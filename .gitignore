@@ -1,0 +1,21 @@
+@'
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+*.log
+
+# IDE
+.vscode/
+
+# Builds / dist
+dist/
+build/
+
+# Secrets
+.env
+.env.*
+'@ | Set-Content .gitignore -NoNewline -Encoding UTF8

@@ -1,0 +1,34 @@
+﻿{
+    "file": "",
+    "doc_type": "SPECIFICATION",
+    "fields": {
+        "specification_date": {"value": "", "bbox": []},
+        "contract_no": {"value": "", "bbox": []},
+        "additional_agreements": {"value": "", "bbox": []},
+        "buyer": {"value": "", "bbox": []},
+        "seller": {"value": "", "bbox": []},
+        "incoterms": {"value": "", "bbox": []},
+        "terms_of_payment": {"value": "", "bbox": []},
+        "total_price": {"value": "", "bbox": []},
+        "packages": {"value": "", "bbox": []},
+        "name_product": {"value": "", "bbox": []},
+        "latin_name": {"value": "", "bbox": []},
+        "size_product": {"value": "", "bbox": []},
+        "unit_box": {"value": "", "bbox": []},
+        "commodity_code": {"value": "", "bbox": []},
+        "products": {
+            "product_1": {
+                "name_product": {"value": "", "bbox": []},
+                "latin_name": {"value": "", "bbox": []},
+                "size_product": {"value": "", "bbox": []},
+                "unit_box": {"value": "", "bbox": []},
+                "packages": {"value": "", "bbox": []},
+                "net_weight": {"value": "", "bbox": []},
+                "gross_weight": {"value": "", "bbox": []},
+                "price_per_unit": {"value": "", "bbox": []},
+                "total_price": {"value": "", "bbox": []},
+                "commodity_code": {"value": "", "bbox": []}
+            }
+        }
+    }
+}

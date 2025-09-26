@@ -1,0 +1,88 @@
+﻿version: "3.9"
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: supplyhub
+      POSTGRES_USER: supplyhub
+      POSTGRES_PASSWORD: supplyhub
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supplyhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build: .
+    depends_on:
+      init-db:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
+      SUPPLYHUB_REDIS_URL: redis://redis:6379/0
+      SUPPLYHUB_CELERY_BROKER_URL: redis://redis:6379/1
+      SUPPLYHUB_CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SUPPLYHUB_BASE_DIR: /data/storage
+      SUPPLYHUB_USE_STUB_SERVICES: "0"
+    volumes:
+      - storage:/data/storage
+    ports:
+      - "8000:8000"
+
+  worker:
+    build: .
+    depends_on:
+      init-db:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
+      SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:9002/v1/fill
+      SUPPLYHUB_OCR_ENDPOINT: http://host.docker.internal:9001/v1/ocr
+      SUPPLYHUB_REDIS_URL: redis://redis:6379/0
+      SUPPLYHUB_CELERY_BROKER_URL: redis://redis:6379/1
+      SUPPLYHUB_CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SUPPLYHUB_BASE_DIR: /data/storage
+      SUPPLYHUB_USE_STUB_SERVICES: "0"
+    volumes:
+      - storage:/data/storage
+    command: [
+      "celery",
+      "-A",
+      "app.workers.celery_app.celery_app",
+      "worker",
+      "--loglevel=info"
+    ]
+
+  init-db:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
+    command: ["python", "-m", "app.scripts.init_db"]
+    restart: "no"
+
+volumes:
+  postgres_data:
+  storage:

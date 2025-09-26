@@ -1,0 +1,60 @@
+﻿{
+    "file": "",
+    "doc_type": "PRICE_LIST_1",
+    "fields": {
+        "price_list_1_date":{
+            "value": "",
+            "bbox": []
+        },
+        "producer":{
+            "value": "",
+            "bbox": []
+        },
+        "incoterms":{
+            "value": "",
+            "bbox": []
+        },
+        "seller":{
+            "value": "",
+            "bbox": []
+        },
+        "valid_till":{
+            "value": "",
+            "bbox": []
+        },
+        "products":{
+            "product_1":{
+                "name_product":{
+                    "value": "",
+                    "bbox": []
+                },
+                "latin_name":{
+                    "value": "",
+                    "bbox": []
+                },
+                "size_product":{
+                    "value": "",
+                    "bbox": []
+                },
+                "unit_box":{
+                    "value": "",
+                    "bbox": []
+                },
+                "packages":{
+                    "value": "",
+                    "bbox": []
+                },
+                "price_per_unit":{
+                    "value": "",
+                    "bbox": []
+                },
+                "total_price":{
+                    "value": "",
+                    "bbox": []
+                }
+            },
+            "product_2":{}
+        }
+    }
+}
+

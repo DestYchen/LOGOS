@@ -1,0 +1,90 @@
+﻿{
+    "file": "",
+    "doc_type": "CERTIFICATE_OF_ORIGIN",
+    "fields": {
+        "certificate_of_origin_no":{
+            "value": "",
+            "bbox": []
+        },
+        "certificate_of_origin_date":{
+            "value": "",
+            "bbox": []
+        },
+        "invoice_no": { 
+            "value": "",
+            "bbox": []
+        },
+        "invoice_date":{
+            "value": "",
+            "bbox": []
+        },
+        "country_of_origin":{
+            "value": "",
+            "bbox": []
+        },
+        "producer":{
+            "value": "",
+            "bbox": []
+        },
+        "buyer":{
+            "value": "",
+            "bbox": []
+        },
+        "seller":{
+            "value": "",
+            "bbox": []
+        },
+        "exporter":{
+            "value": "",
+            "bbox": []
+        },
+        "destination":{
+            "value": "",
+            "bbox": []
+        },
+        "name_product":{
+            "value": "",
+            "bbox": []
+        },
+        "latin_name":{
+            "value": "",
+            "bbox": []
+        },
+        "unit_box":{
+            "value": "",
+            "bbox": []
+        },
+        "packages":{
+            "value": "",
+            "bbox": []
+        },
+        "net_weight":{
+            "value": "",
+            "bbox": []
+        },
+        "gross_weight":{
+            "value": "",
+            "bbox": []
+        },
+        "container_no":{
+            "value": "",
+            "bbox": []
+        },
+        "vessel":{
+            "value": "",
+            "bbox": []
+        },
+        "veterinary_seal":{
+            "value": "",
+            "bbox": []
+        },
+        "linear_seal":{
+            "value": "",
+            "bbox": []
+        },
+        "importer":{
+            "value": "",
+            "bbox": []
+        }
+    }
+}

@@ -1,0 +1,30 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>SupplyHub - Загрузка документов</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 2rem; }
+      h1 { margin-bottom: 1rem; }
+      form { border: 1px solid #ccc; padding: 1.5rem; border-radius: 8px; max-width: 480px; }
+      label { display: block; margin-bottom: 0.5rem; font-weight: bold; }
+      input[type="file"] { width: 100%; margin-bottom: 1rem; }
+      button { background-color: #2563eb; color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 4px; cursor: pointer; }
+      button:hover { background-color: #1e4ecf; }
+      .note { margin-top: 1rem; color: #555; font-size: 0.9rem; }
+      .link { margin-top: 2rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Загрузка документов</h1>
+    <form action="/web/upload" method="post" enctype="multipart/form-data">
+      <label for="files">Выберите файлы (PDF, изображения, DOCX, XLSX, TXT)</label>
+      <input id="files" type="file" name="files" multiple required />
+      <button type="submit">Отправить на обработку</button>
+      <p class="note">После загрузки документы автоматически поставятся в очередь на обработку. Вы будете перенаправлены на страницу с результатом.</p>
+    </form>
+    <div class="link">
+      <a href="/web/batches">Список загруженных партий</a>
+    </div>
+  </body>
+</html>

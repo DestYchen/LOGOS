@@ -1,0 +1,99 @@
+﻿{
+    "file": "",
+    "doc_type": "PACKING_LIST",
+    "fields": {
+        "packing_list_date":{
+            "value": "",
+            "bbox": []
+        },
+        "contract_no":{
+            "value": "",
+            "bbox": []
+        },
+        "invoice_no":{
+            "value": "",
+            "bbox": []
+        },
+        "products":{
+            "product_1":{
+                "name_product":{
+                    "value": "",
+                    "bbox": []
+                },
+                "latin_name":{
+                    "value": "",
+                    "bbox": []
+                },
+                "size_product":{
+                    "value": "",
+                    "bbox": []
+                },
+                "unit_box":{
+                    "value": "",
+                    "bbox": []
+                },
+                "packages":{
+                    "value": "",
+                    "bbox": []
+                },
+                "net_weight":{
+                    "value": "",
+                    "bbox": []
+                },
+                "net_weight_with_glaze":{
+                    "value": "",
+                    "bbox": []
+                },
+                "net_weight_with_ice":{
+                    "value": "",
+                    "bbox": []
+                },
+                "net_weight_with_glaze_and_pack":{
+                    "value": "",
+                    "bbox": []
+                },
+                "gross_weight":{
+                    "value": "",
+                    "bbox": []
+                },
+                "price_per_unit":{
+                    "value": "",
+                    "bbox": []
+                },
+                "total_price":{
+                    "value": "",
+                    "bbox": []
+                }
+            },
+            "product_2":{}
+        },
+        "producer":{
+            "value": "",
+            "bbox": []
+        },
+        "buyer":{
+            "value": "",
+            "bbox": []
+        },
+        "seller":{
+            "value": "",
+            "bbox": []
+        },
+        "container_no":{
+            "value": "",
+            "bbox": []
+        },
+        "vessel":{
+            "value": "",
+            "bbox": []
+        },
+        "veterinary_seal":{
+            "value": "",
+            "bbox": []
+        },
+        "linear_seal":{
+            "value": "",
+            "bbox": []
+        }
+    }
+}

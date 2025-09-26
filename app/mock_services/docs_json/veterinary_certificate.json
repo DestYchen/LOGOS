@@ -1,0 +1,66 @@
+﻿{
+    "file": "",
+    "doc_type": "VETERINARY_CERTIFICATE",
+    "fields": {
+        "veterinary_certificate_no":{
+            "value": "",
+            "bbox": []
+        },
+        "veterinary_certificate_date":{
+            "value": "",
+            "bbox": []
+        },
+        "seller":{
+            "value": "",
+            "bbox": []
+        },
+        "producer":{
+            "value": "",
+            "bbox": []
+        },
+        "buyer":{
+            "value": "",
+            "bbox": []
+        },
+        "exporter":{
+            "value": "",
+            "bbox": []
+        },
+        "vessel":{
+            "value": "",
+            "bbox": []
+        },
+        "container_no":{
+            "value": "",
+            "bbox": []
+        },
+        "packages":{
+            "value": "",
+            "bbox": []
+        },
+        "name_product":{
+            "value": "",
+            "bbox": []
+        },
+        "latin_name":{
+            "value": "",
+            "bbox": []
+        },
+        "unit_box":{
+            "value": "",
+            "bbox": []
+        },
+        "net_weight":{
+            "value": "",
+            "bbox": []
+        },
+        "veterinary_seal":{
+            "value": "",
+            "bbox": []
+        },
+        "country_of_origin":{
+            "value": "",
+            "bbox": []
+        }
+    }
+}

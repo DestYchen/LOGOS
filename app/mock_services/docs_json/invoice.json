@@ -1,0 +1,87 @@
+﻿{
+    "file": "",
+    "doc_type": "INVOICE",
+    "fields": {
+        "invoice_no": { 
+            "value": "",
+            "bbox": []
+        },
+        "invoice_date":{
+            "value": "",
+            "bbox": []
+        },
+        "products":{
+            "product_1":{
+                "name_product":{
+                    "value": "",
+                    "bbox": []
+                },
+                "latin_name":{
+                    "value": "",
+                    "bbox": []
+                },
+                "size_product":{
+                    "value": "",
+                    "bbox": []
+                },
+                "unit_box":{
+                    "value": "",
+                    "bbox": []
+                },
+                "packages":{
+                    "value": "",
+                    "bbox": []
+                },
+                "price_per_unit":{
+                    "value": "",
+                    "bbox": []
+                },
+                "total_price":{
+                    "value": "",
+                    "bbox": []
+                }
+            },
+            "product_2":{}
+        },
+        "producer":{
+            "value": "",
+            "bbox": []
+        },
+        "incoterms":{
+            "value": "",
+            "bbox": []
+        },
+        "terms_of_payment":{
+            "value": "",
+            "bbox": []
+        },
+        "bank_details":{
+            "value": "",
+            "bbox": []
+        },
+        "buyer":{
+            "value": "",
+            "bbox": []
+        },
+        "seller":{
+            "value": "",
+            "bbox": []
+        },
+        "proforma_no":{
+            "value": "",
+            "bbox": []
+        },
+        "container_no":{
+            "value": "",
+            "bbox": []
+        },
+        "commodity_code":{
+            "value": "",
+            "bbox": []
+        },
+        "vessel":{
+            "value": "",
+            "bbox": []
+        }
+    }
+}

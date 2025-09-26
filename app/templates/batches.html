@@ -1,0 +1,47 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <title>SupplyHub - Загруженные партии</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 2rem; }
+      table { border-collapse: collapse; width: 100%; max-width: 960px; }
+      th, td { border: 1px solid #e5e7eb; padding: 0.75rem; text-align: left; }
+      th { background: #f3f4f6; }
+      a { color: #2563eb; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .empty { margin-top: 2rem; color: #555; }
+      .actions { margin-bottom: 1.5rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Загруженные партии</h1>
+    <div class="actions">
+      <a href="/web/upload"><- Назад к загрузке</a>
+    </div>
+    {% if batches %}
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Статус</th>
+            <th>Документы</th>
+            <th>Создана</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in batches %}
+            <tr>
+              <td><a href="/web/batches/{{ item.id }}">{{ item.id }}</a></td>
+              <td>{{ item.status }}</td>
+              <td>{{ item.documents_count }}</td>
+              <td>{{ item.created_at }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="empty">Пока нет загруженных партий.</p>
+    {% endif %}
+  </body>
+</html>
