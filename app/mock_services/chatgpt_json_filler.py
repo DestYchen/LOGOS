@@ -16,13 +16,41 @@ HARDCODED_OPENAI_API_KEY = ""
 FILLER_PROMPT = os.getenv(
     "CHATGPT_FILLER_PROMPT",
     (
-        "You extract structured data from documents. Fill only the known fields. "
-        "You will receive a template describing the exact JSON structure expected. "
-        "Return strictly valid JSON matching that template with strings for values, arrays for bbox/token_refs, and dictionaries for nested sections. "
-        "Do not add new keys or commentary."
+        "INPUTS YOU WILL RECEIVE:"
+        "- Document type (string)"
+        "- Template fields (a JSON object describing the exact field structure)"
+        "- Document text (plain text; OCR output)"
+        "- Optionally OCR tokens (for token_refs alignment)"
+
+        "STRICT OUTPUT CONTRACT:"
+        "Return a single JSON object with ONLY the following top-level keys:"
+        "{"
+        "'doc_id': string,"
+        "'fields': object"
+        "}"
+
+        "- 'doc_id': echo the provided doc_id if present in the input; if not provided, return an empty string ''."
+        "- 'fields': ONLY include keys that exist in 'Template fields'. For each included key that represents a leaf field, the value MUST be an object that may contain any subset of:"
+        "- 'value': string"
+        "- 'bbox': array of numbers (or empty array if unknown)"
+        "- 'token_refs': array of token ids/indices (or empty array if unknown)"
+
+        "DO NOT add new keys. DO NOT add commentary. DO NOT repeat or reprint the template."
+
+        "EXTRACTION RULES:"
+        "1) Copy values EXACTLY as they appear in the document text (no paraphrasing, no guessing)."
+        "2) If a field is absent or uncertain, either:"
+        "   - omit that field from 'fields', OR"
+        "   - set 'value' to '' and leave 'bbox'/'token_refs' as []."
+        "3) If OCR tokens are provided, prefer filling 'token_refs' with the best matching token indices. If uncertain, return []."
+        "4) For non-leaf sections (nested objects), ONLY include children that you confidently fill; otherwise omit the whole branch."
+        "5) Never invent or normalize formats unless the document explicitly provides them (e.g., keep original date/number formatting)."
+        "6) The JSON MUST be strictly valid and parseable. No trailing text."
+
+        "BE CONCISE: output only the JSON object that satisfies the contract above."
     ),
 )
-OPENAI_MODEL = "openai/gpt-oss-120b:free"
+OPENAI_MODEL = "google/gemma-3-27b-it"
 
 client: Optional[OpenAI] = None
 

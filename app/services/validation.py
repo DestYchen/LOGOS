@@ -78,6 +78,16 @@ class InvalidFieldRecord:
     field: FilledField
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, uuid.UUID):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _json_safe(val) for key, val in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    return value
+
+
 @dataclass
 class FieldCollection:
     ref: FieldRef
@@ -1056,16 +1066,20 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
 async def store_validations(session: AsyncSession, batch_id: uuid.UUID, messages: List[ValidationMessage]) -> None:
     await session.execute(delete(Validation).where(Validation.batch_id == batch_id))
     for message in messages:
+        serializable_refs = _json_safe(message.refs) if message.refs else None
         session.add(
             Validation(
                 batch_id=batch_id,
                 rule_id=message.rule_id,
                 severity=message.severity,
                 message=message.message,
-                refs=message.refs,
+                refs=serializable_refs,
             )
         )
     await session.flush()
+
+
+
 
 
 

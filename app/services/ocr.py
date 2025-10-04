@@ -41,12 +41,18 @@ async def run_ocr(
     if file_bytes is not None:
         payload["file_bytes"] = base64.b64encode(file_bytes).decode("ascii")
         payload["file_suffix"] = file_path.suffix
+    logger.debug("OCR request prepared doc=%s file=%s suffix=%s bytes=%s", doc_id, file_path, file_path.suffix, "file_bytes" in payload)
     async with httpx.AsyncClient(timeout=120.0) as client:
         try:
             response = await client.post(str(settings.ocr_endpoint), json=payload)
+            logger.debug("OCR response %s %s for doc=%s", response.status_code, response.reason_phrase, doc_id)
+            if response.status_code >= 400:
+                logger.debug("OCR response body: %s", response.text[:1000])
             response.raise_for_status()
             raw = response.json()
-            return _normalize_payload(raw, str(doc_id))
+            normalized = _normalize_payload(raw, str(doc_id))
+            logger.debug("OCR normalized tokens=%s doc=%s", len(normalized.get("tokens", [])), doc_id)
+            return normalized
         except httpx.HTTPError:
             if settings.use_stub_services:
                 logger.warning("OCR HTTP error; using stubbed response for %s", file_path, exc_info=True)
