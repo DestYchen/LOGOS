@@ -67,7 +67,7 @@ app = FastAPI(title="OpenRouter OCR Adapter")
 def init_client() -> None:
     global client
     if client is None:
-        api_key = "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".strip()
+        api_key = "".strip()
         if not api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set and HARDCODED_OPENROUTER_API_KEY is empty")
 
