@@ -8,10 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db
 from app.api.schemas import (
+    BatchSummary,
     BatchCreateRequest,
     BatchCreateResponse,
     BatchReportResponse,
     BatchUploadResponse,
+    DocumentSummary,
     FieldUpdateRequest,
     ReviewCompleteResponse,
     ReviewField,
@@ -24,6 +26,40 @@ from app.services import pipeline, reports, review
 
 router = APIRouter(prefix="/batches", tags=["batches"])
 
+
+def _serialize_batch_summary(batch) -> BatchSummary:
+    documents = [
+        DocumentSummary(
+            id=document.id,
+            filename=document.filename,
+            status=document.status,
+            doc_type=document.doc_type,
+            pages=getattr(document, "pages", 0) or 0,
+        )
+        for document in batch.documents
+    ]
+    return BatchSummary(
+        id=batch.id,
+        status=batch.status,
+        created_at=batch.created_at,
+        updated_at=batch.updated_at,
+        created_by=batch.created_by,
+        documents=documents,
+    )
+
+
+@router.get("/", response_model=List[BatchSummary])
+async def list_batches_api(session: AsyncSession = Depends(get_db)) -> List[BatchSummary]:
+    batches = await batch_service.list_batch_summaries(session)
+    return [_serialize_batch_summary(batch) for batch in batches]
+
+
+@router.get("/{batch_id}", response_model=BatchSummary)
+async def batch_summary(batch_id: uuid.UUID, session: AsyncSession = Depends(get_db)) -> BatchSummary:
+    batch = await batch_service.get_batch(session, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="batch_not_found")
+    return _serialize_batch_summary(batch)
 
 @router.post("/", response_model=BatchCreateResponse, status_code=status.HTTP_201_CREATED)
 async def create_batch(
