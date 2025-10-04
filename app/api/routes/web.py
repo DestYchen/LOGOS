@@ -4,10 +4,10 @@ import asyncio
 import json
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,10 +56,16 @@ async def list_batches(request: Request, session: AsyncSession = Depends(get_db)
             "status": item.status.value,
             "documents_count": len(item.documents),
             "created_at": item.created_at.strftime("%Y-%m-%d %H:%M"),
+            "can_delete": item.status in (BatchStatus.DONE, BatchStatus.FAILED),
         }
         for item in batches
     ]
-    return templates.TemplateResponse("batches.html", {"request": request, "batches": items})
+    message = request.query_params.get("message")
+    error = request.query_params.get("error")
+    return templates.TemplateResponse(
+        "batches.html",
+        {"request": request, "batches": items, "message": message, "error": error},
+    )
 
 
 @router.get("/batches/{batch_id}", response_class=HTMLResponse)
@@ -107,11 +113,19 @@ async def batch_details(
         )
 
     report_json = None
+    report_documents: List[Dict[str, Any]] = []
+    report_validations: List[Dict[str, Any]] = []
+    report_available = False
     try:
         report_payload = await asyncio.to_thread(reports.load_report, batch_id)
         report_json = json.dumps(report_payload, indent=2, ensure_ascii=False)
+        doc_rows, validation_rows = reports.build_report_tables(report_payload)
+        report_documents = doc_rows
+        report_validations = validation_rows
+        report_available = True
     except FileNotFoundError:
         report_json = None
+
 
     can_complete = pending_total == 0 and not awaiting_processing
 
@@ -124,8 +138,12 @@ async def batch_details(
         "status": batch.status.value,
         "documents": documents_payload,
         "report_json": report_json,
+        "report_documents": report_documents,
+        "report_validations": report_validations,
+        "report_available": report_available,
         "message": message,
         "error": error,
+        "doc_types": [dt.value for dt in DocumentType],
         "can_complete": can_complete,
         "pending_total": pending_total,
         "awaiting_processing": awaiting_processing,
@@ -390,4 +408,72 @@ def _latest_field(document: Document, field_key: str) -> Optional[FilledField]:
 def _read_json(path: Path) -> dict:
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
+
+
+@router.post("/batches/{batch_id}/delete")
+async def delete_batch(
+    batch_id: uuid.UUID, session: AsyncSession = Depends(get_db)
+) -> RedirectResponse:
+    batch = await batch_service.get_batch(session, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="batch_not_found")
+    if batch.status not in (BatchStatus.DONE, BatchStatus.FAILED):
+        return RedirectResponse(
+            url=f"/web/batches?error=delete_forbidden", status_code=status.HTTP_303_SEE_OTHER
+        )
+
+    # Remove DB entity (cascade deletes documents/fields/validations)
+    await session.delete(batch)
+    await session.flush()
+
+    # Remove files from storage
+    from app.core.storage import remove_batch as _remove_batch
+
+    _remove_batch(str(batch_id))
+
+    return RedirectResponse(
+        url=f"/web/batches?message=batch_deleted", status_code=status.HTTP_303_SEE_OTHER
+    )
+
+
+
+@router.post("/documents/{doc_id}/set_type")
+async def set_document_type(
+    doc_id: uuid.UUID,
+    doc_type: str = Form(...),
+    session: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(Document)
+        .where(Document.id == doc_id)
+        .options(selectinload(Document.batch), selectinload(Document.fields))
+    )
+    result = await session.execute(stmt)
+    document = result.scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document_not_found")
+    from app.core.enums import DocumentType as _DT
+    try:
+        forced_type = _DT(doc_type)
+    except Exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid_doc_type") from None
+    await pipeline.fill_document_from_existing_ocr(session, batch_id=document.batch_id, document=document, forced_doc_type=forced_type)
+    await session.flush()
+    return RedirectResponse(url=f"/web/batches/{document.batch_id}?message=type_set", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@router.get("/batches/{batch_id}/report.xlsx")
+async def download_batch_report(batch_id: uuid.UUID) -> StreamingResponse:
+    try:
+        buffer = await asyncio.to_thread(reports.export_report_excel_for_batch, batch_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="report_not_found")
+    headers = {"Content-Disposition": f"attachment; filename=\"batch-{batch_id}-report.xlsx\""}
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
 

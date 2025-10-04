@@ -18,8 +18,11 @@
     <h1>Загруженные партии</h1>
     <div class="actions">
       <a href="/web/upload"><- Назад к загрузке</a>
-    </div>
-    {% if batches %}
+    </div>\n    {% if message == 'batch_deleted' %}
+      <div class="alert info" style="margin: 1rem 0; padding: 0.75rem; border: 1px solid #6ee7b7; background: #ecfdf5; color: #047857; border-radius: 6px; max-width: 960px;">Пакет документов удалён.</div>
+    {% elif error == 'delete_forbidden' %}
+      <div class="alert error" style="margin: 1rem 0; padding: 0.75rem; border: 1px solid #fca5a5; background: #fef2f2; color: #b91c1c; border-radius: 6px; max-width: 960px;">Удаление запрещено: пакет ещё не завершён.</div>
+    {% endif %}    {% if batches %}
       <table>
         <thead>
           <tr>
@@ -27,15 +30,20 @@
             <th>Статус</th>
             <th>Документы</th>
             <th>Создана</th>
-          </tr>
-        </thead>
-        <tbody>
+                      <th>Действия</th>\n          </tr>
+        </thead>\n        <tbody>
           {% for item in batches %}
             <tr>
               <td><a href="/web/batches/{{ item.id }}">{{ item.id }}</a></td>
               <td>{{ item.status }}</td>
-              <td>{{ item.documents_count }}</td>
-              <td>{{ item.created_at }}</td>
+              <td>{{ item.documents_count }}</td>              <td>{{ item.created_at }}</td>
+              <td>
+                {% if item.can_delete %}
+                <form action="/web/batches/{{ item.id }}/delete" method="post" onsubmit="return confirm('Вы уверены, что хотите удалить этот пакет документов?');" style="display:inline;">
+                  <button type="submit">Удалить</button>
+                </form>
+                {% else %}-{% endif %}
+              </td>
             </tr>
           {% endfor %}
         </tbody>
@@ -45,3 +53,6 @@
     {% endif %}
   </body>
 </html>
+
+
+

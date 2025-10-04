@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import base64
+import logging
 import json
 import os
 import re
@@ -36,9 +37,10 @@ OCR_PROMPT = os.getenv(
     ),
 )
 
-OPENAI_MODEL = os.getenv("CHATGPT_OCR_MODEL", "mistralai/mistral-small-3.2-24b-instruct:free")
+OPENAI_MODEL = "mistralai/mistral-small-3.2-24b-instruct:free"
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 client: Optional[OpenAI] = None
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
@@ -65,7 +67,7 @@ app = FastAPI(title="OpenRouter OCR Adapter")
 def init_client() -> None:
     global client
     if client is None:
-        api_key = os.getenv("OPENROUTER_API_KEY") or HARDCODED_OPENROUTER_API_KEY.strip()
+        api_key = "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".strip()
         if not api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set and HARDCODED_OPENROUTER_API_KEY is empty")
 
@@ -73,8 +75,8 @@ def init_client() -> None:
             api_key=api_key,
             base_url="https://openrouter.ai/api/v1",
             default_headers={
-                "HTTP-Referer": os.getenv("OPENROUTER_HTTP_REFERER", "http://localhost:8003"),
-                "X-Title": os.getenv("OPENROUTER_X_TITLE", "My OCR Adapter"),
+                "HTTP-Referer": "http://localhost:8001",
+                "X-Title": "My OCR Adapter",
             },
         )
 
@@ -82,6 +84,7 @@ def init_client() -> None:
 @app.post("/v1/ocr", response_model=OCRResponse)
 async def run_ocr(request: OCRRequest) -> OCRResponse:
     path = Path(request.file_path)
+    logger.debug("Received OCR request doc_id=%s path=%s file_name=%s suffix=%s has_bytes=%s", request.doc_id, path, request.file_name, request.file_suffix, bool(request.file_bytes))
     try:
         doc_uuid = uuid.UUID(request.doc_id)
     except ValueError as exc:
@@ -91,6 +94,7 @@ async def run_ocr(request: OCRRequest) -> OCRResponse:
     if request.file_bytes:
         try:
             file_bytes = base64.b64decode(request.file_bytes)
+            logger.debug("Decoded file_bytes length=%s for doc_id=%s", len(file_bytes), request.doc_id)
         except (ValueError, TypeError) as exc:
             raise HTTPException(status_code=400, detail="invalid_file_bytes") from exc
 
@@ -100,6 +104,7 @@ async def run_ocr(request: OCRRequest) -> OCRResponse:
         Path(request.file_name).suffix if request.file_name else "",
     ]
     suffix = next((item for item in suffix_candidates if item), "").lower()
+    logger.debug("Resolved suffix=%s path_exists=%s for doc_id=%s", suffix, path.exists(), request.doc_id)
 
     if settings.use_stub_services:
         temp_path: Optional[Path] = None
@@ -121,17 +126,21 @@ async def run_ocr(request: OCRRequest) -> OCRResponse:
     tokens: List[dict[str, Any]]
     if path.exists():
         if path.suffix.lower() == ".pdf":
+            logger.debug("Processing PDF from path=%s doc_id=%s", path, request.doc_id)
             tokens = await _tokens_from_pdf(path, request.doc_id)
         else:
+            logger.debug("Processing single file from path=%s doc_id=%s", path, request.doc_id)
             tokens = await _tokens_from_single_file(path, request.doc_id)
     elif file_bytes is not None:
         try:
+            logger.debug("Processing bytes input doc_id=%s suffix=%s len=%s", request.doc_id, suffix, len(file_bytes))
             tokens = await _tokens_from_bytes(file_bytes, suffix, request.doc_id)
         except Exception as exc:
             raise HTTPException(status_code=400, detail="invalid_file_bytes") from exc
     else:
         raise HTTPException(status_code=404, detail="file_not_found")
 
+    logger.debug("Collected tokens=%s for doc_id=%s", len(tokens), request.doc_id)
     if not tokens:
         raise HTTPException(status_code=400, detail="empty_document")
 
@@ -140,9 +149,11 @@ async def run_ocr(request: OCRRequest) -> OCRResponse:
 
 async def _tokens_from_pdf(path: Path, doc_id: str, dpi: int = 200, max_pages: int = 40) -> List[dict[str, Any]]:
     tokens: List[dict[str, Any]] = []
+    logger.debug("Opening PDF file=%s doc_id=%s", path, doc_id)
     with fitz.open(path) as document:
         if document.page_count == 0:
             return []
+        logger.debug("PDF page_count=%s doc_id=%s", document.page_count, doc_id)
         for index, page in enumerate(document):
             if index >= max_pages:
                 break
@@ -150,6 +161,7 @@ async def _tokens_from_pdf(path: Path, doc_id: str, dpi: int = 200, max_pages: i
             image_bytes = pix.tobytes("png")
             content = _image_content(image_bytes, ".png")
             page_tokens = await _call_chatgpt_page(doc_id, index + 1, content)
+            logger.debug("Collected %s tokens for doc_id=%s page=%s", len(page_tokens), doc_id, index + 1)
             tokens.extend(page_tokens)
     return tokens
 
@@ -159,6 +171,7 @@ async def _tokens_from_pdf_bytes(data: bytes, doc_id: str, dpi: int = 200, max_p
     with fitz.open(stream=data, filetype="pdf") as document:
         if document.page_count == 0:
             return []
+        logger.debug("PDF bytes page_count=%s doc_id=%s", document.page_count, doc_id)
         for index, page in enumerate(document):
             if index >= max_pages:
                 break
@@ -166,6 +179,7 @@ async def _tokens_from_pdf_bytes(data: bytes, doc_id: str, dpi: int = 200, max_p
             image_bytes = pix.tobytes("png")
             content = _image_content(image_bytes, ".png")
             page_tokens = await _call_chatgpt_page(doc_id, index + 1, content)
+            logger.debug("Collected %s tokens for doc_id=%s page=%s", len(page_tokens), doc_id, index + 1)
             tokens.extend(page_tokens)
     return tokens
 
@@ -174,12 +188,15 @@ async def _tokens_from_single_file(path: Path, doc_id: str) -> List[dict[str, An
     suffix = path.suffix.lower()
     if suffix in IMAGE_EXTENSIONS:
         content = _image_content(path.read_bytes(), suffix)
+        logger.debug("Built image content suffix=%s doc_id=%s", suffix, doc_id)
     else:
         extracted = text_extractor.extract_text(path)
         text = extracted.text if extracted else _read_text(path)
         if not text.strip():
+            logger.debug("Text payload empty for doc_id=%s", doc_id)
             return []
         content = _text_content(text)
+        logger.debug("Built text content length=%s doc_id=%s", len(text), doc_id)
 
     return await _call_chatgpt_page(doc_id, 1, content)
 
@@ -196,14 +213,18 @@ async def _tokens_from_bytes(data: bytes, suffix: str, doc_id: str) -> List[dict
         content = _image_content(data, normalized)
         return await _call_chatgpt_page(doc_id, 1, content)
     text = data.decode("utf-8", errors="ignore")
+    logger.debug("Decoded bytes to text length=%s doc_id=%s", len(text), doc_id)
     if not text.strip():
+        logger.debug("Text payload empty for doc_id=%s (bytes)", doc_id)
         return []
     content = _text_content(text)
     return await _call_chatgpt_page(doc_id, 1, content)
 
 
 async def _call_chatgpt_page(doc_id: str, page_number: int, content: List[dict[str, Any]]) -> List[dict[str, Any]]:
+    logger.debug("Calling LLM for doc_id=%s page=%s with %s parts", doc_id, page_number, len(content))
     data = await _call_chatgpt(doc_id=doc_id, content=content)
+    logger.debug("LLM response keys=%s doc_id=%s page=%s", list(data.keys()), doc_id, page_number)
 
     tokens_raw: List[dict[str, Any]] = []
     if "tokens" in data and isinstance(data["tokens"], list):
@@ -257,12 +278,14 @@ async def _call_chatgpt(*, doc_id: str, content: List[dict[str, Any]]) -> dict[s
         {"role": "user", "content": _messages_from_content(content)},
     ]
 
+    logger.debug("Invoking OpenRouter model=%s doc_id=%s parts=%s", OPENAI_MODEL, doc_id, len(content))
     resp = client.chat.completions.create(
         model=OPENAI_MODEL,
         messages=messages,
         temperature=0,
     )
 
+    logger.debug("OpenRouter response status usage=%s doc_id=%s", getattr(resp, 'usage', None), doc_id)
     raw = resp.choices[0].message.content or ""
     raw = _extract_json(raw)
 

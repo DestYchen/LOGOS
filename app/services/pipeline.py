@@ -82,10 +82,21 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
             return
         batch_paths = batch_dir(str(batch_id))
         batch_paths.ensure()
-        results: List[ProcessingResult] = []
+
+        ocr_results: List[ProcessingResult] = []
         for document in batch.documents:
-            result = await _process_document(session, batch_id, document)
-            results.append(result)
+            result = await _run_ocr_step(session, batch_id, document)
+            ocr_results.append(result)
+
+        await session.flush()
+
+        filler_results: List[ProcessingResult] = []
+        for document in batch.documents:
+            if document.status == DocumentStatus.TEXT_READY:
+                result = await _run_filler_step(session, batch_id, document)
+                filler_results.append(result)
+
+        results = ocr_results + filler_results
         failures = [result for result in results if not result.success]
         if failures:
             meta = dict(batch.meta) if batch.meta else {}
@@ -100,10 +111,12 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
             meta = dict(batch.meta)
             meta.pop('processing_warnings', None)
             batch.meta = meta
-        if results and all(not result.success for result in results):
+
+        if batch.documents and all(doc.status == DocumentStatus.FAILED for doc in batch.documents):
             batch.status = BatchStatus.FAILED
         else:
             batch.status = BatchStatus.FILLED_AUTO
+
         await session.flush()
         await status.record_snapshot(
             session,
@@ -115,11 +128,14 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
         )
 
 
-async def _process_document(session, batch_id: uuid.UUID, document: Document) -> ProcessingResult:
+async def _run_ocr_step(session, batch_id: uuid.UUID, document: Document) -> ProcessingResult:
     paths = batch_dir(str(batch_id))
     raw_file = paths.raw / document.filename
     if not raw_file.exists():
         raise FileNotFoundError(f"raw file missing: {raw_file}")
+
+    document.filled_path = None
+    document.ocr_path = None
 
     extraction = text_extractor.extract_text(raw_file, document.mime)
     needs_ocr = text_extractor.requires_ocr(raw_file, document.mime)
@@ -128,11 +144,21 @@ async def _process_document(session, batch_id: uuid.UUID, document: Document) ->
     ocr_file = derived / 'ocr.json'
 
     if not needs_ocr and extraction is not None:
-        ocr_payload = {'doc_id': str(document.id), 'tokens': []}
+        ocr_payload: Dict[str, Any] = {'doc_id': str(document.id), 'tokens': []}
     else:
         if not needs_ocr and extraction is None:
             logger.warning('Parser extraction unavailable for %s, running OCR fallback', raw_file)
-        ocr_payload = await ocr.run_ocr(document.id, raw_file, file_name=document.filename)
+        try:
+            ocr_payload = await ocr.run_ocr(document.id, raw_file, file_name=document.filename)
+        except Exception:
+            logger.error('OCR service failed for %s', document.filename, exc_info=True)
+            document.status = DocumentStatus.FAILED
+            document.filled_path = None
+            return ProcessingResult(
+                document=document,
+                success=False,
+                message=f"Документ {document.filename} не обработан: ошибка вызова OCR. Обратитесь к администратору.",
+            )
 
     with ocr_file.open('w', encoding='utf-8') as handle:
         json.dump(ocr_payload, handle, indent=2)
@@ -151,7 +177,7 @@ async def _process_document(session, batch_id: uuid.UUID, document: Document) ->
         return ProcessingResult(
             document=document,
             success=False,
-            message=f"Документ {document.filename} не обработан: OCR не вернул текст.",
+            message=f"Документ {document.filename} не обработан: OCR не дал токенов.",
         )
 
     doc_type = classification.classify_document(tokens)
@@ -167,8 +193,51 @@ async def _process_document(session, batch_id: uuid.UUID, document: Document) ->
 
     document.doc_type = doc_type
     document.status = DocumentStatus.TEXT_READY
+    return ProcessingResult(document=document, success=True, message=None)
+
+
+async def _run_filler_step(session, batch_id: uuid.UUID, document: Document) -> ProcessingResult:
+    paths = batch_dir(str(batch_id))
+    raw_file = paths.raw / document.filename
+    derived = paths.derived_for(str(document.id))
+
+    doc_type = document.doc_type
+    if doc_type == DocumentType.UNKNOWN:
+        document.status = DocumentStatus.FAILED
+        document.filled_path = None
+        return ProcessingResult(
+            document=document,
+            success=False,
+            message=f"Документ {document.filename} не обработан: тип не распознан.",
+        )
+
+    tokens: List[Dict[str, Any]] = []
+    if document.ocr_path:
+        ocr_file = paths.base / document.ocr_path
+        if ocr_file.exists():
+            try:
+                with ocr_file.open('r', encoding='utf-8') as handle:
+                    ocr_payload = json.load(handle)
+                tokens = classification.flatten_tokens(ocr_payload)
+            except Exception:
+                tokens = []
+
+    extraction = text_extractor.extract_text(raw_file, document.mime)
+    if not tokens and extraction is not None and extraction.text.strip():
+        tokens = _plain_text_tokens(extraction.text)
+
+    if not tokens:
+        logger.warning('No OCR tokens available for filler step %s', document.filename)
+        document.status = DocumentStatus.FAILED
+        document.filled_path = None
+        return ProcessingResult(
+            document=document,
+            success=False,
+            message=f"Документ {document.filename} не обработан: OCR не дал токенов.",
+        )
 
     schema = get_schema(doc_type)
+
     doc_text_parts: List[str] = []
     tokens_text = ' '.join(token.get('text', '') for token in tokens).strip()
     if tokens_text:
@@ -182,19 +251,29 @@ async def _process_document(session, batch_id: uuid.UUID, document: Document) ->
         for token in tokens
     ]
 
-    filled_response = await json_filler.fill_json(
-        document.id,
-        doc_type,
-        doc_text=doc_text,
-        file_name=document.filename,
-        ocr_tokens=filler_tokens or None,
-    )
+    try:
+        filled_response = await json_filler.fill_json(
+            document.id,
+            doc_type,
+            doc_text=doc_text,
+            file_name=document.filename,
+            ocr_tokens=filler_tokens or None,
+        )
+    except Exception:
+        logger.error('JSON filler service failed for %s', document.filename, exc_info=True)
+        document.status = DocumentStatus.FAILED
+        document.filled_path = None
+        return ProcessingResult(
+            document=document,
+            success=False,
+            message=f"Документ {document.filename} не обработан: ошибка вызова JSON Filler. Обратитесь к администратору.",
+        )
 
     fields_raw = filled_response.get('fields', {})
     normalized_fields = _flatten_filler_fields(fields_raw)
     scored_fields: Dict[str, Dict[str, Any]] = {}
     for key, payload in normalized_fields.items():
-        payload = dict(payload)  # work with a copy to avoid mutating original
+        payload = dict(payload)
         payload.setdefault('bbox', [])
         payload.setdefault('token_refs', None)
         payload.setdefault('source', 'llm')
@@ -219,13 +298,12 @@ async def _process_document(session, batch_id: uuid.UUID, document: Document) ->
         return ProcessingResult(
             document=document,
             success=False,
-            message=f"Документ {document.filename} не содержит заполненных полей после обработки.",
+            message=f"Документ {document.filename} не содержит заполненных полей после проверки.",
         )
 
     document.status = DocumentStatus.FILLED_AUTO
     document.filled_path = str(filled_file.relative_to(paths.base))
     return ProcessingResult(document=document, success=True, message=None)
-
 
 async def _store_fields(session, document: Document, fields: Dict[str, Dict[str, Any]]) -> None:
     existing_versions: Dict[str, int] = {}
@@ -257,6 +335,109 @@ async def _store_fields(session, document: Document, fields: Dict[str, Dict[str,
         session.add(field)
 
     await session.flush()
+
+
+async def _append_processing_warning(session, batch_id: uuid.UUID, message: str) -> None:
+    batch = await batch_service.get_batch(session, batch_id)
+    if batch is None:
+        return
+    meta = dict(batch.meta) if batch.meta else {}
+    warnings = list(meta.get("processing_warnings", []))
+    if message not in warnings:
+        warnings.append(message)
+    meta["processing_warnings"] = warnings
+    batch.meta = meta
+    await session.flush()
+
+
+async def fill_document_from_existing_ocr(
+    session, *, batch_id: uuid.UUID, document: Document, forced_doc_type: DocumentType
+) -> None:
+    """Fill fields for an already OCR-processed document with a user-selected type.
+
+    Loads tokens from saved OCR payload, reconstructs text, calls JSON filler for the
+    provided document type, and persists fields and artifacts. Does not re-run OCR.
+    """
+    paths = batch_dir(str(batch_id))
+    # Load OCR payload
+    tokens: List[Dict[str, Any]] = []
+    if document.ocr_path:
+        ocr_file = paths.base / document.ocr_path
+        if ocr_file.exists():
+            try:
+                with ocr_file.open("r", encoding="utf-8") as handle:
+                    ocr_payload = json.load(handle)
+                tokens = classification.flatten_tokens(ocr_payload)
+            except Exception:
+                tokens = []
+
+    # Fallback to plain text if needed (for non-image docs)
+    if not tokens:
+        raw_file = paths.raw / document.filename
+        extraction = text_extractor.extract_text(raw_file, document.mime)
+        if extraction is not None and extraction.text.strip():
+            tokens = _plain_text_tokens(extraction.text)
+
+    document.pages = 1 if tokens else 0
+
+    # Prepare text for JSON filler
+    doc_text_parts: List[str] = []
+    tokens_text = " ".join(token.get("text", "") for token in tokens).strip()
+    if tokens_text:
+        doc_text_parts.append(tokens_text)
+    raw_file = paths.raw / document.filename
+    extraction = text_extractor.extract_text(raw_file, document.mime)
+    if extraction and extraction.text not in doc_text_parts:
+        doc_text_parts.append(extraction.text)
+    doc_text = "\n\n".join(doc_text_parts)
+
+    filler_tokens = [
+        {key: value for key, value in token.items() if key != "category"}
+        for token in tokens
+    ]
+
+    # Call JSON filler
+    try:
+        filled_response = await json_filler.fill_json(
+            document.id,
+            forced_doc_type,
+            doc_text=doc_text,
+            file_name=document.filename,
+            ocr_tokens=filler_tokens or None,
+        )
+    except Exception:
+        logger.error('JSON filler service failed for %s (manual type set)', document.filename, exc_info=True)
+        document.status = DocumentStatus.FAILED
+        document.filled_path = None
+        await _append_processing_warning(
+            session,
+            batch_id,
+            f"Документ {document.filename} не обработан: ошибка сервиса JSON Filler. Обратитесь к разработчику.",
+        )
+        return
+
+    fields_raw = filled_response.get("fields", {})
+    normalized_fields = _flatten_filler_fields(fields_raw)
+    scored_fields: Dict[str, Dict[str, Any]] = {}
+    schema = get_schema(forced_doc_type)
+    for key, payload in normalized_fields.items():
+        payload = dict(payload)
+        payload.setdefault("bbox", [])
+        payload.setdefault("token_refs", None)
+        payload.setdefault("source", "llm")
+        score = confidence.score_field(key, payload, tokens, schema)
+        payload["confidence"] = score
+        scored_fields[key] = payload
+
+    derived = paths.derived_for(str(document.id))
+    filled_file = derived / "filled.json"
+    with filled_file.open("w", encoding="utf-8") as handle:
+        json.dump({"fields": scored_fields}, handle, indent=2)
+
+    await _store_fields(session, document, scored_fields)
+    document.doc_type = forced_doc_type
+    document.status = DocumentStatus.FILLED_AUTO
+    document.filled_path = str(filled_file.relative_to(paths.base))
 
 
 async def run_validation_pipeline(batch_id: uuid.UUID) -> None:
@@ -294,3 +475,4 @@ async def enqueue_validation(batch_id: uuid.UUID) -> str:
     except Exception:
         asyncio.create_task(run_validation_pipeline(batch_id))
         return f"local-validate-{batch_id}"
+
