@@ -2,84 +2,98 @@
     "file": "",
     "doc_type": "INVOICE",
     "fields": {
-        "invoice_no": { 
+        "invoice_no": {
             "value": "",
             "bbox": []
         },
-        "invoice_date":{
+        "invoice_date": {
             "value": "",
             "bbox": []
         },
-        "products":{
-            "product_1":{
-                "name_product":{
+        "products": {
+            "product_1": {
+                "name_product": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "latin_name":{
+                "latin_name": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "size_product":{
+                "size_product": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "unit_box":{
+                "unit_box": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "packages":{
+                "packages": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "price_per_unit":{
+                "price_per_unit": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "total_price":{
+                "total_price": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 }
             },
-            "product_2":{}
+            "product_2": {}
         },
-        "producer":{
+        "producer": {
             "value": "",
             "bbox": []
         },
-        "incoterms":{
+        "incoterms": {
             "value": "",
             "bbox": []
         },
-        "terms_of_payment":{
+        "terms_of_payment": {
             "value": "",
             "bbox": []
         },
-        "bank_details":{
+        "bank_details": {
             "value": "",
             "bbox": []
         },
-        "buyer":{
+        "buyer": {
             "value": "",
             "bbox": []
         },
-        "seller":{
+        "seller": {
             "value": "",
             "bbox": []
         },
-        "proforma_no":{
+        "proforma_no": {
             "value": "",
             "bbox": []
         },
-        "container_no":{
+        "container_no": {
             "value": "",
             "bbox": []
         },
-        "commodity_code":{
+        "commodity_code": {
             "value": "",
             "bbox": []
         },
-        "vessel":{
+        "vessel": {
             "value": "",
             "bbox": []
         }

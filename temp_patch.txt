@@ -1,0 +1,49 @@
+*** Begin Patch
+*** Update File: app/mock_services/chatgpt_json_filler.py
+@@
+-from copy import deepcopy
+-from typing import Any, Dict, Iterator, Optional
++from copy import deepcopy
++from typing import Any, Dict, Iterator, Optional
+@@
+ async def fill(request: FillerRequest) -> FillerResponse:
+     template_def = get_template_definition(request.doc_type)
+-    print(template_def)
+     template_fields = deepcopy(template_def.get("fields", {}))
+     product_template = template_def.get("product_template")
+ 
+     if client is None:
+         return FillerResponse(**_stub_fill(request, template_fields, product_template))
+@@
+     content = [
+         {"role": "system", "content": FILLER_PROMPT},
+         {"role": "user", "content": user_content},
+     ]
++
++    debug_payload: Dict[str, Any] = {
++        "doc_id": request.doc_id,
++        "doc_type": request.doc_type.value,
++        "file_name": request.file_name,
++        "template_fields": template_fields,
++        "doc_text_length": len(request.doc_text or ""),
++        "doc_text_preview": request.doc_text[:1000],
++    }
++    if request.tokens is not None:
++        if isinstance(request.tokens, list):
++            debug_payload["tokens_count"] = len(request.tokens)
++            debug_payload["tokens_preview"] = request.tokens[:5]
++        else:
++            debug_payload["tokens_type"] = type(request.tokens).__name__
++            debug_payload["tokens_repr"] = str(request.tokens)[:1000]
++
++    print("=== JSON FILLER REQUEST PAYLOAD ===")
++    print(json.dumps(debug_payload, ensure_ascii=False, indent=2))
++    print("=== JSON FILLER MODEL MESSAGE ===")
++    print(json.dumps(content, ensure_ascii=False, indent=2))
++    print("=== END JSON FILLER DEBUG ===")
+ 
+     try:
+         # response = client.responses.create(model=OPENAI_MODEL, temperature=0, input=content)
+         response = client.chat.completions.create(
+                 model=OPENAI_MODEL,
+*** End Patch

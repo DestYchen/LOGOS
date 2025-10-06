@@ -2,59 +2,72 @@
     "file": "",
     "doc_type": "PRICE_LIST_2",
     "fields": {
-        "price_list_2_date":{
+        "price_list_2_date": {
             "value": "",
             "bbox": []
         },
-        "producer":{
+        "producer": {
             "value": "",
             "bbox": []
         },
-        "incoterms":{
+        "incoterms": {
             "value": "",
             "bbox": []
         },
-        "seller":{
+        "seller": {
             "value": "",
             "bbox": []
         },
-        "valid_till":{
+        "valid_till": {
             "value": "",
             "bbox": []
         },
-        "products":{
-            "product_1":{
-                "name_product":{
+        "products": {
+            "product_1": {
+                "name_product": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "latin_name":{
+                "latin_name": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "size_product":{
+                "size_product": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "unit_box":{
+                "unit_box": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "packages":{
+                "packages": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "price_per_unit":{
+                "price_per_unit": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "total_price":{
+                "total_price": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 }
             },
-            "product_2":{}
+            "product_2": {}
         }
     }
 }
-

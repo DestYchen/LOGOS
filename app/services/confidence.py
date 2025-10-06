@@ -14,7 +14,7 @@ def score_field(
 ) -> float:
     """Return a stub confidence score: 1 requests review, 0 skips."""
 
-    return float(random.randint(0, 1))
+    return float(1)
 
 
 def score_fields(

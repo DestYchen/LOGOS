@@ -2,96 +2,120 @@
     "file": "",
     "doc_type": "PACKING_LIST",
     "fields": {
-        "packing_list_date":{
+        "packing_list_date": {
             "value": "",
             "bbox": []
         },
-        "contract_no":{
+        "contract_no": {
             "value": "",
             "bbox": []
         },
-        "invoice_no":{
+        "invoice_no": {
             "value": "",
             "bbox": []
         },
-        "products":{
-            "product_1":{
-                "name_product":{
+        "products": {
+            "product_1": {
+                "name_product": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "latin_name":{
+                "latin_name": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "size_product":{
+                "size_product": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "unit_box":{
+                "unit_box": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "packages":{
+                "packages": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "net_weight":{
+                "net_weight": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "net_weight_with_glaze":{
+                "net_weight_with_glaze": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "net_weight_with_ice":{
+                "net_weight_with_ice": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "net_weight_with_glaze_and_pack":{
+                "net_weight_with_glaze_and_pack": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "gross_weight":{
+                "gross_weight": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "price_per_unit":{
+                "price_per_unit": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 },
-                "total_price":{
+                "total_price": {
                     "value": "",
-                    "bbox": []
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
                 }
             },
-            "product_2":{}
+            "product_2": {}
         },
-        "producer":{
+        "producer": {
             "value": "",
             "bbox": []
         },
-        "buyer":{
+        "buyer": {
             "value": "",
             "bbox": []
         },
-        "seller":{
+        "seller": {
             "value": "",
             "bbox": []
         },
-        "container_no":{
+        "container_no": {
             "value": "",
             "bbox": []
         },
-        "vessel":{
+        "vessel": {
             "value": "",
             "bbox": []
         },
-        "veterinary_seal":{
+        "veterinary_seal": {
             "value": "",
             "bbox": []
         },
-        "linear_seal":{
+        "linear_seal": {
             "value": "",
             "bbox": []
         }

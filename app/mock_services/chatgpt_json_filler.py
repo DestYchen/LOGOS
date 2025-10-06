@@ -2,6 +2,8 @@
 
 import json
 import os
+import logging
+import re
 from copy import deepcopy
 from typing import Any, Dict, Iterator, Optional
 
@@ -53,6 +55,12 @@ FILLER_PROMPT = os.getenv(
 OPENAI_MODEL = "google/gemini-2.5-pro"
 
 client: Optional[OpenAI] = None
+logger = logging.getLogger(__name__)
+
+
+def _extract_json(payload: str) -> str:
+    match = re.search(r"\{.*\}", payload, re.S)
+    return match.group(0) if match else payload
 
 
 class FillerRequest(BaseModel):
@@ -96,28 +104,85 @@ async def fill(request: FillerRequest) -> FillerResponse:
     print()
     print(request.doc_text[:8000])
     template_def = get_template_definition(request.doc_type)
-    print(template_def)
     template_fields = deepcopy(template_def.get("fields", {}))
     product_template = template_def.get("product_template")
 
     if client is None:
         return FillerResponse(**_stub_fill(request, template_fields, product_template))
 
-    template_json = json.dumps(template_fields, ensure_ascii=False)
-    user_content = [
-        {"type": "text", "text": f"Document type: {request.doc_type.value}"},
-        {"type": "text", "text": f"Template fields: {template_json}"},
-        {"type": "text", "text": request.doc_text[:8000]},
-    ]
+    template_payload: Dict[str, Any] = {"fields": template_fields}
+    if product_template is not None:
+        template_payload["product_template"] = product_template
+    template_json = json.dumps(template_payload, ensure_ascii=False)
+
+    # user_content = [
+    #     {"type": "text", "text": f"Document type: {request.doc_type.value}"},
+    #     {"type": "text", "text": f"Template fields: {template_json}"},
+    #     {"type": "text", "text": request.doc_text[:8000]},
+    # ]
+
+    tokens_preview = ""
     if request.tokens:
-        tokens_preview = json.dumps(request.tokens, ensure_ascii=False)[:4000]
-        user_content.append({"type": "input_text", "text": f"OCR tokens: {tokens_preview}"})
+        tokens_preview = json.dumps(request.tokens, ensure_ascii=False)
+        #user_content.append({"type": "input_text", "text": f"OCR tokens: {tokens_preview}"})
+
+    print(tokens_preview)
+
+    plain_text = f'<raw_plain_text>\n{request.doc_text}\n</raw_plain_text>'
+    raw_tockens = f"<raw_tokens>\n{tokens_preview}\n</raw_tokens>"
+    template_block = f"<template>\n{template_json}\n</template>"
+    
+    system_prompt = (
+        "You are a system tasked with turning raw OCR data into structured JSON."
+        "You receive:"
+        "- raw plain-text extracted from the document;"
+        "- the OCR tokens with ids, text, bbox, page;"
+        "- a JSON template describing which fields must be filled."
+        "- when present, a product_template object that shows the structure for items inside the 'products' map."
+
+        "Rules:"
+        "1. Only fill the fields present in the template. Leave the others empty."
+        "2. For every field you fill:"
+        "- value — copy the exact text from the document (no normalization or guessing);"
+        "- bbox — use the bounding box from the same token that supplied the value (if the value is composed from several tokens, you may provide multiple bounding boxes or leave it empty if coordinates are unknown);"
+        "- token_refs — list the identifiers of the tokens (e.g., ['p1_t4', 'p1_t5']) from which you extracted the value."
+        "3. If 'products' is expected, create entries like product_1, product_2, ... using the provided product_template structure, one per product in the document."
+        "4. If you are not confident, leave value empty and both bbox and token_refs as empty arrays."
+        "5. Output only valid JSON that matches the template exactly. No extra text, comments, or additional keys."
+    )
+    # content = [
+    #     {"role": "system", "content": FILLER_PROMPT},
+    #     {"role": "user", "content": user_content},
+    # ]
 
     content = [
-        {"role": "system", "content": FILLER_PROMPT},
-        {"role": "user", "content": user_content},
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": plain_text + "\n\n" + raw_tockens + "\n\n" + template_block},
     ]
 
+    debug_payload: Dict[str, Any] = {
+        "doc_id": request.doc_id,
+        "doc_type": request.doc_type.value,
+        "file_name": request.file_name,
+        "template_fields": template_fields,
+        "doc_text_length": len(request.doc_text or ""),
+        "doc_text_preview": request.doc_text[:1000],
+    }
+    if request.tokens is not None:
+        if isinstance(request.tokens, list):
+            debug_payload["tokens_count"] = len(request.tokens)
+            debug_payload["tokens_preview"] = request.tokens[:5]
+        else:
+            debug_payload["tokens_type"] = type(request.tokens).__name__
+            debug_payload["tokens_repr"] = str(request.tokens)[:1000]
+
+    # print("=== JSON FILLER REQUEST PAYLOAD ===")
+    # print(json.dumps(debug_payload, ensure_ascii=False, indent=2))
+    # print("=== JSON FILLER MODEL MESSAGE ===")
+    # print(json.dumps(content, ensure_ascii=False, indent=2))
+    # print("=== END JSON FILLER DEBUG ===")
+
+    raw_response: str | None = None
     try:
         # response = client.responses.create(model=OPENAI_MODEL, temperature=0, input=content)
         response = client.chat.completions.create(
@@ -125,17 +190,32 @@ async def fill(request: FillerRequest) -> FillerResponse:
                 messages=content,
                 temperature=0)
         raw = response.choices[0].message.content or ""
+        raw_response = raw
+        raw = _extract_json(raw)
+        print(raw)
         data = json.loads(raw)
-    except Exception:
+    except Exception as exc:
+        logger.exception(
+            "JSON filler LLM call failed doc_id=%s type=%s: %s; raw=%r",
+            request.doc_id,
+            request.doc_type.value,
+            exc,
+            raw_response,
+        )
         return FillerResponse(**_stub_fill(request, template_fields, product_template))
 
-    filled_fields = _merge_template(template_fields, product_template, data.get("fields", {}))
+    fields_payload = data.get("fields")
+    if not isinstance(fields_payload, dict):
+        fields_payload = data
+
+    logger.debug("JSON filler parsed payload doc_id=%s: %s", request.doc_id, fields_payload)
+
+    filled_fields = _merge_template(template_fields, product_template, fields_payload)
     return FillerResponse(
         doc_id=data.get("doc_id", request.doc_id),
         fields=filled_fields,
         meta={"source": "llm", "template": request.doc_type.value},
     )
-
 
 def _merge_template(
     template_fields: Dict[str, Any],
@@ -205,3 +285,5 @@ def _stub_fill(
         "fields": result_fields,
         "meta": {"stub": True, "template": request.doc_type.value},
     }
+
+
