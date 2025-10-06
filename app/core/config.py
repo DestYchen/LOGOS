@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     celery_broker_url: str = Field(default="redis://localhost:6379/1")
     celery_result_backend: str = Field(default="redis://localhost:6379/2")
     base_dir: Path = Field(default=Path("/srv/supplyhub"))
-    ocr_endpoint: HttpUrl = Field(default="http://dots-ocr.internal/v1/ocr")
+    ocr_endpoint: HttpUrl = Field(default="http://127.0.0.1:8000/v1/ocr")
     json_filler_endpoint: HttpUrl = Field(default="http://json-filler.internal/v1/fill")
     low_conf_threshold: float = Field(default=0.75)
     report_timezone: str = Field(default="UTC")

@@ -50,7 +50,7 @@ FILLER_PROMPT = os.getenv(
         "BE CONCISE: output only the JSON object that satisfies the contract above."
     ),
 )
-OPENAI_MODEL = "google/gemma-3-27b-it"
+OPENAI_MODEL = "google/gemini-2.5-pro"
 
 client: Optional[OpenAI] = None
 
@@ -93,6 +93,8 @@ def init_client() -> None:
 
 @app.post("/v1/fill", response_model=FillerResponse)
 async def fill(request: FillerRequest) -> FillerResponse:
+    print()
+    print(request.doc_text[:8000])
     template_def = get_template_definition(request.doc_type)
     print(template_def)
     template_fields = deepcopy(template_def.get("fields", {}))

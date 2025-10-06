@@ -143,7 +143,7 @@ async def run_ocr(request: OCRRequest) -> OCRResponse:
     logger.debug("Collected tokens=%s for doc_id=%s", len(tokens), request.doc_id)
     if not tokens:
         raise HTTPException(status_code=400, detail="empty_document")
-
+    print(tokens)
     return OCRResponse(doc_id=request.doc_id, tokens=tokens)
 
 
