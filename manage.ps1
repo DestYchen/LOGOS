@@ -146,9 +146,61 @@ function Stop-ByPidFile($pidFile, $label) {
   }
 }
 
+function Get-PortOwnerPid([int]$port) {
+  if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+    $c = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue
+    if ($c) { return [int]$c.OwningProcess }
+  }
+  $lines = netstat -ano | Select-String (":$port\s")
+  foreach ($l in $lines) {
+    $parts = $l.Line -split '\s+'
+    if ($parts.Length -ge 5) { return [int]$parts[-1] }
+  }
+  return $null
+}
+
+function Kill-Port([int]$port) {
+  $owner = Get-PortOwnerPid $port
+  if ($owner) {
+    try {
+      Stop-Process -Id $owner -Force -ErrorAction Stop
+      Write-Host ("Killed PID {0} listening on port {1}" -f $owner, $port)
+    } catch {
+      Write-Host ("Failed to kill PID {0} on port {1}: {2}" -f $owner, $port, $_.Exception.Message)
+    }
+  }
+}
+
+function Get-PortFromArgs($argsArray) {
+  for ($i=0; $i -lt $argsArray.Count; $i++) {
+    if ($argsArray[$i] -eq "--port" -and $i -lt ($argsArray.Count-1)) {
+      return [int]$argsArray[$i+1]
+    }
+  }
+  return $null
+}
+
+function Kill-UvicornBySignature($svc) {
+  $sig = $svc.Args[0]  # "module:app"
+  try {
+    $procs = Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'"
+    foreach ($p in $procs) {
+      if ($p.CommandLine -and $p.CommandLine -match "uvicorn" -and $p.CommandLine -match [regex]::Escape($sig)) {
+        try { Stop-Process -Id $p.ProcessId -Force -ErrorAction Stop; Write-Host ("Killed PID {0} by signature {1}" -f $p.ProcessId,$sig) } catch {}
+      }
+    }
+  } catch { }
+}
+
 function Stop-UvicornServices {
   foreach ($svc in $UvicornServices) {
+    # 1) по PID-файлу
     Stop-ByPidFile $svc.Pid ("uvicorn:" + $svc.Name)
+    # 2) по сигнатуре командной строки
+    Kill-UvicornBySignature $svc
+    # 3) по порту
+    $port = Get-PortFromArgs $svc.Args
+    if ($port) { Kill-Port $port }
   }
 }
 
