@@ -384,14 +384,15 @@ const ResolvePage = () => {
 
   const handleComplete = async () => {
     if (!packetId) return
+    setFinalizing(true)
     try {
-      setFinalizing(true)
       await completeReview(packetId)
       await refreshHistory()
       navigate(`/table/${packetId}`)
     } catch (err) {
       console.error(err)
       setPanelMessage(TEXT.updateError)
+    } finally {
       setFinalizing(false)
     }
   }
