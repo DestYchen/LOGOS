@@ -34,7 +34,7 @@ async def get_system_status(session: AsyncSession) -> dict:
             "updated_at": now,
         }
 
-    active_batches_stmt = select(func.count(Batch.id)).where(Batch.status.notin_([BatchStatus.DONE, BatchStatus.FAILED]))
+    active_batches_stmt = select(func.count(Batch.id)).where(Batch.status.notin_([BatchStatus.DONE, BatchStatus.FAILED, BatchStatus.CANCELLED]))
     active_batches = (await session.execute(active_batches_stmt)).scalar_one()
     status["active_batches"] = active_batches
 

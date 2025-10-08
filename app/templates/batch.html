@@ -23,6 +23,11 @@
       table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
       th, td { border: 1px solid #e5e7eb; padding: 0.5rem 0.75rem; text-align: left; font-size: 0.95rem; vertical-align: top; }
       th { background: #f3f4f6; }
+      .products-table { margin-top: 0.75rem; }
+      .products-table th, .products-table td { font-size: 0.9rem; }
+      .product-id-cell { font-weight: 600; white-space: nowrap; }
+      .cell-missing { background: #fef2f2; color: #991b1b; }
+      .meta-conf { display: block; font-size: 0.75rem; color: #6b7280; margin-top: 0.2rem; }
       .small-btn { padding: 0.35rem 0.8rem; font-size: 0.85rem; }
       .field-actions form { display: inline-flex; gap: 0.4rem; margin-right: 0.5rem; margin-top: 0.25rem; align-items: center; }
       .field-actions input[type="text"] { padding: 0.35rem 0.5rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
@@ -30,6 +35,8 @@
       .set-type-form { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
       .set-type-form label { font-size: 0.9rem; }
       .set-type-form select { padding: 0.35rem 0.5rem; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
+      .comparison-list { margin: 0; padding-left: 1.25rem; font-size: 0.9rem; color: #374151; }
+      .validation-matrix td { white-space: pre-line; }
       .report-actions { margin: 0.75rem 0; }
       a.small-btn { display: inline-block; text-decoration: none; }
     </style>
@@ -54,16 +61,17 @@
     {% endif %}
 
     <div class="status">
-      <div class="alert error" style="display:{% if processing_warnings %}block{% else %}none{% endif %};">
-        {% if processing_warnings %}
+      {% set warnings = processing_warnings | default([], true) %}
+      {% if warnings %}
+        <div class="alert error">
           <strong>Предупреждения обработки:</strong>
           <ul>
-            {% for w in processing_warnings %}
+            {% for w in warnings %}
               <li>{{ w }}</li>
             {% endfor %}
           </ul>
-        {% endif %}
-      </div>
+        </div>
+      {% endif %}
       <strong>Статус:</strong>
       {% if status in ["FILLED_AUTO", "FILLED_REVIEWED", "VALIDATED", "DONE"] %}
         <span class="ready">{{ status }}</span>
@@ -75,6 +83,9 @@
 
     <div class="docs">
       {% for doc in documents %}
+        <form action="/web/documents/{{ doc.id }}/delete" method="post" onsubmit="return confirm('Удалить документ из партии? Это действие необратимо.');" style="margin: 0.25rem 0 0.75rem;">
+          <button class="small-btn" type="submit">Удалить документ</button>
+        </form>
         <h2>Документ: {{ doc.filename }}</h2>
         <div class="meta">Тип: {{ doc.doc_type }} · Статус: {{ doc.status }}</div>
         {% if doc.doc_type == "UNKNOWN" and doc.status == "FAILED" %}
@@ -92,11 +103,31 @@
             </form>
           </div>
         {% endif %}
+        {% if doc.doc_type != "UNKNOWN" %}
+          <div class="set-type">
+            <form action="/web/documents/{{ doc.id }}/set_type" method="post" class="set-type-form">
+              <label for="doc-change-type-{{ loop.index0 }}">Сменить тип и перезаполнить:</label>
+              <select id="doc-change-type-{{ loop.index0 }}" name="doc_type">
+                {% for value in doc_types %}
+                  {% if value != "UNKNOWN" %}
+                    <option value="{{ value }}" {% if value == doc.doc_type %}selected{% endif %}>{{ value }}</option>
+                  {% endif %}
+                {% endfor %}
+              </select>
+              <button class="small-btn" type="submit">Применить</button>
+            </form>
+          </div>
+        {% endif %}
+        {% if doc.doc_type != "UNKNOWN" %}
+          <div class="set-type">
+            <form action="/web/documents/{{ doc.id }}/refill" method="post" class="set-type-form">
+              <label>Перезаполнить поля с текущим типом ({{ doc.doc_type }}):</label>
+              <button class="small-btn" type="submit">Перезаполнить</button>
+            </form>
+          </div>
+        {% endif %}
         {% if doc.processing and doc.status != "FAILED" %}
           <p class="meta">Документ ещё обрабатывается. Подождите завершения обработки перед подтверждением полей.</p>
-        {% endif %}
-        {% if doc.filled_json %}
-          <pre>{{ doc.filled_json }}</pre>
         {% endif %}
 
         <h3>Поля</h3>
@@ -150,6 +181,41 @@
             {% endfor %}
           </tbody>
         </table>
+
+        {% if doc.products.columns %}
+          <div class="products-block">
+            <h3>Продукты</h3>
+            {% if doc.products.rows %}
+              <table class="products-table">
+                <thead>
+                  <tr>
+                    <th>Идентификатор</th>
+                    {% for column in doc.products.columns %}
+                      <th>{{ column.label }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in doc.products.rows %}
+                    <tr>
+                      <td class="product-id-cell">{{ row.product_id }}</td>
+                      {% for cell in row.fields %}
+                        <td class="{% if cell.missing %}cell-missing{% endif %}">
+                          {{ cell.value if cell.value is not none and cell.value != '' else '—' }}
+                          {% if cell.confidence_display %}
+                            <span class="meta-conf">{{ cell.confidence_display }}</span>
+                          {% endif %}
+                        </td>
+                      {% endfor %}
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <p class="meta">Продукты не найдены.</p>
+            {% endif %}
+          </div>
+        {% endif %}
       {% endfor %}
     </div>
 
@@ -209,14 +275,41 @@
           <p class="meta">Заполненных полей нет.</p>
         {% endif %}
         <h3>Замечания и проверки</h3>
-        {% if report_validations %}
+        {% if validation_matrix %}
+          <table class="validation-matrix">
+            <thead>
+              <tr>
+                <th>??????</th>
+                <th>???????? ???????</th>
+                {% for column in validation_matrix_columns %}
+                  <th>{{ column.label }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in validation_matrix %}
+                <tr>
+                  <td>{{ row.severity or '-' }}</td>
+                  <td>
+                    <div><strong>{{ row.rule_id }}</strong></div>
+                    <div>{{ row.message or '?' }}</div>
+                  </td>
+                  {% for column in validation_matrix_columns %}
+                    {% set cell = row.cells.get(column.key) %}
+                    <td>{{ cell if cell else '?' }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% elif report_validations %}
           <table>
             <thead>
               <tr>
-                <th>Правило</th>
-                <th>Степень</th>
-                <th>Сообщение</th>
-                <th>Ссылки</th>
+                <th>???????</th>
+                <th>???????</th>
+                <th>?????????</th>
+                <th>??????</th>
               </tr>
             </thead>
             <tbody>
@@ -231,7 +324,41 @@
             </tbody>
           </table>
         {% else %}
-          <p class="meta">Замечаний не найдено.</p>
+          <p class="meta">????????? ?? ???????.</p>
+        {% endif %}
+
+
+        <h3>?????? ?????????</h3>
+
+        {% if product_matrix %}
+          <table class="product-matrix">
+            <thead>
+              <tr>
+                <th>Статус</th>
+                <th>Описание правила</th>
+                {% for column in product_matrix_columns %}
+                  <th>{{ column.label }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in product_matrix %}
+                <tr>
+                  <td>{{ row.severity or '-' }}</td>
+                  <td>
+                    <div><strong>{{ row.rule_id }}</strong></div>
+                    <div>{{ row.message or '-' }}</div>
+                  </td>
+                  {% for column in product_matrix_columns %}
+                    {% set cell = row.cells.get(column.key) %}
+                    <td>{{ cell if cell else '-' }}</td>
+                  {% endfor %}
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p class="meta">Расхождения по продуктам не обнаружены.</p>
         {% endif %}
         {% if report_json %}
           <details>
@@ -249,5 +376,3 @@
     </div>
   </body>
 </html>
-
-

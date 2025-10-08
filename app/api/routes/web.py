@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import json
@@ -20,6 +20,7 @@ from app.core.schema import get_schema
 from app.core.storage import batch_dir
 from app.models import Document, FilledField
 from app.services import batches as batch_service
+from app.services import deletion
 from app.services import pipeline, reports, review
 
 router = APIRouter(prefix="/web", tags=["web"])
@@ -43,6 +44,9 @@ async def handle_upload(
 
     batch = await batch_service.create_batch(session, created_by="web")
     await batch_service.save_documents(session, batch, files)
+    # Ensure DB rows are visible for the worker and subsequent GET before enqueue/redirect
+    await session.flush()
+    await session.commit()
     await pipeline.enqueue_batch_processing(batch.id)
     return RedirectResponse(url=f"/web/batches/{batch.id}", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -56,7 +60,21 @@ async def list_batches(request: Request, session: AsyncSession = Depends(get_db)
             "status": item.status.value,
             "documents_count": len(item.documents),
             "created_at": item.created_at.strftime("%Y-%m-%d %H:%M"),
-            "can_delete": item.status in (BatchStatus.DONE, BatchStatus.FAILED),
+            # Разрешаем удаление не только для DONE/FAILED, а для любых статусов,
+            # так как удаление теперь безопасно обрабатывает отмену задач.
+            "can_delete": item.status in (
+                BatchStatus.NEW,
+                BatchStatus.PREPARED,
+                BatchStatus.TEXT_READY,
+                BatchStatus.CLASSIFIED,
+                BatchStatus.FILLED_AUTO,
+                BatchStatus.FILLED_REVIEWED,
+                BatchStatus.VALIDATED,
+                BatchStatus.DONE,
+                BatchStatus.FAILED,
+                getattr(BatchStatus, "CANCEL_REQUESTED", BatchStatus.DONE),
+                getattr(BatchStatus, "CANCELLED", BatchStatus.DONE),
+            ),
         }
         for item in batches
     ]
@@ -99,6 +117,8 @@ async def batch_details(
         if filled_json is None:
             awaiting_processing = True
 
+        products_table = _build_product_table(document)
+
         documents_payload.append(
             {
                 "id": str(document.id),
@@ -109,6 +129,7 @@ async def batch_details(
                 "fields": fields,
                 "pending_count": pending_count,
                 "processing": filled_json is None,
+                "products": products_table,
             }
         )
 
@@ -116,6 +137,8 @@ async def batch_details(
     report_documents: List[Dict[str, Any]] = []
     report_validations: List[Dict[str, Any]] = []
     report_available = False
+    product_comparisons: List[Dict[str, Any]] = []
+    report_payload: Optional[Dict[str, Any]] = None
     try:
         report_payload = await asyncio.to_thread(reports.load_report, batch_id)
         report_json = json.dumps(report_payload, indent=2, ensure_ascii=False)
@@ -123,9 +146,13 @@ async def batch_details(
         report_documents = doc_rows
         report_validations = validation_rows
         report_available = True
+        product_comparisons = _build_product_comparisons(report_payload)
     except FileNotFoundError:
         report_json = None
+        report_payload = None
 
+    product_matrix_columns, product_matrix = _build_product_comparison_matrix(product_comparisons)
+    validation_matrix_columns, validation_matrix = _build_validation_matrix(report_payload, documents_payload)
 
     can_complete = pending_total == 0 and not awaiting_processing
 
@@ -141,6 +168,11 @@ async def batch_details(
         "report_documents": report_documents,
         "report_validations": report_validations,
         "report_available": report_available,
+        "product_comparisons": product_comparisons,
+        "product_matrix_columns": product_matrix_columns,
+        "product_matrix": product_matrix,
+        "validation_matrix_columns": validation_matrix_columns,
+        "validation_matrix": validation_matrix,
         "message": message,
         "error": error,
         "doc_types": [dt.value for dt in DocumentType],
@@ -178,6 +210,8 @@ async def complete_batch(
         document.status = DocumentStatus.FILLED_REVIEWED
     batch.status = BatchStatus.FILLED_REVIEWED
     await session.flush()
+    # Commit statuses before enqueue to avoid concurrent updates on the same batch row
+    await session.commit()
 
     await pipeline.enqueue_validation(batch_id)
     return RedirectResponse(
@@ -398,6 +432,185 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, object]], in
         )
 
     return fields, pending
+
+
+def _build_product_comparisons(report_payload: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not report_payload:
+        return []
+    # Если отчёт содержит такой раздел — вернём его; иначе пусто.
+    return list(report_payload.get("product_comparisons", []))
+
+def _build_product_comparison_matrix(product_comparisons: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, str]], List[Dict[str, Any]]]:
+    # Минимально: пустая матрица, если логика ещё не реализована
+    return [], []
+
+def _format_doc_type_label(key: str) -> str:
+    # Можно маппить на красивые лейблы, а пока — просто вернуть как есть
+    return key
+
+
+def _build_product_table(document: Document) -> Dict[str, Any]:
+    schema = get_schema(document.doc_type)
+    products_schema = schema.fields.get("products") if schema else None
+    template = None
+    if products_schema and products_schema.children:
+        template = products_schema.children.get("product_template")
+
+    # Если шаблона нет — пустая таблица
+    if template is None or not template.children:
+        return {"columns": [], "rows": []}
+
+    # Колонки: ключ и человекочитаемый лейбл
+    columns: List[Dict[str, str]] = []
+    column_keys: List[str] = []
+    for key, field_schema in template.children.items():
+        columns.append({"key": key, "label": field_schema.label or key})
+        column_keys.append(key)
+
+    # Последние значения полей документа
+    latest_fields: Dict[str, FilledField] = {
+        f.field_key: f for f in document.fields if getattr(f, "latest", False)
+    }
+
+    # products_map: {product_id: {sub_key: FilledField}}
+    products_map: Dict[str, Dict[str, FilledField]] = {}
+    for field_key, field in latest_fields.items():
+        if not field_key.startswith("products."):
+            continue
+        parts = field_key.split(".")
+        if len(parts) < 3:
+            continue
+        product_id = parts[1]
+        sub_key = ".".join(parts[2:])
+        products_map.setdefault(product_id, {})[sub_key] = field
+
+    # Строки таблицы
+    rows: List[Dict[str, Any]] = []
+    for product_id, subfields in sorted(products_map.items(), key=lambda kv: kv[0]):
+        row_cells: Dict[str, Any] = {}
+        for key in column_keys:
+            # Берём именно значение для этой колонки (sub_key)
+            fld = subfields.get(key)
+            row_cells[key] = fld.value if fld is not None else None
+        rows.append({
+            "product_id": product_id,
+            "cells": row_cells,
+        })
+
+    return {"columns": columns, "rows": rows}
+
+
+
+
+
+def _format_validation_detail(
+    ref: Dict[str, Any],
+    doc_info: Optional[Dict[str, Any]],
+) -> Optional[str]:
+    label = doc_info.get('filename') or doc_info.get('doc_type') if doc_info else None
+    value = ref.get('value')
+    field_key = ref.get('field_key') or ref.get('field')
+    parts: List[str] = []
+    if value not in (None, '', []):
+        parts.append(str(value))
+    if field_key:
+        parts.append(str(field_key))
+    detail = ' • '.join(parts) if parts else None
+    # if label:
+    #     return f"{label}: {detail}" if detail else label
+    return detail if detail else "---"
+
+
+
+def _build_validation_matrix(
+    report_payload: Optional[Dict[str, Any]],
+    documents_payload: List[Dict[str, Any]],
+) -> Tuple[List[Dict[str, str]], List[Dict[str, Any]]]:
+    if not report_payload:
+        return [], []
+
+    validations = report_payload.get('validations') or []
+    if not validations:
+        return [], []
+
+    doc_info: Dict[str, Dict[str, str]] = {}
+    for doc in documents_payload:
+        doc_id = str(doc.get('id')) if doc.get('id') is not None else None
+        if doc_id:
+            doc_info[doc_id] = {
+                'doc_type': doc.get('doc_type'),
+                'filename': doc.get('filename'),
+            }
+
+    for doc in report_payload.get('documents', []):
+        doc_id = doc.get('doc_id')
+        if doc_id is None:
+            continue
+        key = str(doc_id)
+        info = doc_info.get(key, {}).copy()
+        if doc.get('doc_type'):
+            info['doc_type'] = doc.get('doc_type')
+        if doc.get('filename'):
+            info['filename'] = doc.get('filename')
+        doc_info[key] = info
+
+    doc_types_present: set[str] = set()
+    for info in doc_info.values():
+        doc_type = info.get('doc_type')
+        if doc_type:
+            doc_types_present.add(doc_type)
+
+    for item in validations:
+        for ref in item.get('refs', []):
+            ref_doc_type = ref.get('doc_type')
+            if ref_doc_type:
+                doc_types_present.add(ref_doc_type)
+            doc_id = ref.get('doc_id')
+            if doc_id is not None:
+                info = doc_info.get(str(doc_id))
+                if info and info.get('doc_type'):
+                    doc_types_present.add(info['doc_type'])
+
+    columns: List[Dict[str, str]] = []
+    used_keys: set[str] = set()
+    for doc_type in DocumentType:
+        key = doc_type.value
+        if key in doc_types_present:
+            columns.append({'key': key, 'label': _format_doc_type_label(key)})
+            used_keys.add(key)
+    for key in sorted(doc_types_present):
+        if key not in used_keys:
+            columns.append({'key': key, 'label': _format_doc_type_label(key)})
+            used_keys.add(key)
+
+    rows: List[Dict[str, Any]] = []
+    for item in validations:
+        cells_map: Dict[str, List[str]] = {col['key']: [] for col in columns}
+        for ref in item.get('refs', []):
+            doc_id = ref.get('doc_id')
+            info = doc_info.get(str(doc_id)) if doc_id is not None else None
+            doc_type = info.get('doc_type') if info and info.get('doc_type') else ref.get('doc_type')
+            if not doc_type:
+                continue
+            if doc_type not in cells_map:
+                cells_map[doc_type] = []
+            detail = _format_validation_detail(ref, info)
+            if detail:
+                cells_map[doc_type].append(detail)
+
+        rows.append(
+            {
+                'rule_id': item.get('rule_id'),
+                'severity': item.get('severity'),
+                'message': item.get('message'),
+                'cells': {key: '\n'.join(values) if values else None for key, values in cells_map.items()},
+            }
+        )
+
+    return columns, rows
+
+
 def _latest_field(document: Document, field_key: str) -> Optional[FilledField]:
     for field in document.fields:
         if field.field_key == field_key and field.latest:
@@ -411,28 +624,15 @@ def _read_json(path: Path) -> dict:
 
 
 @router.post("/batches/{batch_id}/delete")
-async def delete_batch(
-    batch_id: uuid.UUID, session: AsyncSession = Depends(get_db)
-) -> RedirectResponse:
-    batch = await batch_service.get_batch(session, batch_id)
-    if batch is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="batch_not_found")
-    if batch.status not in (BatchStatus.DONE, BatchStatus.FAILED):
-        return RedirectResponse(
-            url=f"/web/batches?error=delete_forbidden", status_code=status.HTTP_303_SEE_OTHER
-        )
-
-    # Remove DB entity (cascade deletes documents/fields/validations)
-    await session.delete(batch)
-    await session.flush()
-
-    # Remove files from storage
-    from app.core.storage import remove_batch as _remove_batch
-
-    _remove_batch(str(batch_id))
+async def delete_batch(batch_id: uuid.UUID) -> RedirectResponse:
+    try:
+        await deletion.delete_batch(batch_id, requested_by="web")
+    except deletion.BatchNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="batch_not_found") from exc
 
     return RedirectResponse(
-        url=f"/web/batches?message=batch_deleted", status_code=status.HTTP_303_SEE_OTHER
+        url="/web/batches?message=batch_deleted",
+        status_code=status.HTTP_303_SEE_OTHER,
     )
 
 
@@ -462,6 +662,92 @@ async def set_document_type(
     return RedirectResponse(url=f"/web/batches/{document.batch_id}?message=type_set", status_code=status.HTTP_303_SEE_OTHER)
 
 
+@router.post("/documents/{doc_id}/refill")
+async def refill_document(
+    doc_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(Document)
+        .where(Document.id == doc_id)
+        .options(selectinload(Document.batch), selectinload(Document.fields))
+    )
+    result = await session.execute(stmt)
+    document = result.scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document_not_found")
+
+    if document.doc_type == DocumentType.UNKNOWN:
+        return RedirectResponse(
+            url=f"/web/batches/{document.batch_id}?error=type_required",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+
+    await pipeline.fill_document_from_existing_ocr(
+        session,
+        batch_id=document.batch_id,
+        document=document,
+        forced_doc_type=document.doc_type,
+    )
+    await session.flush()
+    return RedirectResponse(
+        url=f"/web/batches/{document.batch_id}?message=refilled",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/documents/{doc_id}/delete")
+async def delete_document(
+    doc_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db),
+):
+    stmt = (
+        select(Document)
+        .where(Document.id == doc_id)
+        .options(selectinload(Document.batch), selectinload(Document.fields))
+    )
+    result = await session.execute(stmt)
+    document = result.scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document_not_found")
+
+    # Remove files on disk (best-effort)
+    from pathlib import Path as _Path
+    import shutil as _shutil
+    paths = batch_dir(str(document.batch_id))
+    try:
+        raw_file = paths.raw / document.filename
+        raw_file.unlink(missing_ok=True)  # type: ignore[arg-type]
+    except Exception:
+        pass
+    try:
+        if document.ocr_path:
+            (paths.base / document.ocr_path).unlink(missing_ok=True)  # type: ignore[arg-type]
+    except Exception:
+        pass
+    try:
+        if document.filled_path:
+            (paths.base / document.filled_path).unlink(missing_ok=True)  # type: ignore[arg-type]
+    except Exception:
+        pass
+    # Remove derived/preview folders for the document
+    try:
+        _shutil.rmtree(paths.derived / str(document.id), ignore_errors=True)
+    except Exception:
+        pass
+    try:
+        _shutil.rmtree(paths.preview / str(document.id), ignore_errors=True)
+    except Exception:
+        pass
+
+    batch_id = document.batch_id
+    await session.delete(document)
+    await session.flush()
+
+    return RedirectResponse(
+        url=f"/web/batches/{batch_id}?message=document_deleted",
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
 @router.get("/batches/{batch_id}/report.xlsx")
 async def download_batch_report(batch_id: uuid.UUID) -> StreamingResponse:
     try:

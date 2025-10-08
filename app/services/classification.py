@@ -11,11 +11,12 @@ KEYWORDS = {
     DocumentType.EXPORT_DECLARATION: [r"(?i)export\s+declaration", r"(?i)customs\s+declaration"],
     DocumentType.PACKING_LIST: [r"(?i)packing\s+list"],
     DocumentType.BILL_OF_LANDING: [r"(?i)bill\s+of\s+landing", r"(?i)\bB/L\b"],
-    DocumentType.PRICE_LIST_1: [r"(?i)price\s*list\s*1"],
-    DocumentType.PRICE_LIST_2: [r"(?i)price\s*list\s*2"],
+    DocumentType.PRICE_LIST_1: [r"(?i)price\s*list"],
+    DocumentType.PRICE_LIST_2: [r"(?i)price\s*list"],
     DocumentType.QUALITY_CERTIFICATE: [r"(?i)quality\s+certificate"],
     DocumentType.CERTIFICATE_OF_ORIGIN: [r"(?i)certificate\s+of\s+origin"],
     DocumentType.VETERINARY_CERTIFICATE: [r"(?i)veterinary\s+certificate"],
+    DocumentType.PROFORMA: [r"(?i)\bproforma(?:[\s-]+invoice)?\b"],
 }
 
 

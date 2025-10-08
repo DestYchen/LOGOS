@@ -22,6 +22,7 @@ from app.api.schemas import (
 from app.core.config import get_settings
 from app.core.enums import BatchStatus, DocumentStatus
 from app.services import batches as batch_service
+from app.services import deletion
 from app.services import pipeline, reports, review
 
 router = APIRouter(prefix="/batches", tags=["batches"])
@@ -195,3 +196,12 @@ async def get_report(batch_id: uuid.UUID, session: AsyncSession = Depends(get_db
         validations=validations,
         meta=meta,
     )
+
+@router.post("/{batch_id}/delete")
+async def delete_batch_api(batch_id: uuid.UUID) -> dict:
+    try:
+        result = await deletion.delete_batch(batch_id, requested_by="api")
+    except deletion.BatchNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="batch_not_found") from exc
+
+    return {"batch_id": str(batch_id), "documents": result.get("documents", 0)}

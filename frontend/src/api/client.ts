@@ -26,6 +26,8 @@ export const fetchBatchSummary = async (batchId: string): Promise<BatchSummary> 
 
 export const mapBatchStatus = (status: BatchStatus): UiBatchState => {
   if (status === "FAILED") return "failed"
+  if (status === "CANCEL_REQUESTED") return "deleting"
+  if (status === "CANCELLED") return "cancelled"
   if (status === "NEW") return "draft"
   if (status === "PREPARED") return "waiting"
   if (status === "TEXT_READY" || status === "CLASSIFIED") return "processing"

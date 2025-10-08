@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from app.core.enums import DocumentType
 from app.mock_services.templates import get_template_definition
 
-HARDCODED_OPENAI_API_KEY = ""
+HARDCODED_OPENAI_API_KEY = "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"
 FILLER_PROMPT = os.getenv(
     "CHATGPT_FILLER_PROMPT",
     (
@@ -52,15 +52,96 @@ FILLER_PROMPT = os.getenv(
         "BE CONCISE: output only the JSON object that satisfies the contract above."
     ),
 )
-OPENAI_MODEL = "google/gemma-3-27b-it"
+OPENAI_MODEL = "qwen/qwen2.5-vl-32b-instruct:free"
 
 client: Optional[OpenAI] = None
 logger = logging.getLogger(__name__)
 
 
+
+
+def _strip_markdown_fence(text: str) -> str:
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+
+    lines = stripped.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    while lines and lines[-1].strip().startswith("```"):
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _is_json_fragment(fragment: str) -> bool:
+    if not fragment:
+        return False
+    try:
+        json.loads(fragment)
+    except Exception:
+        return False
+    return True
+
+
+def _iter_json_fragments(text: str) -> Iterator[str]:
+    if not text:
+        return
+
+    in_string = False
+    escape = False
+    stack: list[str] = []
+    start: Optional[int] = None
+    pairs = {"{": "}", "[": "]"}
+
+    for index, ch in enumerate(text):
+        if in_string:
+            if escape:
+                escape = False
+                continue
+            if ch == "\\":
+                escape = True
+                continue
+            if ch == '"':
+                in_string = False
+            continue
+
+        if ch == '"':
+            in_string = True
+            continue
+
+        if ch in pairs:
+            if not stack:
+                start = index
+            stack.append(ch)
+            continue
+
+        if ch in ("}", "]"):
+            if not stack:
+                continue
+            opener = stack.pop()
+            if pairs.get(opener) != ch:
+                stack.clear()
+                start = None
+                continue
+            if not stack and start is not None:
+                yield text[start:index + 1]
+                start = None
+
+
+
 def _extract_json(payload: str) -> str:
-    match = re.search(r"\{.*\}", payload, re.S)
-    return match.group(0) if match else payload
+    if not payload:
+        return payload
+
+    cleaned = _strip_markdown_fence(payload)
+    if _is_json_fragment(cleaned):
+        return cleaned
+
+    for candidate in _iter_json_fragments(cleaned):
+        if _is_json_fragment(candidate):
+            return candidate
+
+    return cleaned
 
 
 class FillerRequest(BaseModel):
@@ -129,7 +210,7 @@ async def fill(request: FillerRequest) -> FillerResponse:
     plain_text = f'<raw_plain_text>\n{request.doc_text}\n</raw_plain_text>'
     raw_tockens = f"<raw_tokens>\n{tokens_preview}\n</raw_tokens>"
     template_block = f"<template>\n{template_json}\n</template>"
-    
+
     system_prompt = (
         "You are a system tasked with turning raw OCR data into structured JSON."
         "You receive:"
@@ -144,7 +225,11 @@ async def fill(request: FillerRequest) -> FillerResponse:
         "- value — copy the exact text from the document (no normalization or guessing);"
         "- bbox — use the bounding box from the same token that supplied the value (if the value is composed from several tokens, you may provide multiple bounding boxes or leave it empty if coordinates are unknown);"
         "- token_refs — list the identifiers of the tokens (e.g., ['p1_t4', 'p1_t5']) from which you extracted the value."
-        "3. If 'products' is expected, create entries like product_1, product_2, ... using the provided product_template structure, one per product in the document."
+        "3. If 'products' is present in the template, you MUST output it as an object where each entry is named product_1, product_2, ..., one per product row. Even when the entire table arrives as a single token (for example <table>...</table>), you must parse it row by row and behave as if each <tr> were separate input."
+        "- Count the number of product rows. The number of product_N entries must match exactly."
+        "- Each product_N must contain every child field shown in product_template (even if empty)."
+        "- If you cannot split rows, still create product_1 with whatever data you have and leave the rest empty."
+        "- Any product_N outside fields.products or data inside product_template will be ignored."
         "4. If you are not confident, leave value empty and both bbox and token_refs as empty arrays."
         "5. Output only valid JSON that matches the template exactly. No extra text, comments, or additional keys."
     )
@@ -186,7 +271,8 @@ async def fill(request: FillerRequest) -> FillerResponse:
         response = client.chat.completions.create(
                 model=OPENAI_MODEL,
                 messages=content,
-                temperature=0)
+                temperature=0,
+                timeout=300)
         raw = response.choices[0].message.content or ""
         raw_response = raw
         raw = _extract_json(raw)

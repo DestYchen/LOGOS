@@ -20,6 +20,8 @@ const statusLabels: Record<UiBatchState, { label: string; className: string }> =
   processing: { label: "Обработка", className: "badge badge-processing" },
   manual: { label: "Нужно разметить", className: "badge badge-manual" },
   done: { label: "Готово", className: "badge badge-done" },
+  deleting: { label: "Удаляется", className: "badge badge-deleting" },
+  cancelled: { label: "Удалено", className: "badge badge-cancelled" },
   failed: { label: "Ошибка", className: "badge badge-failed" },
 }
 

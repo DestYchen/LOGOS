@@ -1,6 +1,7 @@
-п»їfrom __future__ import annotations
+from __future__ import annotations
 
 
+    # Disabled anchored equality for gross weight
 import operator
 import re
 import uuid
@@ -14,7 +15,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import DocumentType, ValidationSeverity
 from app.core.schema import get_schema
 from app.models import Document, FilledField, Validation
-from datetime import datetime
 
 
 @dataclass
@@ -505,7 +505,7 @@ CERT_ORIGIN_DATE = _ref("CERTIFICATE_OF_ORIGIN", "certificate_of_origin_date", "
 DATE_RULES: List[DateRule] = [
     DateRule(
         rule_id="date_proforma_earliest",
-        description="Р”Р°С‚Р° РїСЂРѕС„РѕСЂРјС‹ РґРѕР»Р¶РЅР° Р±С‹С‚СЊ СЃР°РјРѕР№ СЂР°РЅРЅРµР№ СЃСЂРµРґРё СЃРІСЏР·Р°РЅРЅС‹С… РґРѕРєСѓРјРµРЅС‚РѕРІ",
+        description="Дата проформы должна быть самой ранней среди связанных документов",
         anchor=PROFORMA_DATE,
         comparisons=[
             DateComparison("<=", INVOICE_DATE),
@@ -522,7 +522,7 @@ DATE_RULES: List[DateRule] = [
     ),
     DateRule(
         rule_id="date_invoice_not_too_early",
-        description="Р”Р°С‚Р° РёРЅРІРѕР№СЃР° РЅРµ РґРѕР»Р¶РЅР° Р±С‹С‚СЊ СЂР°РЅСЊС€Рµ РґР°С‚С‹ РѕС‚РіСЂСѓР·РєРё Рё РґР°С‚С‹ СЃРµСЂС‚РёС„РёРєР°С‚РѕРІ",
+        description="Дата инвойса не должна быть раньше даты отгрузки и даты сертификатов",
         anchor=INVOICE_DATE,
         comparisons=[
             DateComparison(">=", BOL_DATE),
@@ -536,7 +536,7 @@ DATE_RULES: List[DateRule] = [
     ),
     DateRule(
         rule_id="date_bill_of_landing_after_sources",
-        description="Р”Р°С‚Р° РєРѕРЅРѕСЃСЃР°РјРµРЅС‚Р° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РїРѕР·Р¶Рµ РґР°С‚ РїСЂРѕС„РѕСЂРјС‹, РёРЅРІРѕР№СЃР° Рё РїСЂР°Р№СЃ Р»РёСЃС‚РѕРІ",
+        description="Дата коноссамента должна быть позже дат проформы, инвойса и прайс листов",
         anchor=BOL_DATE,
         comparisons=[
             DateComparison(">=", PROFORMA_DATE),
@@ -547,7 +547,7 @@ DATE_RULES: List[DateRule] = [
     ),
     DateRule(
         rule_id="date_packing_list_before_ship",
-        description="Р”Р°С‚Р° РїР°РєРёРЅРі Р»РёСЃС‚Р° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ СЂР°РЅСЊС€Рµ С‡РµРј РґР°С‚Р° РєРѕРЅРѕСЃР°РјРµРЅС‚Р° Рё РЅРµ РїРѕР·Р¶Рµ С‡РµРј РґР°С‚Р° РёРЅРІРѕР№СЃР°",
+        description="Дата пакинг листа должна быть раньше чем дата коносамента и не позже чем дата инвойса",
         anchor=PACKING_LIST_DATE,
         comparisons=[
             DateComparison("<", BOL_DATE),
@@ -556,13 +556,13 @@ DATE_RULES: List[DateRule] = [
     ),
     DateRule(
         rule_id="date_price_list_1_before_proforma",
-        description="Р”Р°С‚Р° РїСЂР°Р№СЃ Р»РёСЃС‚Р° 1 РґРѕР»Р¶РЅР° Р±С‹С‚СЊ СЂР°РЅСЊС€Рµ РёР»Рё СЂР°РІРЅР° РґР°С‚Рµ РїСЂРѕС„РѕСЂРјС‹",
+        description="Дата прайс листа 1 должна быть раньше или равна дате проформы",
         anchor=PRICE_LIST1_DATE,
         comparisons=[DateComparison("<=", PROFORMA_DATE)],
     ),
     DateRule(
         rule_id="date_price_list_2_between_proforma_invoice",
-        description="Р”Р°С‚Р° РїСЂР°Р№СЃ Р»РёСЃС‚Р° 2 РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РїРѕР·Р¶Рµ РґР°С‚С‹ РїСЂРѕС„РѕРјС‹ Рё РЅРµ РїРѕР·Р¶РµРґР°С‚С‹ РёРЅРІРѕР№СЃР°",
+        description="Дата прайс листа 2 должна быть позже даты профомы и не позжедаты инвойса",
         anchor=PRICE_LIST2_DATE,
         comparisons=[
             DateComparison(">", PROFORMA_DATE),
@@ -571,31 +571,31 @@ DATE_RULES: List[DateRule] = [
     ),
     DateRule(
         rule_id="date_quality_certificate_after_bol",
-        description="Р”Р°С‚Р° СЃРµСЂС‚РёС„РёРєР°С‚Р°С‚ РєР°С‡РµСЃС‚РІР° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РїРѕР·Р¶Рµ РёР»Рё СЂР°РІРЅР° РґР°С‚Рµ РєРѕРЅРѕСЃСЃР°РјРµРЅС‚Р°",
+        description="Дата сертификатат качества должна быть позже или равна дате коноссамента",
         anchor=QUALITY_CERT_DATE,
         comparisons=[DateComparison(">=", BOL_DATE)],
     ),
     DateRule(
         rule_id="date_veterinary_certificate_before_bol",
-        description="Р”Р°С‚Р° РІРµС‚РµСЂРёРЅР°СЂРЅРѕРіРѕ СЃРµСЂС‚РёС„РёРєР°С‚Р° РґРѕР»Р¶РЅР° Р±С‹С‚СЊ СЂР°РЅСЊС€Рµ С‡РµРј РґР°С‚Р° РєРѕРЅРѕСЃСЃР°РјРµРЅС‚Р°",
+        description="Дата ветеринарного сертификата должна быть раньше чем дата коноссамента",
         anchor=VET_CERT_DATE,
         comparisons=[DateComparison("<", BOL_DATE)],
     ),
     DateRule(
         rule_id="date_export_declaration_after_bol",
-        description="Р”Р°С‚Р° СЌРєСЃРїРѕСЂС‚РЅРѕР№ РґРµРєР»Р°СЂР°С†РёРё РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РїРѕР·Р¶Рµ РёР»Рё СЂР°РІРЅР° РґР°С‚С‹ РєРѕРЅРѕСЃСЃР°РјРµРЅС‚Р°",
+        description="Дата экспортной декларации должна быть позже или равна даты коноссамента",
         anchor=EXPORT_DECL_DATE,
         comparisons=[DateComparison(">=", BOL_DATE)],
     ),
     DateRule(
         rule_id="date_specification_not_after_invoice",
-        description="Р”Р°С‚Р° СЃРїРµС†РёС„РёРєР°С†РёРё РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РЅРµ РїРѕР·Р¶Рµ, С‡РµРј РґР°С‚Р° РёРЅРІРѕР№СЃР°",
+        description="Дата спецификации должна быть не позже, чем дата инвойса",
         anchor=SPECIFICATION_DATE,
         comparisons=[DateComparison("<=", INVOICE_DATE)],
     ),
     DateRule(
         rule_id="date_certificate_origin_after_invoice",
-        description="Р”Р°С‚Р° СЃРµСЂС‚РёС„РёРєР°С‚Р° РїСЂРѕРёСЃС…РѕР¶РґРµРЅРёСЏ РґРѕР»Р¶РЅР° Р±С‹С‚СЊ РїРѕР·Р¶Рµ РёР»Рё СЂР°РІРЅРѕ РґР°С‚Рµ РёРЅРІРѕР№СЃР°",
+        description="Дата сертификата происхождения должна быть позже или равно дате инвойса",
         anchor=CERT_ORIGIN_DATE,
         comparisons=[DateComparison(">=", INVOICE_DATE)],
     ),
@@ -605,7 +605,7 @@ DATE_RULES: List[DateRule] = [
 ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     AnchoredEqualityRule(
         rule_id="contract_no_alignment",
-        description="РќРѕРјРµСЂ РєРѕРЅС‚СЂР°РєС‚Р° РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РѕРґРёРЅР°РєРѕРІС‹Рј СЃСЂРµРґРё РїСЂРѕС„РѕСЂРјС‹, РёРЅРІРѕР№СЃР° Рё СЃРїРµС†РёС„РёРєР°С†РёРё",
+        description="Номер контракта должен быть одинаковым среди проформы, инвойса и спецификации",
         anchor=_ref("PROFORMA", "contract_no", "Contract number"),
         targets=[
             _ref("INVOICE", "contract_no"),
@@ -614,7 +614,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="additional_agreements_alignment",
-        description="Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅРѕРµ СЃРѕРіР»Р°С€РµРЅРёРµ РґРѕР¶РЅРѕ Р±С‹С‚СЊ РѕРґРёРЅР°РєРѕРІС‹Рј СЃСЂРµРґРё РїСЂРѕС„РѕРјС‹, РёРЅРІРѕР№СЃР° Рё СЃРїРµС†РёС„РёРєР°С†РёРё",
+        description="Дополнительное соглашение дожно быть одинаковым среди профомы, инвойса и спецификации",
         anchor=_ref("PROFORMA", "additional_agreements", "Additional agreements"),
         targets=[
             _ref("INVOICE", "additional_agreements"),
@@ -623,14 +623,14 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="country_of_origin_consistency",
-        description="РЎС‚СЂР°РЅР° РїСЂРѕРёСЃС…РѕР¶РґРµРЅРёСЏ РІ РІРµС‚РµСЂРёРЅР°СЂРЅРѕРј СЃРµСЂС‚РёС„РёРєР°С‚Рµ РґРѕР»Р¶РЅР° СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Страна происхождения в ветеринарном сертификате должна совпадать с другими документами",
         anchor=_ref("VETERINARY_CERTIFICATE", "country_of_origin", "Country of origin"),
         targets=_refs(ALL_DOC_TYPES, "country_of_origin", exclude=["VETERINARY_CERTIFICATE"]),
         value_kind="string-casefold",
     ),
     AnchoredEqualityRule(
         rule_id="producer_consistency",
-        description="РџСЂРѕРёР·РІРѕРґРёС‚РµР»СЊ РІ РІРµС‚РµСЂРёРЅР°СЂРЅРѕРј СЃРµСЂС‚РёС„РёРєР°С‚Рµ РґРѕР»Р¶РµРЅ СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Производитель в ветеринарном сертификате должен совпадать с другими документами",
         anchor=_ref("VETERINARY_CERTIFICATE", "producer", "Producer"),
         targets=[
             _ref("INVOICE", "producer"),
@@ -644,7 +644,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="incoterms_consistency",
-        description="РЈСЃР»РѕРІРёСЏ РґРѕСЃС‚Р°РІРєРё РёР· РёРЅРІРѕР№СЃР° РґРѕР»Р¶РЅС‹ СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Условия доставки из инвойса должны совпадать с другими документами",
         anchor=_ref("INVOICE", "incoterms", "Incoterms"),
         targets=[
             _ref("PROFORMA", "incoterms"),
@@ -657,7 +657,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="terms_of_payment_consistency",
-        description="РЈСЃР»РѕРІРёСЏ РѕРїР»Р°С‚С‹ РёР· РёРЅРІРѕР№СЃР° РґРѕР»Р¶РЅС‹ СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Условия оплаты из инвойса должны совпадать с другими документами",
         anchor=_ref("INVOICE", "terms_of_payment", "Terms of payment"),
         targets=[
             _ref("PROFORMA", "terms_of_payment"),
@@ -666,13 +666,13 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="bank_details_consistency",
-        description="Р‘Р°РЅРєРѕРІСЃРєРёРµ РґР°РЅРЅС‹Рµ РґРѕР»Р¶РЅС‹ СЃРѕРІРїР°РґР°С‚СЊ РІ РёРЅРІРѕР№СЃРµ Рё РїСЂРѕС„РѕСЂРјРµ",
+        description="Банковские данные должны совпадать в инвойсе и проформе",
         anchor=_ref("INVOICE", "bank_details", "Bank details"),
         targets=[_ref("PROFORMA", "bank_details")],
     ),
     AnchoredEqualityRule(
         rule_id="exporter_consistency",
-        description="Р­РєСЃРїРѕСЂС‚РµСЂ РІ РІРµС‚РµСЂРёРЅР°СЂРЅРѕРј СЃРµСЂС‚РёС„РёРєР°С‚Рµ РґРѕР»Р¶РµРЅ СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё",
+        description="Экспортер в ветеринарном сертификате должен совпадать с другими",
         anchor=_ref("VETERINARY_CERTIFICATE", "exporter", "Exporter"),
         targets=[
             _ref("BILL_OF_LANDING", "exporter"),
@@ -682,7 +682,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="total_price_consistency",
-        description="РС‚РѕРіРѕРІР°СЏ С†РµРЅР° РІ РёРЅРІРѕР№СЃРµ РґРѕР»Р¶РЅР° СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Итоговая цена в инвойсе должна совпадать с другими документами",
         anchor=_ref("INVOICE", "total_price", "Total price"),
         targets=[
             _ref("PROFORMA", "total_price"),
@@ -695,7 +695,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="packages_consistency",
-        description="РљРѕР»РёС‡РµСЃС‚РІРѕ СѓРїР°РєРѕРІРѕРє РІ РїР°РєРёРЅРі Р»РёСЃС‚Рµ РґРѕР»Р¶РЅРѕ СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Количество упаковок в пакинг листе должно совпадать с другими документами",
         anchor=_ref("PACKING_LIST", "packages", "Packages"),
         targets=[
             _ref("INVOICE", "packages"),
@@ -709,8 +709,18 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
         value_kind="number",
     ),
     AnchoredEqualityRule(
+    # Disabled anchored equality for net/gross weights
+        anchor=_ref("PACKING_LIST", "gross_weight", "Gross weight"),
+        targets=[
+            _ref("BILL_OF_LANDING", "gross_weight"),
+            _ref("EXPORT_DECLARATION", "gross_weight"),
+            _ref("CERTIFICATE_OF_ORIGIN", "gross_weight"),
+        ],
+        value_kind="number",
+    ),
+    AnchoredEqualityRule(
         rule_id="invoice_number_consistency",
-        description="РќРѕРјРµСЂ РёРЅРІРѕР№СЃР° РґРѕР»Р¶РµРЅ СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Номер инвойса должен совпадать с другими документами",
         anchor=_ref("INVOICE", "invoice_no", "Invoice number"),
         targets=[
             _ref("PACKING_LIST", "invoice_no"),
@@ -720,7 +730,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="veterinary_seal_consistency",
-        description="Р’РµС‚РµСЂРёРЅР°СЂРЅР°СЏ РїР»РѕРјР±Р° РІ РІРµС‚РµСЂРёРЅР°СЂРЅРѕРј СЃРµСЂС‚РёС„РёРєР°С‚Рµ РґРѕР»Р¶РЅР° СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Ветеринарная пломба в ветеринарном сертификате должна совпадать с другими документами",
         anchor=_ref("VETERINARY_CERTIFICATE", "veterinary_seal", "Veterinary seal"),
         targets=[
             _ref("BILL_OF_LANDING", "veterinary_seal"),
@@ -731,7 +741,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="linear_seal_consistency",
-        description="Р›РёРЅРµР№РЅР°СЏ РїСЂР»РѕР±РјР° РІ РєРѕРЅРѕСЃСЃР°РјРµРЅС‚Рµ РґРѕР»Р¶РЅР° СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Линейная прлобма в коноссаменте должна совпадать с другими документами",
         anchor=_ref("BILL_OF_LANDING", "linear_seal", "Linear seal"),
         targets=[
             _ref("QUALITY_CERTIFICATE", "linear_seal"),
@@ -741,13 +751,13 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="name_product_consistency",
-        description="РќР°РёРјРµРЅРѕРІР°РЅРёРµ РїСЂРѕРґСѓРєС‚Р° РґРѕР»Р¶РЅРѕ СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Наименование продукта должно совпадать с другими документами",
         anchor=_ref("INVOICE", "name_product", "Product name"),
         targets=_refs(ALL_DOC_TYPES, "name_product", exclude=["INVOICE"]),
     ),
     AnchoredEqualityRule(
         rule_id="latin_name_consistency",
-        description="Р›Р°С‚РёРЅСЃРєРѕРµ РЅР°РёРјРµРЅРѕРІР°РЅРёРµ РІ РІРµС‚РµСЂРёРЅР°СЂРЅРѕРј СЃРµСЂС‚РёС„РёРєР°С‚Рµ РґРѕР»Р¶РЅРѕ СЃРѕРІРїР°РґР°С‚СЊ СЃ РґСЂСѓРіРёРјРё РґРѕРєСѓРјРµРЅС‚Р°РјРё",
+        description="Латинское наименование в ветеринарном сертификате должно совпадать с другими документами",
         anchor=_ref("VETERINARY_CERTIFICATE", "latin_name", "Latin name"),
         targets=_refs(ALL_DOC_TYPES, "latin_name", exclude=["VETERINARY_CERTIFICATE"]),
     ),
@@ -763,7 +773,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
 GROUP_EQUALITY_RULES: List[GroupEqualityRule] = [
     GroupEqualityRule(
         rule_id="buyer_alignment",
-        description="РџРѕРєСѓРїР°С‚РµР»СЊ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РѕРґРёРЅР°РєРѕРІС‹Р№ СЃСЂРµРґРё РїСЂРѕС„РѕСЂРјС‹, РёРЅРІРѕР№СЃР°, СЌРєСЃРїРѕСЂС‚РЅРѕР№ РґРµРєР»Р°СЂР°С†РёРё, СЃРїРµС†РёС„РёРєР°С†РёРё, РІРµС‚РµСЂРёРЅР°СЂРЅРѕРіРѕ СЃРµСЂС‚РёС„РёРєР°С‚Р° Рё СЃРµСЂС„С‚РёС„РёРєР°С‚Р° РїСЂРѕРёСЃС…РѕР¶РґРµРЅРёСЏ",
+        description="Покупатель должен быть одинаковый среди проформы, инвойса, экспортной декларации, спецификации, ветеринарного сертификата и серфтификата происхождения",
         refs=[
             _ref("PROFORMA", "buyer"),
             _ref("INVOICE", "buyer"),
@@ -776,7 +786,7 @@ GROUP_EQUALITY_RULES: List[GroupEqualityRule] = [
     GroupEqualityRule(
         rule_id="seller_alignment",
         description="Seller must be identical across Proforma, Invoice, Export declaration, Specification and price lists" \
-        "РџСЂРѕРґР°РІРµС† РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РѕРґРёРЅР°РєРѕРІС‹Р№ СЃСЂРµРґРё РїСЂРѕС„РѕСЂРјС‹, РёРЅРІРѕР№СЃР°, СЌРєСЃРїРѕСЂС‚РЅРѕР№ РґРµРєР»Р°СЂР°С†РёРё, СЃРїРµС†РёС„РёРєР°С†РёРё Рё РїСЂР°Р№СЃ Р»РёСЃС‚РѕРІ",
+        "Продавец должен быть одинаковый среди проформы, инвойса, экспортной декларации, спецификации и прайс листов",
         refs=[
             _ref("PROFORMA", "seller"),
             _ref("INVOICE", "seller"),
@@ -788,7 +798,7 @@ GROUP_EQUALITY_RULES: List[GroupEqualityRule] = [
     ),
     GroupEqualityRule(
         rule_id="container_number_alignment",
-        description="РќРѕРјРµСЂ РєРѕРЅС‚РµР№РЅРµСЂР° РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РѕРґРёРЅР°РєРѕРІС‹Р№ СЃСЂРµРґРё РёРЅРІРѕР№СЃР°, РІРµС‚РµСЂРёРЅР°СЂРЅРѕРіРѕ СЃРµСЂС‚РёС„РёРєР°С‚Р°, СЃРµСЂС‚РёС„РёРєР°С‚Р° РєР°С‡РµСЃС‚РІР°, СЃРµСЂС„С‚РёС„РёРєР°С‚Р° РїСЂРѕРёСЃС…РѕР¶РґРµРЅРёСЏ Рё РєРѕРЅРѕСЃСЃР°РјРµРЅС‚Р°",
+        description="Номер контейнера должен быть одинаковый среди инвойса, ветеринарного сертификата, сертификата качества, серфтификата происхождения и коноссамента",
         refs=[
             _ref("INVOICE", "container_no"),
             _ref("VETERINARY_CERTIFICATE", "container_no"),
@@ -799,7 +809,7 @@ GROUP_EQUALITY_RULES: List[GroupEqualityRule] = [
     ),
     GroupEqualityRule(
         rule_id="vessel_alignment",
-        description="РўСЂР°РЅСЃРїРѕСЂС‚ РґРѕСЃС‚Р°РІРєРё РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РѕРґРёРЅР°РєРѕРІС‹Р№ СЃСЂРµРґРё РёРЅРІРѕР№СЃР°, РІРµС‚РµСЂРёРЅР°СЂРЅРѕРіРѕ СЃРµСЂС‚РёС„РёРєР°С‚Р°, СЃРµСЂС„С‚РёС„РёРєР°С‚Р° РєР°С‡РµСЃС‚РІР° Рё РєРѕРЅРѕСЃСЃР°РјРµРЅС‚Р°",
+        description="Транспорт доставки должен быть одинаковый среди инвойса, ветеринарного сертификата, серфтификата качества и коноссамента",
         refs=[
             _ref("INVOICE", "vessel"),
             _ref("VETERINARY_CERTIFICATE", "vessel"),
@@ -810,14 +820,14 @@ GROUP_EQUALITY_RULES: List[GroupEqualityRule] = [
     ),
     GroupEqualityRule(
         rule_id="importer_alignment",
-        description="РРјРїРѕСЂС‚РµСЂ РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РѕРґРёРЅР°РєРѕРІС‹Рј Сѓ РєРѕРЅРѕСЃСЃР°РјРµРЅС‚Р° Рё СЃРµСЂС‚РёС„РёРєР°С‚Р° РїСЂРѕРёСЃС…РѕР¶РґРµРЅРёСЏ",
+        description="Импортер должен быть одинаковым у коноссамента и сертификата происхождения",
         refs=[
             _ref("BILL_OF_LANDING", "importer"),
             _ref("CERTIFICATE_OF_ORIGIN", "importer"),
         ],
     ),
-]
-# Product-level group equality checks disabled (handled by per-product matcher)
+    GroupEqualityRule(
+    # Product-level group equality checks disabled (handled by per-product matcher)
 
 
 def _collect_records_for_rule(
