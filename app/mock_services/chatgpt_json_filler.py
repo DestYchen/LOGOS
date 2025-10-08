@@ -41,13 +41,15 @@ FILLER_PROMPT = os.getenv(
 
         "EXTRACTION RULES:"
         "1) Copy values EXACTLY as they appear in the document text (no paraphrasing, no guessing)."
-        "2) If a field is absent or uncertain, either:"
+        "2) Strip field labels from values: return only the raw value without label words like 'INVOICE', '№', 'CONTAINER', colons, etc."
+        "   Examples: 'INVOICE № 019246' => '019246'; 'CONTAINER: PONU4832160' => 'PONU4832160'."
+        "3) Normalize dates to DD.MM.YYYY format when you output them."
+        "4) If a field is absent or uncertain, either:"
         "   - omit that field from 'fields', OR"
         "   - set 'value' to '' and leave 'bbox'/'token_refs' as []."
-        "3) If OCR tokens are provided, prefer filling 'token_refs' with the best matching token indices. If uncertain, return []."
-        "4) For non-leaf sections (nested objects), ONLY include children that you confidently fill; otherwise omit the whole branch."
-        "5) Never invent or normalize formats unless the document explicitly provides them (e.g., keep original date/number formatting)."
-        "6) The JSON MUST be strictly valid and parseable. No trailing text."
+        "5) If OCR tokens are provided, prefer filling 'token_refs' with the best matching token indices. If uncertain, return []."
+        "6) For non-leaf sections (nested objects), ONLY include children that you confidently fill; otherwise omit the whole branch."
+        "7) The JSON MUST be strictly valid and parseable. No trailing text."
 
         "BE CONCISE: output only the JSON object that satisfies the contract above."
     ),
@@ -144,6 +146,88 @@ def _extract_json(payload: str) -> str:
     return cleaned
 
 
+def _sanitize_json_like(text: str) -> str:
+    """
+    Attempt to repair common LLM JSON issues while keeping valid JSON intact.
+    - Strip surrounding single quotes
+    - Remove code fences (already handled by _strip_markdown_fence in _extract_json)
+    - Remove trailing commas before } or ]
+    - Replace literal newlines/tabs inside quoted strings with escaped sequences
+    - Normalize smart quotes to straight quotes
+    """
+    if not text:
+        return text
+
+    # Strip surrounding single quotes if present: '<json>' -> <json>
+    stripped = text.strip()
+    if stripped.startswith("'") and stripped.endswith("'") and len(stripped) >= 2:
+        stripped = stripped[1:-1].strip()
+
+    # Normalize smart quotes
+    stripped = (
+        stripped.replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2018", "'")
+        .replace("\u2019", "'")
+    )
+
+    # Remove trailing commas before closing braces/brackets
+    stripped = re.sub(r",\s*([}\]])", r"\1", stripped)
+
+    # Escape literal newlines and tabs that appear inside quoted strings
+    out: list[str] = []
+    in_string = False
+    escape = False
+    i = 0
+    while i < len(stripped):
+        ch = stripped[i]
+        if in_string:
+            if escape:
+                out.append(ch)
+                escape = False
+                i += 1
+                continue
+            if ch == "\\":
+                out.append(ch)
+                escape = True
+                i += 1
+                continue
+            # Convert control characters to escaped forms
+            if ch == "\n":
+                out.extend(["\\", "n"])  # \n
+                i += 1
+                continue
+            if ch == "\r":
+                # swallow optional following \n
+                out.extend(["\\", "n"])  # normalize CR/CRLF to \n
+                if i + 1 < len(stripped) and stripped[i + 1] == "\n":
+                    i += 2
+                else:
+                    i += 1
+                continue
+            if ch == "\t":
+                out.extend(["\\", "t"])  # \t
+                i += 1
+                continue
+            if ch == '"':
+                in_string = False
+                out.append(ch)
+                i += 1
+                continue
+            out.append(ch)
+            i += 1
+            continue
+        else:
+            if ch == '"':
+                in_string = True
+                out.append(ch)
+                i += 1
+                continue
+            out.append(ch)
+            i += 1
+
+    return "".join(out)
+
 class FillerRequest(BaseModel):
     doc_id: str
     doc_type: DocumentType
@@ -224,9 +308,11 @@ async def fill(request: FillerRequest) -> FillerResponse:
         "Rules:"
         "1. Only fill the fields present in the template. Leave the others empty."
         "2. For every field you fill:"
-        "- value — copy the exact text from the document (no normalization or guessing);"
-        "- bbox — use the bounding box from the same token that supplied the value (if the value is composed from several tokens, you may provide multiple bounding boxes or leave it empty if coordinates are unknown);"
-        "- token_refs — list the identifiers of the tokens (e.g., ['p1_t4', 'p1_t5']) from which you extracted the value."
+        "- value - copy the exact text from the document but strip any leading field labels/titles and punctuation like colons; return only the raw value."
+        "  Examples: 'INVOICE № 019246' -> '019246'; 'CONTAINER: PONU4832160' -> 'PONU4832160'."
+        "- dates - format as DD.MM.YYYY (e.g., '04 SEPTEMBER 2019' -> '04.09.2019')."
+        "- bbox - use the bounding box from the same token that supplied the value (if the value is composed from several tokens, you may provide multiple bounding boxes or leave it empty if coordinates are unknown);"
+        "- token_refs - list the identifiers of the tokens (e.g., ['p1_t4', 'p1_t5']) from which you extracted the value."
         "3. If 'products' is present in the template, you MUST output it as an object where each entry is named product_1, product_2, ..., one per product row. Even when the entire table arrives as a single token (for example <table>...</table>), you must parse it row by row and behave as if each <tr> were separate input."
         "- Count the number of product rows. The number of product_N entries must match exactly."
         "- Each product_N must contain every child field shown in product_template (even if empty)."
@@ -278,8 +364,20 @@ async def fill(request: FillerRequest) -> FillerResponse:
         raw = response.choices[0].message.content or ""
         raw_response = raw
         raw = _extract_json(raw)
+        raw = _sanitize_json_like(raw)
         print(raw)
-        data = json.loads(raw)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as jde:
+            # Last-chance: try to remove trailing commas once more and parse
+            repaired = re.sub(r",\s*([}\]])", r"\1", raw)
+            if repaired != raw:
+                try:
+                    data = json.loads(repaired)
+                except Exception:
+                    raise jde
+            else:
+                raise
     except Exception as exc:
         logger.exception(
             "JSON filler LLM call failed doc_id=%s type=%s: %s; raw=%r",

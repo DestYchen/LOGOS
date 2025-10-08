@@ -50,6 +50,70 @@ export interface BatchSummary {
   documents: DocumentSummary[]
 }
 
+export interface BatchCreateResponse {
+  batch_id: string
+}
+
+export interface BatchUploadResponse {
+  saved: string[]
+}
+
+export interface ReviewField {
+  doc_id: string
+  document_filename: string
+  field_key: string
+  value: string | null
+  confidence: number
+  required: boolean
+  threshold: number
+  source: string
+  page: number | null
+  bbox: number[] | null
+  token_refs: string[] | null
+  doc_type: DocumentType
+}
+
+export interface ReviewResponse {
+  batch_id: string
+  status: BatchStatus
+  low_conf_threshold: number
+  fields: ReviewField[]
+}
+
+export interface FieldUpdateRequestPayload {
+  value: string | null
+  bbox?: number[] | null
+  token_refs?: string[] | null
+}
+
+export interface FieldUpdateResponse {
+  doc_id: string
+  field_key: string
+  version: number
+  confidence: number
+}
+
+export interface ValidationRef {
+  doc_id?: string
+  field_key?: string
+  page?: number | null
+  bbox?: number[] | null
+}
+
+export interface ValidationResult {
+  rule_id: string
+  severity: string
+  message: string
+  refs: ValidationRef[]
+}
+
+export interface BatchReportResponse {
+  batch_id: string
+  status: BatchStatus
+  validations: ValidationResult[]
+  meta: Record<string, unknown>
+}
+
 export type UiBatchState =
   | "draft"
   | "waiting"
