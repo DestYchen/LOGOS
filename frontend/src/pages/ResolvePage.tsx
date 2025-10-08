@@ -101,17 +101,32 @@ const ResolvePage = () => {
     async (targetId: string) => {
       setLoading(true)
       try {
-        const [summary, reviewPayload] = await Promise.all([getBatch(targetId, true), fetchReview(targetId)])
+        const summary = await getBatch(targetId, true)
         if (!summary) {
           setBatch(null)
           setReview(null)
           setError(TEXT.noBatch)
           return
         }
+
         if (summary.status === "VALIDATED" || summary.status === "DONE") {
           navigate(`/table/${summary.id}`)
           return
         }
+
+        if (summary.status === "FILLED_AUTO" && summary.documents.some((doc) => doc.status === "FILLED_AUTO")) {
+          navigate(`/resolve/${summary.id}`)
+        }
+
+        let reviewPayload: ReviewResponse | null = null
+        try {
+          reviewPayload = await fetchReview(summary.id)
+        } catch (err) {
+          console.error(err)
+          setError(TEXT.loadError)
+          return
+        }
+
         setBatch(summary)
         setReview(reviewPayload)
         setError(null)
