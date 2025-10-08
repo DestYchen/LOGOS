@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from app.core.enums import DocumentType
 from app.mock_services.templates import get_template_definition
 
-HARDCODED_OPENAI_API_KEY = ""
+HARDCODED_OPENAI_API_KEY = "ds"
 FILLER_PROMPT = os.getenv(
     "CHATGPT_FILLER_PROMPT",
     (
@@ -52,7 +52,7 @@ FILLER_PROMPT = os.getenv(
         "BE CONCISE: output only the JSON object that satisfies the contract above."
     ),
 )
-OPENAI_MODEL = "google/gemini-2.5-pro"
+OPENAI_MODEL = "openai/gpt-oss-20b"
 
 client: Optional[OpenAI] = None
 logger = logging.getLogger(__name__)
@@ -91,7 +91,7 @@ def init_client() -> None:
 
         client = OpenAI(
             api_key=api_key,
-            base_url="https://openrouter.ai/api/v1",
+            base_url="http://192.168.1.64:1234/v1",
             default_headers={
                 "HTTP-Referer": os.getenv("OPENROUTER_HTTP_REFERER", "http://localhost:8002"),
                 "X-Title": os.getenv("OPENROUTER_X_TITLE", "My OCR Adapter"),

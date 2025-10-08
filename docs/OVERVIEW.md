@@ -56,7 +56,7 @@
 Utilities for ensuring folders and generating unique filenames are in `app/core/storage.py:22`.
 
 ## 8. Stub & Mock Services
-- **ChatGPT OCR Adapter** (`app/mock_services/chatgpt_ocr.py:79`): wraps OpenRouter for vision+language OCR, converts PDFs with PyMuPDF, and returns normalized token pages (with stub fallback).
+- **OCR Pipeline** (`app/services/ocr.py`, `app/services/dots_ocr_adapter.py`): orchestrates dots.ocr + vLLM in-process (with stub fallback). The legacy `app/mock_services/chatgpt_ocr.py` module remains only for backwards compatibility and is no longer served via uvicorn.
 - **ChatGPT JSON Filler Adapter** (`app/mock_services/chatgpt_json_filler.py:57`): uses OpenAI Responses API with templates loaded from `app/mock_services/templates/loader.py:25`; falls back to deterministic stub filling when API keys are missing.
 - Templates under `app/mock_services/docs_json` define expected field structures per `DocumentType`.
 

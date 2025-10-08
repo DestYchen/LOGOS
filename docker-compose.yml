@@ -37,13 +37,28 @@ services:
       SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
       SUPPLYHUB_REDIS_URL: redis://redis:6379/0
       SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:9002/v1/fill
-      SUPPLYHUB_OCR_ENDPOINT: http://host.docker.internal:9001/v1/ocr
       SUPPLYHUB_CELERY_BROKER_URL: redis://redis:6379/1
       SUPPLYHUB_CELERY_RESULT_BACKEND: redis://redis:6379/2
       SUPPLYHUB_BASE_DIR: /data/storage
       SUPPLYHUB_USE_STUB_SERVICES: "0"
+      # vLLM-only OCR adapter configuration
+      DOTS_OCR_REPO: /vendor/dots.ocr
+      DOTS_OCR_VLLM_HOST: host.docker.internal
+      DOTS_OCR_VLLM_PORT: "8010"
+      DOTS_OCR_VLLM_BASE: http://host.docker.internal:8010/v1
+      DOTS_OCR_PROMPT_OVERRIDE: |-
+        Please output the layout information from the PDF image, including each layout element's bbox, its category, and the corresponding text content within the bbox. 1. Bbox format: [x1, y1, x2, y2] 2. Layout Categories: The possible categories are ['Caption', 'Footnote', 'Formula', 'List-item', 'Page-footer', 'Page-header', 'Section-header', 'Table', 'Text', 'Title']. 3. Text Extraction & Formatting Rules: - Formula: Format its text as LaTeX. - Table: Format its text as HTML. - All Others (Text, Title, etc.): Format their text as Markdown. - When an element contains textual content that resembles paragraphs, titles, captions, or tables, prefer the closest text-oriented category instead of using picture-like labels. 4. Constraints: - The output text must be the original text from the image, with no translation. - All layout elements must be sorted according to human reading order. 5. Final Output: Output a single JSON array (no prose), where each element is an object with keys: bbox (as [x1, y1, x2, y2]), category (one of the listed categories), and text (string). Do not include any keys other than bbox, category, and text. Do not include any explanations or extra text outside the JSON array.
+      DOTS_OCR_DEBUG_LOG_PROMPT: "1"
+      # OCR prompt + debug controls
+      DOTS_OCR_DISABLE_PICTURE_DATATYPE: "1"
+      DOTS_OCR_DEBUG_DUMP_RAW: "1"
+      DOTS_OCR_DEBUG_DIR: /data/storage/dotsocr_debug
+      DOTS_OCR_DEBUG_LOG_RAW: "1"
+      DOTS_OCR_DEBUG_LOG_CHUNK: "8000"
     volumes:
       - storage:/data/storage
+      # Mount local dots.ocr repository for utils (no HF/torch required)
+      - ../dots/dots.ocr:/vendor/dots.ocr:ro
     ports:
       - "8000:8000"
 
@@ -59,14 +74,28 @@ services:
     environment:
       SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
       SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:9002/v1/fill
-      SUPPLYHUB_OCR_ENDPOINT: http://host.docker.internal:9001/v1/ocr
       SUPPLYHUB_REDIS_URL: redis://redis:6379/0
       SUPPLYHUB_CELERY_BROKER_URL: redis://redis:6379/1
       SUPPLYHUB_CELERY_RESULT_BACKEND: redis://redis:6379/2
       SUPPLYHUB_BASE_DIR: /data/storage
       SUPPLYHUB_USE_STUB_SERVICES: "0"
+      # vLLM-only OCR adapter configuration
+      DOTS_OCR_REPO: /vendor/dots.ocr
+      DOTS_OCR_VLLM_HOST: host.docker.internal
+      DOTS_OCR_VLLM_PORT: "8010"
+      DOTS_OCR_VLLM_BASE: http://host.docker.internal:8010/v1
+      DOTS_OCR_PROMPT_OVERRIDE: |-
+        Please output the layout information from the PDF image, including each layout element's bbox, its category, and the corresponding text content within the bbox. 1. Bbox format: [x1, y1, x2, y2] 2. Layout Categories: The possible categories are ['Caption', 'Footnote', 'Formula', 'List-item', 'Page-footer', 'Page-header', 'Section-header', 'Table', 'Text', 'Title']. 3. Text Extraction & Formatting Rules: - Formula: Format its text as LaTeX. - Table: Format its text as HTML. - All Others (Text, Title, etc.): Format their text as Markdown. - When an element contains textual content that resembles paragraphs, titles, captions, or tables, prefer the closest text-oriented category instead of using picture-like labels. 4. Constraints: - The output text must be the original text from the image, with no translation. - All layout elements must be sorted according to human reading order. 5. Final Output: Output a single JSON array (no prose), where each element is an object with keys: bbox (as [x1, y1, x2, y2]), category (one of the listed categories), and text (string). Do not include any keys other than bbox, category, and text. Do not include any explanations or extra text outside the JSON array.
+      DOTS_OCR_DEBUG_LOG_PROMPT: "1"
+      # OCR prompt + debug controls
+      DOTS_OCR_DISABLE_PICTURE_DATATYPE: "1"
+      DOTS_OCR_DEBUG_DUMP_RAW: "1"
+      DOTS_OCR_DEBUG_DIR: /data/storage/dotsocr_debug
+      DOTS_OCR_DEBUG_LOG_RAW: "1"
+      DOTS_OCR_DEBUG_LOG_CHUNK: "8000"
     volumes:
       - storage:/data/storage
+      - ../dots/dots.ocr:/vendor/dots.ocr:ro
     command: [
       "celery",
       "-A",

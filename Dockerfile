@@ -15,7 +15,7 @@ COPY docs ./docs
 COPY app ./app
 
 RUN pip install --no-cache-dir "pip<24.1" "setuptools>=67" wheel \
-    && pip install --no-cache-dir -e .
+    && pip install -e .
 
 EXPOSE 8000
 

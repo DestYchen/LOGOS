@@ -4,7 +4,7 @@ Document reconciliation service for foreign-trade paperwork. FastAPI delivers bo
 
 ## Status Snapshot
 - **Working:** batch CRUD plus upload (app/api/routes/batches.py:28), background pipeline fallback when Celery unavailable (app/services/pipeline.py:281), report generation (app/services/reporting.py:34), validation rules persisted to DB (app/services/validation.py:940), HTML review UI (app/api/routes/web.py:31).
-- **Partially implemented:** OCR and LLM adapters present but need real API keys; they default to deterministic stubs (app/services/ocr.py:17, app/services/json_filler.py:17). Confidence scoring is random and unsuitable for production (app/services/confidence.py:9). Document classification only covers a subset of DocumentType values (app/services/classification.py:9).
+- **Partially implemented:** OCR integrates the local dots.ocr + vLLM runtime with stub fallback (app/services/ocr.py:17); the JSON filler adapter still needs real API keys and otherwise returns deterministic stubs (app/services/json_filler.py:17). Confidence scoring is random and unsuitable for production (app/services/confidence.py:9). Document classification only covers a subset of DocumentType values (app/services/classification.py:9).
 - **Missing:** Production-ready frontend, authentication and authorization, migrations, automated tests, monitoring dashboards, hardened AI integrations.
 
 ## Architecture Overview
@@ -47,11 +47,11 @@ Dockerfile, docker-compose.yml, SPEC.md, pyproject.toml
 
 ## Configuration and Deployment
 - Runtime dependencies declared in pyproject.toml; Docker image installs in editable mode for live reload.
-- docker-compose.yml provisions Postgres, Redis, API, worker, init-db, and shared storage volume; worker expects OCR and JSON services on host ports 9001 and 9002.
+- docker-compose.yml provisions Postgres, Redis, API, worker, init-db, and shared storage volume; the worker expects the JSON filler adapter on host port 9002 (OCR now runs in-process).
 - Environment variables prefixed SUPPLYHUB_ configure DB, Redis, Celery, paths, and stub toggles (app/core/config.py:7). SUPPLYHUB_USE_STUB_SERVICES=1 forces internal mocks.
 
 ## External and Mock Services
-- ChatGPT-based OCR adapter (app/mock_services/chatgpt_ocr.py:79) and JSON filler adapter (app/mock_services/chatgpt_json_filler.py:57) require OpenRouter or OpenAI keys; both gracefully fall back to deterministic stubs and load JSON templates from app/mock_services/docs_json/.
+- OCR pipeline runs in-process via `app/services/ocr.py` and `app/services/dots_ocr_adapter.py`, talking to the vLLM container directly (HTTP fallback is only used when `SUPPLYHUB_OCR_ENDPOINT` is set). The JSON filler adapter (app/mock_services/chatgpt_json_filler.py:57) targets OpenRouter/OpenAI but falls back to deterministic stubs loaded from app/mock_services/docs_json/.
 - CLI smoke tests (	est_ocr/testim.py, 	est_ocr/test_json_filler.py) can hit adapters or external endpoints directly.
 
 ## Current Gaps and Risks

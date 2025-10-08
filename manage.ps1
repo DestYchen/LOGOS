@@ -22,12 +22,6 @@ $UvicornServices = @(
     Args = @("app.mock_services.chatgpt_json_filler:app","--host","127.0.0.1","--port","9002","--log-level","debug")
     Log  = "uvicorn_json_filler.log"
     Pid  = ".pids\json_filler.pid"
-  },
-  @{
-    Name = "ocr"
-    Args = @("app.mock_services.chatgpt_ocr:app","--host","127.0.0.1","--port","9001","--log-level","debug")
-    Log  = "uvicorn_ocr.log"
-    Pid  = ".pids\ocr.pid"
   }
 )
 
@@ -51,9 +45,50 @@ function Get-VenvPython {
 
 function Require-Venv-And-Uvicorn {
   $py = Get-VenvPython
-  if (-not $py) { throw "Missing .venv\Scripts\python.exe. Create venv: python -m venv .venv, then install deps into .venv." }
+  if (-not $py) {
+    Write-Host "No .venv detected. Creating .venv ..."
+    # Prefer Windows launcher if available
+    $created = $false
+    try {
+      & py -3 -m venv .venv 2>$null
+      if ($LASTEXITCODE -eq 0) { $created = $true }
+    } catch { }
+
+    if (-not $created) {
+      try {
+        & python -m venv .venv 2>$null
+        if ($LASTEXITCODE -eq 0) { $created = $true }
+      } catch { }
+    }
+
+    $py = Get-VenvPython
+    if (-not $py) {
+      throw "Could not create .venv automatically. Install Python 3 and run: python -m venv .venv"
+    }
+
+    # Ensure pip and install deps
+    $pip = Join-Path (Split-Path $py -Parent) "pip.exe"
+    if (-not (Test-Path $pip)) {
+      & $py -m ensurepip --upgrade
+    }
+    Write-Host "Installing dependencies into .venv ..."
+    if (Test-Path "requirements.txt") {
+      & $py -m pip install -r requirements.txt
+    } else {
+      & $py -m pip install uvicorn[standard] fastapi
+    }
+  }
+
+  # Verify uvicorn is importable
   $version = & $py -c "import uvicorn,sys; sys.stdout.write(uvicorn.__version__)"
-  if ($LASTEXITCODE -ne 0 -or -not $version) { throw "uvicorn not found in .venv. Install: .\.venv\Scripts\pip install uvicorn[standard] fastapi" }
+  if ($LASTEXITCODE -ne 0 -or -not $version) {
+    Write-Host "uvicorn missing in .venv; installing ..."
+    & $py -m pip install uvicorn[standard] fastapi
+    $version = & $py -c "import uvicorn,sys; sys.stdout.write(uvicorn.__version__)"
+    if ($LASTEXITCODE -ne 0 -or -not $version) {
+      throw "uvicorn not found in .venv after install. Try manually: .\\.venv\\Scripts\\pip install uvicorn[standard] fastapi"
+    }
+  }
   return $py
 }
 
@@ -107,29 +142,21 @@ function Start-UvicornServices {
   foreach ($svc in $UvicornServices) {
     Write-Host ("Starting uvicorn [{0}] via .venv ..." -f $svc.Name)
 
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName  = $python
-    $psi.Arguments = (@("-m","uvicorn") + $svc.Args) -join " "
-    $psi.WorkingDirectory = $rootPath
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError  = $true
-    $psi.UseShellExecute = $false
-    $psi.CreateNoWindow = $true
-    $psi.Environment["PYTHONPATH"] = $rootPath
+    $args = @("-m","uvicorn","--app-dir",$rootPath) + $svc.Args
+    $outLog = Join-Path -Path $rootPath -ChildPath $svc.Log
+    $errLog = [System.IO.Path]::ChangeExtension($outLog, ".err.log")
 
-    $proc = New-Object System.Diagnostics.Process
-    $proc.StartInfo = $psi
-    $null = $proc.Start()
-
-    $logPath = Join-Path -Path $rootPath -ChildPath $svc.Log
-    $sw = [System.IO.StreamWriter]::new($logPath,$true)
-    $proc.BeginOutputReadLine()
-    $proc.BeginErrorReadLine()
-    $proc.add_OutputDataReceived({ param($s,$e) if ($e.Data) { $sw.WriteLine($e.Data) }})
-    $proc.add_ErrorDataReceived({ param($s,$e) if ($e.Data) { $sw.WriteLine($e.Data) }})
+    # Start process detached, redirecting to separate stdout/stderr files
+    $proc = Start-Process -FilePath $python `
+                          -ArgumentList $args `
+                          -WorkingDirectory $rootPath `
+                          -WindowStyle Hidden `
+                          -RedirectStandardOutput $outLog `
+                          -RedirectStandardError $errLog `
+                          -PassThru
 
     Set-Content -Path $svc.Pid -Value $proc.Id
-    Write-Host (" -> PID {0}, log: {1}" -f $proc.Id, $svc.Log)
+    Write-Host (" -> PID {0}, logs: {1}, {2}" -f $proc.Id, [System.IO.Path]::GetFileName($outLog), [System.IO.Path]::GetFileName($errLog))
   }
 }
 
