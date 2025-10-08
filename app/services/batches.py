@@ -14,9 +14,19 @@ from app.core.enums import BatchStatus, DocumentStatus
 from app.core.storage import batch_dir, ensure_base_dir, unique_filename
 from app.models import Batch, Document
 
+import subprocess
+
 
 def _documents_with_fields():
     return selectinload(Batch.documents).selectinload(Document.fields)
+
+def _is_docx(path: Path, content_type: Optional[str]) -> bool:
+    if path.suffix.lower() == ".docx":
+        return True
+    if content_type:
+        ctype = content_type.split(";", 1)[0].strip().lower()
+        return ctype == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    return False
 
 
 def _is_pdf(path: Path, content_type: Optional[str]) -> bool:
@@ -26,6 +36,37 @@ def _is_pdf(path: Path, content_type: Optional[str]) -> bool:
         return content_type.split(";", 1)[0].strip().lower() == "application/pdf"
     return False
 
+def _convert_docx_to_pdf(source: Path, target_dir: Path, base_name: str, timeout_sec: int = 120) -> Optional[Path]:
+    """
+    Конвертирует DOCX в PDF в target_dir с помощью LibreOffice (`soffice --headless`).
+    Возвращает путь к PDF или None при ошибке.
+    """
+    target_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        completed = subprocess.run(
+            [
+                "soffice",
+                "--headless", "--nologo", "--nodefault", "--nofirststartwizard",
+                "--convert-to", "pdf",
+                "--outdir", str(target_dir),
+                str(source),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+            timeout=timeout_sec,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return None
+
+    # Ожидаем имя {stem}.pdf
+    candidate = target_dir / f"{Path(base_name).stem}.pdf"
+    if candidate.exists():
+        return candidate
+
+    # Fallback: взять самый свежий PDF
+    pdfs = sorted(target_dir.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
+    return pdfs[0] if pdfs else None
 
 def _split_pdf_file(source: Path, target_dir: Path, base_name: str) -> List[Path]:
     try:
@@ -101,6 +142,30 @@ async def save_documents(session: AsyncSession, batch: Batch, files: Iterable[Up
         if _is_pdf(dest, content_type):
             created_paths = _split_pdf_file(dest, batch_paths.raw, safe_name)
 
+        elif _is_docx(dest, content_type):
+            # DOCX → PDF
+            pdf_path = _convert_docx_to_pdf(dest, batch_paths.raw, safe_name)
+            if pdf_path and pdf_path.exists():
+                # PDF → страницы
+                created_paths = _split_pdf_file(pdf_path, batch_paths.raw, pdf_path.name)
+
+                if created_paths:
+                    # Удаляем исходники, чтобы не плодить хранение
+                    try:
+                        dest.unlink()     # исходный .docx
+                    except FileNotFoundError:
+                        pass
+                    try:
+                        pdf_path.unlink() # общий .pdf
+                    except FileNotFoundError:
+                        pass
+                else:
+                    # Одностраничный PDF или ошибка разрезания → оставим исходный DOCX
+                    try:
+                        pdf_path.unlink()
+                    except FileNotFoundError:
+                        pass
+
         if created_paths:
             try:
                 dest.unlink()
@@ -111,7 +176,7 @@ async def save_documents(session: AsyncSession, batch: Batch, files: Iterable[Up
                 document = Document(
                     batch_id=batch.id,
                     filename=page_path.name,
-                    mime=content_type,
+                    mime="application/pdf",
                     status=DocumentStatus.NEW,
                 )
                 session.add(document)

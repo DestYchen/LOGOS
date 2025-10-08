@@ -107,6 +107,30 @@ const ManualView = ({ batch }: { batch: BatchSummary }) => {
   )
 }
 
+const DeletingView = ({ batch }: { batch: BatchSummary }) => {
+  return (
+    <div className="panel">
+      <h2>Удаление партии</h2>
+      <p className="muted">Партия {batch.id} помечена на удаление. Обновите очередь позже, чтобы убедиться, что она исчезла из списка.</p>
+      <Link to="/queue" className="btn-secondary" style={{ marginTop: 16, alignSelf: "flex-start" }}>
+        Вернуться к очереди
+      </Link>
+    </div>
+  )
+}
+
+const CancelledView = ({ batch }: { batch: BatchSummary }) => {
+  return (
+    <div className="panel">
+      <h2>Партия удалена</h2>
+      <p className="muted">Данные партии {batch.id} удалены и больше недоступны.</p>
+      <Link to="/queue" className="btn-secondary" style={{ marginTop: 16, alignSelf: "flex-start" }}>
+        Вернуться к очереди
+      </Link>
+    </div>
+  )
+}
+
 const ResultView = ({ batch }: { batch: BatchSummary }) => {
   return (
     <div className="panel">
@@ -187,6 +211,8 @@ const BatchRouter = () => {
   if (uiStatus === "processing") return <WaitingView batch={batch} title="Пакет обрабатывается" />
   if (uiStatus === "manual") return <ManualView batch={batch} />
   if (uiStatus === "done") return <ResultView batch={batch} />
+  if (uiStatus === "deleting") return <DeletingView batch={batch} />
+  if (uiStatus === "cancelled") return <CancelledView batch={batch} />
 
   return (
     <div className="screen">

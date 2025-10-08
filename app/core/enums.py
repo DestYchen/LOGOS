@@ -1,4 +1,4 @@
-﻿from enum import Enum
+from enum import Enum
 
 
 class BatchStatus(str, Enum):
@@ -11,6 +11,8 @@ class BatchStatus(str, Enum):
     VALIDATED = "VALIDATED"
     DONE = "DONE"
     FAILED = "FAILED"
+    CANCEL_REQUESTED = "CANCEL_REQUESTED"
+    CANCELLED = "CANCELLED"
 
 
 class DocumentStatus(str, Enum):

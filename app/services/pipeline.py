@@ -5,7 +5,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any, Awaitable, Callable, Dict, List
 
 from celery.app.base import Celery
 
@@ -14,7 +14,7 @@ from app.core.database import get_session
 from app.core.enums import BatchStatus, DocumentStatus, DocumentType
 from app.core.schema import get_schema
 from app.core.storage import batch_dir
-from app.models import Document, FilledField
+from app.models import Batch, Document, FilledField
 from app.services import (
     classification,
     confidence,
@@ -26,6 +26,7 @@ from app.services import (
     validation,
 )
 from app.services import batches as batch_service
+from app.services import tasks as task_tracker
 from app.workers.celery_app import celery_app
 
 settings = get_settings()
@@ -37,6 +38,86 @@ class ProcessingResult:
     document: Document
     success: bool
     message: str | None = None
+
+
+CANCELLATION_STATUSES = {BatchStatus.CANCEL_REQUESTED, BatchStatus.CANCELLED}
+
+
+@dataclass
+class _LocalTaskInfo:
+    kind: str
+    task: asyncio.Task
+
+
+_LOCAL_TASKS: Dict[uuid.UUID, Dict[str, _LocalTaskInfo]] = {}
+
+
+def _register_local_task(batch_id: uuid.UUID, *, task_id: str, kind: str, task: asyncio.Task) -> None:
+    bucket = _LOCAL_TASKS.setdefault(batch_id, {})
+    bucket[task_id] = _LocalTaskInfo(kind=kind, task=task)
+
+    def _cleanup(_task: asyncio.Task) -> None:
+        _deregister_local_task(batch_id, task_id)
+
+    task.add_done_callback(_cleanup)
+
+
+def _deregister_local_task(batch_id: uuid.UUID, task_id: str) -> None:
+    bucket = _LOCAL_TASKS.get(batch_id)
+    if not bucket:
+        return
+    bucket.pop(task_id, None)
+    if not bucket:
+        _LOCAL_TASKS.pop(batch_id, None)
+
+
+async def cancel_local_tasks(batch_id: uuid.UUID) -> None:
+    bucket = _LOCAL_TASKS.get(batch_id)
+    if not bucket:
+        return
+    entries = list(bucket.items())
+    for _, info in entries:
+        if not info.task.done():
+            info.task.cancel()
+    await asyncio.gather(*(info.task for _, info in entries), return_exceptions=True)
+
+
+async def _start_local_task(
+    batch_id: uuid.UUID,
+    *,
+    kind: str,
+    runner: Callable[[uuid.UUID], Awaitable[None]],
+) -> str:
+    task_id = f"local-{kind}-{uuid.uuid4()}"
+    try:
+        await task_tracker.record_task(batch_id, kind=kind, transport="local", task_id=task_id)
+    except asyncio.CancelledError:
+        raise
+    except Exception:  # pragma: no cover - best effort bookkeeping
+        logger.exception("Failed to record local %s task for batch %s", kind, batch_id)
+
+    async def _runner() -> None:
+        try:
+            await runner(batch_id)
+        except asyncio.CancelledError:
+            logger.info("%s task cancelled for batch %s", kind, batch_id)
+            raise
+        finally:
+            await task_tracker.remove_task(batch_id, kind=kind, task_id=task_id)
+
+    task = asyncio.create_task(_runner(), name=f"{kind}-{batch_id}")
+    _register_local_task(batch_id, task_id=task_id, kind=kind, task=task)
+    return task_id
+
+
+async def _is_cancelled(batch_id: uuid.UUID, status: BatchStatus) -> bool:
+    if status in CANCELLATION_STATUSES:
+        return True
+    async with get_session() as session:
+        fresh = await session.get(Batch, batch_id)
+        if fresh is None:
+            return True
+        return fresh.status in CANCELLATION_STATUSES
 
 
 def _celery() -> Celery:
@@ -76,56 +157,79 @@ def _plain_text_tokens(raw_text: str) -> List[Dict[str, Any]]:
 
 
 async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
-    async with get_session() as session:
-        batch = await batch_service.get_batch(session, batch_id)
-        if batch is None:
-            return
-        batch_paths = batch_dir(str(batch_id))
-        batch_paths.ensure()
+    try:
+        async with get_session() as session:
+            batch = await batch_service.get_batch(session, batch_id)
+            if batch is None:
+                return
+            if batch.status in CANCELLATION_STATUSES:
+                logger.info("Skipping processing for cancelled batch %s", batch_id)
+                return
+            batch_paths = batch_dir(str(batch_id))
+            batch_paths.ensure()
 
-        ocr_results: List[ProcessingResult] = []
-        for document in batch.documents:
-            result = await _run_ocr_step(session, batch_id, document)
-            ocr_results.append(result)
+            ocr_results: List[ProcessingResult] = []
+            for document in batch.documents:
+                if batch.status in CANCELLATION_STATUSES:
+                    break
+                result = await _run_ocr_step(session, batch_id, document)
+                ocr_results.append(result)
 
-        await session.flush()
+            await session.flush()
+            if await _is_cancelled(batch_id, batch.status):
+                return
 
-        filler_results: List[ProcessingResult] = []
-        for document in batch.documents:
-            if document.status == DocumentStatus.TEXT_READY:
-                result = await _run_filler_step(session, batch_id, document)
-                filler_results.append(result)
+            filler_results: List[ProcessingResult] = []
+            for document in batch.documents:
+                if batch.status in CANCELLATION_STATUSES:
+                    break
+                if document.status == DocumentStatus.TEXT_READY:
+                    result = await _run_filler_step(session, batch_id, document)
+                    filler_results.append(result)
 
-        results = ocr_results + filler_results
-        failures = [result for result in results if not result.success]
-        if failures:
-            meta = dict(batch.meta) if batch.meta else {}
-            warnings = list(meta.get('processing_warnings', []))
-            for failure in failures:
-                message = failure.message or f"Документ {failure.document.filename} не обработан."
-                if message not in warnings:
-                    warnings.append(message)
-            meta['processing_warnings'] = warnings
-            batch.meta = meta
-        elif batch.meta and 'processing_warnings' in batch.meta:
-            meta = dict(batch.meta)
-            meta.pop('processing_warnings', None)
-            batch.meta = meta
+            await session.flush()
+            if await _is_cancelled(batch_id, batch.status):
+                return
 
-        if batch.documents and all(doc.status == DocumentStatus.FAILED for doc in batch.documents):
-            batch.status = BatchStatus.FAILED
-        else:
-            batch.status = BatchStatus.FILLED_AUTO
+            results = ocr_results + filler_results
+            failures = [result for result in results if not result.success]
+            if failures:
+                meta = dict(batch.meta) if batch.meta else {}
+                warnings = list(meta.get("processing_warnings", []))
+                for failure in failures:
+                    message = failure.message or f"Документ {failure.document.filename} не обработан."
+                    if message not in warnings:
+                        warnings.append(message)
+                meta["processing_warnings"] = warnings
+                batch.meta = meta
+            elif batch.meta and "processing_warnings" in batch.meta:
+                meta = dict(batch.meta)
+                meta.pop("processing_warnings", None)
+                batch.meta = meta
 
-        await session.flush()
-        await status.record_snapshot(
-            session,
-            workers_busy=0,
-            workers_total=0,
-            queue_depth=0,
-            active_batches=1,
-            active_docs=len(batch.documents),
-        )
+            if await _is_cancelled(batch_id, batch.status):
+                return
+            if batch.status not in CANCELLATION_STATUSES:
+                if batch.documents and all(doc.status == DocumentStatus.FAILED for doc in batch.documents):
+                    batch.status = BatchStatus.FAILED
+                else:
+                    batch.status = BatchStatus.FILLED_AUTO
+
+            await session.flush()
+            if batch.status not in CANCELLATION_STATUSES:
+                await status.record_snapshot(
+                    session,
+                    workers_busy=0,
+                    workers_total=0,
+                    queue_depth=0,
+                    active_batches=1,
+                    active_docs=len(batch.documents),
+                )
+    except asyncio.CancelledError:
+        logger.info("Batch pipeline cancelled for %s", batch_id)
+        raise
+    finally:
+        await task_tracker.remove_task(batch_id, kind="process")
 
 
 async def _run_ocr_step(session, batch_id: uuid.UUID, document: Document) -> ProcessingResult:
@@ -150,6 +254,8 @@ async def _run_ocr_step(session, batch_id: uuid.UUID, document: Document) -> Pro
             logger.warning('Parser extraction unavailable for %s, running OCR fallback', raw_file)
         try:
             ocr_payload = await ocr.run_ocr(document.id, raw_file, file_name=document.filename)
+        except asyncio.CancelledError:
+            raise
         except Exception:
             logger.error('OCR service failed for %s', document.filename, exc_info=True)
             document.status = DocumentStatus.FAILED
@@ -219,6 +325,8 @@ async def _run_filler_step(session, batch_id: uuid.UUID, document: Document) -> 
                 with ocr_file.open('r', encoding='utf-8') as handle:
                     ocr_payload = json.load(handle)
                 tokens = classification.flatten_tokens(ocr_payload)
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 tokens = []
 
@@ -259,6 +367,8 @@ async def _run_filler_step(session, batch_id: uuid.UUID, document: Document) -> 
             file_name=document.filename,
             ocr_tokens=filler_tokens or None,
         )
+    except asyncio.CancelledError:
+        raise
     except Exception:
         logger.error('JSON filler service failed for %s', document.filename, exc_info=True)
         document.status = DocumentStatus.FAILED
@@ -368,6 +478,8 @@ async def fill_document_from_existing_ocr(
                 with ocr_file.open("r", encoding="utf-8") as handle:
                     ocr_payload = json.load(handle)
                 tokens = classification.flatten_tokens(ocr_payload)
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 tokens = []
 
@@ -405,6 +517,8 @@ async def fill_document_from_existing_ocr(
             file_name=document.filename,
             ocr_tokens=filler_tokens or None,
         )
+    except asyncio.CancelledError:
+        raise
     except Exception:
         logger.error('JSON filler service failed for %s (manual type set)', document.filename, exc_info=True)
         document.status = DocumentStatus.FAILED
@@ -441,38 +555,62 @@ async def fill_document_from_existing_ocr(
 
 
 async def run_validation_pipeline(batch_id: uuid.UUID) -> None:
-    async with get_session() as session:
-        batch = await batch_service.get_batch(session, batch_id)
-        if batch is None:
-            return
-        messages = await validation.validate_batch(session, batch_id)
-        await validation.store_validations(session, batch_id, messages)
-        batch.status = BatchStatus.VALIDATED
-        await reporting.generate_report(session, batch_id)
-        await status.record_snapshot(
-            session,
-            workers_busy=0,
-            workers_total=0,
-            queue_depth=0,
-            active_batches=0,
-            active_docs=0,
-        )
+    try:
+        async with get_session() as session:
+            batch = await batch_service.get_batch(session, batch_id)
+            if batch is None:
+                return
+            if await _is_cancelled(batch_id, batch.status):
+                return
+            messages = await validation.validate_batch(session, batch_id)
+            if await _is_cancelled(batch_id, batch.status):
+                return
+            await validation.store_validations(session, batch_id, messages)
+            if await _is_cancelled(batch_id, batch.status):
+                return
+            if batch.status not in CANCELLATION_STATUSES:
+                batch.status = BatchStatus.VALIDATED
+            if await _is_cancelled(batch_id, batch.status):
+                return
+            await reporting.generate_report(session, batch_id)
+            if batch.status not in CANCELLATION_STATUSES:
+                await status.record_snapshot(
+                    session,
+                    workers_busy=0,
+                    workers_total=0,
+                    queue_depth=0,
+                    active_batches=0,
+                    active_docs=0,
+                )
+    except asyncio.CancelledError:
+        logger.info("Validation pipeline cancelled for %s", batch_id)
+        raise
+    finally:
+        await task_tracker.remove_task(batch_id, kind="validation")
 
 
 async def enqueue_batch_processing(batch_id: uuid.UUID) -> str:
     try:
         result = _celery().send_task("supplyhub.process_batch", args=[str(batch_id)])
-        return result.id
+    except asyncio.CancelledError:
+        raise
     except Exception:
-        asyncio.create_task(run_batch_pipeline(batch_id))
-        return f"local-{batch_id}"
+        logger.warning("Celery unavailable, running batch %s locally", batch_id, exc_info=True)
+        return await _start_local_task(batch_id, kind="process", runner=run_batch_pipeline)
+    else:
+        await task_tracker.record_task(batch_id, kind="process", transport="celery", task_id=result.id)
+        return result.id
 
 
 async def enqueue_validation(batch_id: uuid.UUID) -> str:
     try:
         result = _celery().send_task("supplyhub.validate_batch", args=[str(batch_id)])
-        return result.id
+    except asyncio.CancelledError:
+        raise
     except Exception:
-        asyncio.create_task(run_validation_pipeline(batch_id))
-        return f"local-validate-{batch_id}"
+        logger.warning("Celery unavailable for validation of batch %s, running locally", batch_id, exc_info=True)
+        return await _start_local_task(batch_id, kind="validation", runner=run_validation_pipeline)
+    else:
+        await task_tracker.record_task(batch_id, kind="validation", transport="celery", task_id=result.id)
+        return result.id
 

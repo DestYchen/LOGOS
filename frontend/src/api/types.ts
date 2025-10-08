@@ -8,6 +8,8 @@ export type BatchStatus =
   | "VALIDATED"
   | "DONE"
   | "FAILED"
+  | "CANCEL_REQUESTED"
+  | "CANCELLED"
 
 export type DocumentStatus =
   | "NEW"
@@ -55,6 +57,8 @@ export type UiBatchState =
   | "manual"
   | "done"
   | "failed"
+  | "deleting"
+  | "cancelled"
 
 export interface QueueCardData extends BatchSummary {
   uiStatus: UiBatchState
