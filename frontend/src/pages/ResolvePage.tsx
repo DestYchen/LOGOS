@@ -2,16 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import DocumentViewer, { type ViewerBox } from "../components/resolve/DocumentViewer"
 import { useBatchStore } from "../state/batch-store"
-import {
-  completeReview,
-  deleteDocument,
-  fetchReview,
-  refillDocument,
-  setDocumentType,
-  updateReviewField,
-} from "../api/client"
+import { completeReview, deleteDocument, fetchReview, setDocumentType, updateReviewField } from "../api/client"
 import type { BatchSummary, DocumentSummary, DocumentType, ReviewField, ReviewResponse } from "../api/types"
 import { prettifyFieldKey } from "../utils/field-label"
+import { buildPreviewCandidates, getPrimaryPreview } from "../utils/preview"
 
 const TEXT = {
   title: "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u2014 \u0438\u0441\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u0435 \u043e\u0448\u0438\u0431\u043e\u043a",
@@ -69,10 +63,7 @@ const DOC_TYPE_OPTIONS: Array<{ value: DocumentType; label: string }> = [
 
 const fieldKeyFor = (docId: string, fieldKey: string) => `${docId}::${fieldKey}`
 
-const buildPreviewUrl = (batchId: string, docId: string, page?: number | null) => {
-  const targetPage = page && page > 0 ? page : 1
-  return `/files/batches/${batchId}/preview/${docId}/page-${targetPage}.png`
-}
+
 
 type ResolveDocumentState = {
   summary: DocumentSummary
@@ -117,6 +108,10 @@ const ResolvePage = () => {
           setError(TEXT.noBatch)
           return
         }
+        if (summary.status === "VALIDATED" || summary.status === "DONE") {
+          navigate(`/table/${summary.id}`)
+          return
+        }
         setBatch(summary)
         setReview(reviewPayload)
         setError(null)
@@ -137,7 +132,7 @@ const ResolvePage = () => {
         setLoading(false)
       }
     },
-    [getBatch],
+    [getBatch, navigate],
   )
   useEffect(() => {
     if (!packetId) return
@@ -372,19 +367,6 @@ const ResolvePage = () => {
     }
   }
 
-  const handleRefill = async (docId: string) => {
-    try {
-      setTypeLoading(docId)
-      await refillDocument(docId)
-      await refresh()
-    } catch (err) {
-      console.error(err)
-      setPanelMessage(TEXT.updateError)
-    } finally {
-      setTypeLoading(null)
-    }
-  }
-
   const handleComplete = async () => {
     if (!packetId) return
     try {
@@ -419,8 +401,9 @@ const ResolvePage = () => {
       })
   }, [activeDocState, activePage, highlightField, showAllFields])
 
-  const imageUrl =
-    packetId && activeDocState ? buildPreviewUrl(packetId, activeDocState.summary.id, activePage) : null
+  const imageCandidates =
+    packetId && activeDocState ? buildPreviewCandidates(packetId, activeDocState.summary.id, activePage) : []
+  const imageUrl = imageCandidates[0] ?? null
 
   if (!packetId) {
     return (
@@ -524,14 +507,6 @@ const ResolvePage = () => {
                   {TEXT.saveAndRecalc}
                 </button>
               </div>
-              <button
-                type="button"
-                className="btn-ghost subtle"
-                onClick={() => handleRefill(activeDocState.summary.id)}
-                disabled={typeLoading === activeDocState.summary.id}
-              >
-                {TEXT.saveAndRecalc}
-              </button>
               {typeLoading === activeDocState.summary.id && <div className="resolve-loader">{TEXT.recalcProgress}</div>}
             </section>
           )}
@@ -708,7 +683,7 @@ const ResolvePage = () => {
                   <div key={doc.summary.id} className="resolve-final-item">
                     <div className="resolve-final-thumbnail">
                       <img
-                        src={buildPreviewUrl(packetId, doc.summary.id, 1)}
+                        src={getPrimaryPreview(packetId, doc.summary.id, 1) ?? ""}
                         alt={doc.summary.filename}
                         onError={(event) => {
                           event.currentTarget.style.visibility = "hidden"
@@ -737,6 +712,7 @@ const ResolvePage = () => {
         <section className="resolve-view">
           <DocumentViewer
             imageUrl={imageUrl}
+            imageCandidates={imageCandidates}
             title={activeDocState.summary.filename}
             boxes={viewerBoxes}
             onHoverBox={(key) => setHighlightField(key)}
@@ -763,3 +739,4 @@ const ResolvePage = () => {
 }
 
 export default ResolvePage
+

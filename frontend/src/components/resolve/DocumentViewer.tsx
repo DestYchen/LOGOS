@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 interface ViewerBox {
   key: string
@@ -8,7 +8,8 @@ interface ViewerBox {
 }
 
 interface DocumentViewerProps {
-  imageUrl: string | null
+  imageUrl?: string | null
+  imageCandidates?: string[]
   title?: string
   boxes?: ViewerBox[]
   onHoverBox?: (key: string | null) => void
@@ -56,12 +57,48 @@ const deriveBoxStyle = (
   }
 }
 
-const DocumentViewer = ({ imageUrl, title, boxes = [], onHoverBox }: DocumentViewerProps) => {
+const DocumentViewer = ({ imageUrl = null, imageCandidates = [], title, boxes = [], onHoverBox }: DocumentViewerProps) => {
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null)
   const [zoomOrigin, setZoomOrigin] = useState<{ x: number; y: number }>({ x: 50, y: 50 })
   const [zooming, setZooming] = useState(false)
+  const [sourceIndex, setSourceIndex] = useState(0)
+
+  const sources = useMemo(() => {
+    const seen = new Set<string>()
+    const ordered: string[] = []
+    const add = (value: string | null | undefined) => {
+      if (!value) return
+      if (seen.has(value)) return
+      seen.add(value)
+      ordered.push(value)
+    }
+    add(imageUrl)
+    for (const candidate of imageCandidates) {
+      add(candidate)
+    }
+    return ordered
+  }, [imageCandidates, imageUrl])
+
+  const sourcesKey = useMemo(() => sources.join("|"), [sources])
+
+  useEffect(() => {
+    setSourceIndex(0)
+    setNaturalSize(null)
+  }, [sourcesKey])
+
+  const activeImage = sources[sourceIndex] ?? null
+
+  const handleImageError = () => {
+    if (sourceIndex < sources.length - 1) {
+      setNaturalSize(null)
+      setSourceIndex((prev) => prev + 1)
+    } else {
+      setSourceIndex(sources.length)
+    }
+  }
 
   const preparedBoxes = useMemo(() => {
+    if (!activeImage) return []
     return boxes
       .filter((box) => Array.isArray(box.bbox) && box.bbox.length >= 4)
       .map((box) => ({
@@ -69,7 +106,7 @@ const DocumentViewer = ({ imageUrl, title, boxes = [], onHoverBox }: DocumentVie
         style: deriveBoxStyle(box.bbox!, naturalSize),
       }))
       .filter((box) => box.style !== null)
-  }, [boxes, naturalSize])
+  }, [activeImage, boxes, naturalSize])
 
   return (
     <div className="resolve-viewer">
@@ -98,17 +135,17 @@ const DocumentViewer = ({ imageUrl, title, boxes = [], onHoverBox }: DocumentVie
           } as React.CSSProperties
         }
       >
-        {imageUrl ? (
+        {activeImage ? (
           <>
             <img
-              src={imageUrl}
+              src={activeImage}
               alt={title ?? ""}
               className="viewer-image"
               onLoad={(event) => {
                 const img = event.currentTarget
                 setNaturalSize({ width: img.naturalWidth, height: img.naturalHeight })
               }}
-              onError={() => setNaturalSize(null)}
+              onError={handleImageError}
             />
             <div className="viewer-boxes">
               {preparedBoxes.map((box) => (
@@ -137,3 +174,5 @@ const DocumentViewer = ({ imageUrl, title, boxes = [], onHoverBox }: DocumentVie
 
 export type { ViewerBox }
 export default DocumentViewer
+
+

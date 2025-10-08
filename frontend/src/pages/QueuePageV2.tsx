@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from "react"
-import { useLocation, useSearchParams } from "react-router-dom"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import UploadDropzoneCard, { type UploadDisplayItem, type UploadIcon } from "../components/upload/UploadDropzoneCard"
 import { DOCUMENT_STATUS_LABELS, UI_STATUS_LABELS } from "../constants/status"
 import { useBatchStore } from "../state/batch-store"
+import { deleteDocument } from "../api/client"
 import type { BatchSummary } from "../api/types"
 
 const TEXT = {
@@ -16,6 +17,11 @@ const TEXT = {
   packetPrefix: "\u041f\u0430\u043a\u0435\u0442",
   documentsCount: "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u043e\u0432:",
   pagesPrefix: "\u0421\u0442\u0440\u0430\u043d\u0438\u0446:",
+  removeConfirm: "\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u044d\u0442\u043e\u0442 \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442 \u0438\u0437 \u043e\u0447\u0435\u0440\u0435\u0434\u0438?",
+  removeError: "\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0443\u0434\u0430\u043b\u0438\u0442\u044c \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442.",
+  removing: "\u0423\u0434\u0430\u043b\u044f\u0435\u043c \u0434\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u2026",
+  manualHint: "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442\u044b \u043d\u0443\u0436\u0434\u0430\u044e\u0442\u0441\u044f \u0432 \u043f\u0440\u043e\u0432\u0435\u0440\u043a\u0435.",
+  proceedManual: "\u041f\u0435\u0440\u0435\u0439\u0442\u0438 \u043a \u0438\u0441\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044e",
 }
 
 const iconForFilename = (name: string): UploadIcon => {
@@ -28,8 +34,10 @@ const iconForFilename = (name: string): UploadIcon => {
 
 const QueuePageV2 = () => {
   const location = useLocation()
+  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const { history, statusFor, getBatch } = useBatchStore()
+  const { history, statusFor, getBatch, refreshHistory } = useBatchStore()
+  const [removingId, setRemovingId] = useState<string | null>(null)
 
   const [activeId, setActiveId] = useState<string | null>(() => {
     const byQuery = searchParams.get("id")
@@ -83,6 +91,18 @@ const QueuePageV2 = () => {
       try {
         const summary = await getBatch(activeId, true)
         if (cancelled) return
+
+        if (summary) {
+          if (summary.status === "FILLED_AUTO") {
+            navigate(`/resolve/${summary.id}`)
+            return
+          }
+          if (["FILLED_REVIEWED", "VALIDATED", "DONE"].includes(summary.status)) {
+            navigate(`/table/${summary.id}`)
+            return
+          }
+        }
+
         setBatch(summary)
         setError(summary ? null : TEXT.error)
       } catch (err) {
@@ -106,18 +126,44 @@ const QueuePageV2 = () => {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [activeId, getBatch])
+  }, [activeId, getBatch, navigate])
+
+  const handleRemoveDocument = useCallback(
+    async (docId: string) => {
+      if (!activeId) return
+      if (!window.confirm(TEXT.removeConfirm)) return
+      if (removingId) return
+      setRemovingId(docId)
+      try {
+        await deleteDocument(docId)
+        const summary = await getBatch(activeId, true)
+        setBatch(summary)
+        setError(summary ? null : TEXT.error)
+        await refreshHistory()
+      } catch (err) {
+        console.error(err)
+        setError(TEXT.removeError)
+      } finally {
+        setRemovingId(null)
+      }
+    },
+    [activeId, getBatch, refreshHistory, removingId],
+  )
 
   const displayedItems = useMemo<UploadDisplayItem[]>(() => {
     if (!batch) return []
-    return batch.documents.map((doc) => ({
-      id: doc.id,
-      name: doc.filename,
-      sizeLabel: DOCUMENT_STATUS_LABELS[doc.status],
-      meta: `${TEXT.pagesPrefix} ${doc.pages}`,
-      icon: iconForFilename(doc.filename),
-    }))
-  }, [batch])
+    return batch.documents.map((doc) => {
+      const removable = doc.status !== "FILLED_AUTO" && doc.status !== "FILLED_REVIEWED"
+      return {
+        id: doc.id,
+        name: doc.filename,
+        sizeLabel: DOCUMENT_STATUS_LABELS[doc.status],
+        meta: `${TEXT.pagesPrefix} ${doc.pages}`,
+        icon: iconForFilename(doc.filename),
+        removable: removable && removingId !== doc.id,
+      }
+    })
+  }, [batch, removingId])
 
   const packetStatus = batch ? statusFor(batch.status) : null
   const packetStatusLabel = packetStatus ? UI_STATUS_LABELS[packetStatus] ?? packetStatus : null
@@ -149,7 +195,18 @@ const QueuePageV2 = () => {
           highlight="queue"
           placeholder={<div className="queue-placeholder">{TEXT.queueHelp}</div>}
           hint={null}
+          onRemoveItem={handleRemoveDocument}
+          footer={removingId ? <div className="queue-removing">{TEXT.removing}</div> : null}
         />
+
+        {batch?.status === "FILLED_AUTO" && (
+          <div className="queue-cta">
+            <span>{TEXT.manualHint}</span>
+            <button type="button" className="btn-primary" onClick={() => navigate(`/resolve/${batch.id}`)}>
+              {TEXT.proceedManual}
+            </button>
+          </div>
+        )}
 
         <div className="queue-footer">
           {loading && <div className="callout info">{TEXT.loading}</div>}

@@ -41,18 +41,29 @@ const Sidebar = () => {
         <div className="sidebar-brand">LOGOS</div>
       </div>
       <nav className="sidebar-primary">
-        <NavLink to="/new" className={({ isActive }) => `sidebar-link${isActive ? " is-active" : ""}`}>
+        <NavLink
+          to="/new"
+          data-variant="primary"
+          className={({ isActive }) => `sidebar-link${isActive ? " is-active" : ""}`}
+        >
           {LABELS.newPacket}
         </NavLink>
-        <NavLink to="/queue" className={({ isActive }) => `sidebar-link${isActive ? " is-active" : ""}`}>
+        <NavLink
+          to="/queue"
+          data-variant="secondary"
+          className={({ isActive }) => `sidebar-link${isActive ? " is-active" : ""}`}
+        >
           {LABELS.queue}
         </NavLink>
       </nav>
       <div className="sidebar-section">
         <div className="sidebar-section-header">
-          <span>{LABELS.history}</span>
-          <NavLink to="/history" className={({ isActive }) => `sidebar-link subtle${isActive ? " is-active" : ""}`}>
-            {"\u2192"}
+          <NavLink
+            to="/history"
+            data-variant="secondary"
+            className={({ isActive }) => `sidebar-history-link${isActive ? " is-active" : ""}`}
+          >
+            {LABELS.history}
           </NavLink>
         </div>
         <div className="sidebar-history">

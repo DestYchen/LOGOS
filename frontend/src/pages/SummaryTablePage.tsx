@@ -5,6 +5,7 @@ import { useBatchStore } from "../state/batch-store"
 import { downloadReport, fetchReport, fetchReview, updateReviewField } from "../api/client"
 import type { BatchSummary, ReviewField, ReviewResponse, ValidationResult } from "../api/types"
 import { prettifyFieldKey } from "../utils/field-label"
+import { buildPreviewCandidates } from "../utils/preview"
 
 const TEXT = {
   title: "\u0418\u0442\u043e\u0433\u043e\u0432\u0430\u044f \u0442\u0430\u0431\u043b\u0438\u0446\u0430",
@@ -179,33 +180,38 @@ const SummaryTablePage = () => {
     return getField(docId, field)
   }, [getField, highlightKey])
 
-  const getImageUrl = (field: ReviewField | null) => {
-    if (!packetId || !field) return null
-    const page = field.page && field.page > 0 ? field.page : 1
-    return `/files/batches/${packetId}/preview/${field.doc_id}/page-${page}.png`
-  }
+  const previewCandidatesForField = useCallback(
+    (field: ReviewField | null): string[] => {
+      if (!packetId || !field) return []
+      return buildPreviewCandidates(packetId, field.doc_id, field.page ?? 1)
+    },
+    [packetId],
+  )
 
-  const buildCutoutStyle = (field: ReviewField | null) => {
-    if (!field) return {}
-    const image = getImageUrl(field)
-    if (!image) return {}
-    if (!field.bbox || field.bbox.length < 4) {
+  const buildCutoutStyle = useCallback(
+    (field: ReviewField | null) => {
+      if (!field) return {}
+      const image = previewCandidatesForField(field)[0]
+      if (!image) return {}
+      if (!field.bbox || field.bbox.length < 4) {
+        return {
+          backgroundImage: `url(${image})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }
+      }
+      const [x1, y1, x2, y2] = field.bbox
+      const isNormalized = x1 <= 1 && y1 <= 1 && x2 <= 1 && y2 <= 1
+      const centerX = isNormalized ? ((x2 >= x1 ? x1 + (x2 - x1) / 2 : x1 + x2 / 2) * 100) : 50
+      const centerY = isNormalized ? ((y2 >= y1 ? y1 + (y2 - y1) / 2 : y1 + y2 / 2) * 100) : 50
       return {
         backgroundImage: `url(${image})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
+        backgroundSize: "220% 220%",
+        backgroundPosition: `${centerX}% ${centerY}%`,
       }
-    }
-    const [x1, y1, x2, y2] = field.bbox
-    const isNormalized = x1 <= 1 && y1 <= 1 && x2 <= 1 && y2 <= 1
-    const centerX = isNormalized ? ((x2 >= x1 ? x1 + (x2 - x1) / 2 : x1 + x2 / 2) * 100) : 50
-    const centerY = isNormalized ? ((y2 >= y1 ? y1 + (y2 - y1) / 2 : y1 + y2 / 2) * 100) : 50
-    return {
-      backgroundImage: `url(${image})`,
-      backgroundSize: "220% 220%",
-      backgroundPosition: `${centerX}% ${centerY}%`,
-    }
-  }
+    },
+    [previewCandidatesForField],
+  )
   if (!packetId) {
     return (
       <div className="page">
@@ -249,6 +255,7 @@ const SummaryTablePage = () => {
   const documents = batch.documents
   const hoverStyle = buildCutoutStyle(hoverField)
   const highlightStyle = buildCutoutStyle(highlightField)
+  const modalCandidates = previewCandidatesForField(modalField)
   const modalBoxes: ViewerBox[] = modalField
     ? [
         {
@@ -361,7 +368,12 @@ const SummaryTablePage = () => {
               </button>
             </div>
             <div className="summary-modal-body">
-              <DocumentViewer imageUrl={getImageUrl(modalField)} title={modalField.document_filename} boxes={modalBoxes} />
+            <DocumentViewer
+              imageUrl={modalCandidates[0] ?? null}
+              imageCandidates={modalCandidates}
+              title={modalField.document_filename}
+              boxes={modalBoxes}
+            />
               <label>{prettifyFieldKey(modalField.field_key)}</label>
               <textarea value={modalValue} onChange={(event) => setModalValue(event.target.value)} />
             </div>
