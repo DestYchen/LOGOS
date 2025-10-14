@@ -1,45 +1,60 @@
 # SupplyHub Test Frontend
 
-This is a fresh shadcn/ui + Vite React rewrite of the web console. It talks to the FastAPI backend via the new JSON endpoints exposed under `/web/api`.
+Новый интерфейс на Vite + React (shadcn/ui) поверх REST-эндпоинтов FastAPI (`/web/api`). Sidebar повторяет макет ChatGPT: меню в верхней части, ниже — скроллируемая история пакетов.
 
-## Prerequisites
+## Требования
 
 - Node.js 18+
-- pnpm / npm / yarn (examples below use npm)
+- npm / pnpm / yarn (примеры ниже используют npm)
 
-## Getting started
+## Быстрый старт
 
 ```bash
 cd "test frontend"
 npm install
 ```
 
-### Development server
+### Дев-сервер
 
 ```bash
-# By default the app assumes the backend is served from http://localhost:8000/web
+# Бэкенд по умолчанию ожидается на http://localhost:8000/web
 npm run dev
 
-# If the backend runs on a different host/port:
+# Если API доступно на другом хосте/порту
 VITE_API_BASE=http://localhost:9000/web npm run dev
 ```
 
-The dev server runs on http://localhost:5173 and proxies API requests to the backend using the `VITE_API_BASE` origin you provide.
+Dev-сервер запускается на http://localhost:5173 и проксирует `/web/*` на указанный `VITE_API_BASE`.
 
-### Production build
+### Продакшен-сборка
 
 ```bash
 npm run build
 ```
 
-The build artefacts are emitted into `dist/`. The FastAPI router (`app/api/routes/web.py`) is already configured to serve static files from `test frontend/dist`, so after building, `/web/app` and `/web/app/*` will serve the compiled SPA.
+Бандлы попадают в `dist/`. FastAPI уже настроен на раздачу `test frontend/dist`, так что после сборки SPA доступно на `/web/app`.
 
-Use `npm run preview` to run Vite’s static preview locally.
+Используйте `npm run preview`, чтобы проверить продовую сборку локально.
 
-## Project structure
+## Структура
 
-- `src/pages` – Upload, batch list, and batch detail screens.
-- `src/lib/api.ts` – Fetch helpers that call the FastAPI endpoints.
-- `src/components` – Reusable shadcn/ui-based components and the layout shell.
+- `src/pages` — ключевые экраны: Новый пакет, В очереди, Документ — исправление ошибок, Итоговая таблица, История.
+- `src/components` — layout с сайдбаром, shadcn/ui элементы, вьюер документов, статусные бейджи.
+- `src/lib/api.ts` — обёртки над `/web/api` и вспомогательные утилиты.
+- `src/contexts/history-context.tsx` — кэш истории пакетов для сайдбара/роутов.
 
-The UI mirrors the previous HTML flow: upload documents, monitor batch progress, review fields, and trigger validation/report downloads.
+## Экранные сценарии
+
+- **Новый пакет (`/new`)** — drag & drop зона, мгновенная валидация формата/размера, список выбранных файлов, «Продолжить» запускает загрузку и переводит в очередь.
+- **В очереди (`/queue?batch=ID`)** — заблокированная форма с анимированной градиентной рамкой, отображает статусы документов и кнопки перехода к следующему шагу.
+- **Документ — исправление ошибок (`/resolve/:batchId[/docIndex]`)** — левая панель с ошибками, правая панель с предпросмотром и зумом, кнопки «Удалить», «Сохранить и пересчитать», подтверждение/редактирование полей, прогресс по документам.
+- **Итоговая таблица (`/table/:batchId`)** — таблица с подсветкой confidence, hover-превью, модальным редактированием и блоком ошибок правил, кнопка «Экспортировать отчёт».
+- **История (`/history`)** — сгруппированный по статусам список пакетов с быстрыми переходами; также компактная версия отображается в сайдбаре.
+
+## Связка с бэкендом
+
+- Файлы летят в `POST /web/upload`.
+- Очередь/история используют `GET /web/api/batches` и `GET /web/api/batches/:id`.
+- Все действия (подтверждение полей, смена типа, пересчёт, удаление, завершение) вызывают новые JSON-роуты из `app/api/routes/web.py`.
+
+После успешной загрузки запустите pipeline (Celery/worker), чтобы статусы обновлялись автоматически.

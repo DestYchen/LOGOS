@@ -71,3 +71,28 @@ body {
   background-color: hsl(var(--background));
   color: hsl(var(--foreground));
 }
+
+.gradient-border {
+  position: relative;
+  border-radius: 1.5rem;
+  padding: 2px;
+  background: linear-gradient(120deg, #4f46e5, #9333ea, #14b8a6, #f97316);
+  background-size: 300% 300%;
+  animation: gradient-flow 8s ease infinite;
+}
+
+.gradient-border > * {
+  border-radius: 1.35rem;
+}
+
+@keyframes gradient-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}

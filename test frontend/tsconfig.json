@@ -1,9 +1,15 @@
-{
-  "extends": "./tsconfig.node.json",
-  "compilerOptions": {
-    "composite": true,
-    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo",
-    "types": ["vite/client"]
-  },
-  "include": ["src"]
+﻿{
+    "extends":  "./tsconfig.node.json",
+    "compilerOptions":  {
+                            "composite":  true,
+                            "tsBuildInfoFile":  "./node_modules/.cache/tsconfig.tsbuildinfo",
+                            "types":  [
+                                          "vite/client"
+                                      ],
+                            "jsx":  "react-jsx",
+                            "noEmit":  true
+                        },
+    "include":  [
+                    "src"
+                ]
 }
