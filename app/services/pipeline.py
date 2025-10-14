@@ -274,7 +274,12 @@ async def _run_ocr_step(session, batch_id: uuid.UUID, document: Document) -> Pro
         tokens = _plain_text_tokens(extraction.text)
 
     document.ocr_path = str(ocr_file.relative_to(paths.base))
-    document.pages = 1 if tokens else 0
+    # Derive page count from tokens (max page index), fallback to 1 if any tokens
+    try:
+        max_page = max(int(t.get('page', 1)) for t in tokens) if tokens else 0
+    except Exception:
+        max_page = 1 if tokens else 0
+    document.pages = max_page
 
     if not tokens:
         logger.warning('No OCR tokens extracted for %s', document.filename)

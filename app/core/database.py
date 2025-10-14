@@ -9,7 +9,7 @@ from .config import get_settings
 
 _settings = get_settings()
 
-engine: AsyncEngine = create_async_engine(str(_settings.database_url), echo=_settings.debug, future=True)
+engine: AsyncEngine = create_async_engine(str(_settings.database_url), echo=_settings.debug, future=True, pool_size=20, max_overflow=30)
 
 AsyncSessionMaker = async_sessionmaker(bind=engine, expire_on_commit=False, class_=AsyncSession)
 

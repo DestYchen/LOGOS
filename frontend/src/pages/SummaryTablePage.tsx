@@ -1,11 +1,13 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react"
+﻿﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
 import DocumentViewer, { type ViewerBox } from "../components/resolve/DocumentViewer"
 import { useBatchStore } from "../state/batch-store"
-import { downloadReport, fetchReport, fetchReview, updateReviewField } from "../api/client"
-import type { BatchSummary, ReviewField, ReviewResponse, ValidationResult } from "../api/types"
+import { completeReview, downloadReport, fetchReport, fetchReview, updateReviewField } from "../api/client"
+import type { BatchReportResponse, BatchSummary, ReviewField, ReviewResponse, ValidationResult } from "../api/types"
 import { prettifyFieldKey } from "../utils/field-label"
 import { buildPreviewCandidates } from "../utils/preview"
+
+const sleep = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms))
 
 const TEXT = {
   title: "\u0418\u0442\u043e\u0433\u043e\u0432\u0430\u044f \u0442\u0430\u0431\u043b\u0438\u0446\u0430",
@@ -18,6 +20,17 @@ const TEXT = {
   modalTitle: "\u0420\u0435\u0434\u0430\u043a\u0442\u0438\u0440\u043e\u0432\u0430\u043d\u0438\u0435",
   save: "\u0421\u043e\u0445\u0440\u0430\u043d\u0438\u0442\u044c",
   cancel: "\u041e\u0442\u043c\u0435\u043d\u0430",
+  reportPendingTitle: "\u0424\u043e\u0440\u043c\u0438\u0440\u0443\u0435\u043c \u043e\u0442\u0447\u0451\u0442",
+  reportPendingHint:
+    "\u042d\u0442\u043e \u043c\u043e\u0436\u0435\u0442 \u0437\u0430\u043d\u044f\u0442\u044c \u043f\u0430\u0440\u0443 \u043c\u0438\u043d\u0443\u0442. \u041c\u044b \u0430\u0432\u0442\u043e\u043c\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0438 \u043e\u0431\u043d\u043e\u0432\u0438\u043c \u0441\u0442\u0440\u0430\u043d\u0438\u0446\u0443, \u043a\u0430\u043a \u0442\u043e\u043b\u044c\u043a\u043e \u0438\u0442\u043e\u0433\u043e\u0432\u044b\u0439 \u043e\u0442\u0447\u0451\u0442 \u0431\u0443\u0434\u0435\u0442 \u0433\u043e\u0442\u043e\u0432.",
+  processingWarningTitle: "\u0415\u0441\u0442\u044c \u043f\u0440\u0435\u0434\u0443\u043f\u0440\u0435\u0436\u0434\u0435\u043d\u0438\u044f",
+  processingWarningHint:
+    "\u041e\u0442\u0447\u0451\u0442 \u0434\u043e\u0441\u0442\u0443\u043f\u0435\u043d, \u043d\u043e \u043f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430 \u043f\u0440\u043e\u0441\u043c\u043e\u0442\u0440\u0438\u0442\u0435 \u0437\u0430\u043c\u0435\u0447\u0430\u043d\u0438\u044f \u043d\u0438\u0436\u0435.",
+}
+
+const WARNING_MESSAGE_LOOKUP: Record<string, string> = {
+  review_not_complete:
+    "\u041d\u0435 \u0432\u0441\u0435 \u043e\u0431\u044f\u0437\u0430\u0442\u0435\u043b\u044c\u043d\u044b\u0435 \u043f\u043e\u043b\u044f \u043f\u043e\u0434\u0442\u0432\u0435\u0440\u0436\u0434\u0435\u043d\u044b; \u043e\u0442\u0447\u0451\u0442 \u0441\u043e\u0431\u0440\u0430\u043d \u0441 \u043f\u0440\u0435\u0434\u0443\u043f\u0440\u0435\u0436\u0434\u0435\u043d\u0438\u044f\u043c\u0438.",
 }
 
 const confidenceTint = (value: number) => {
@@ -31,8 +44,12 @@ const fieldKeyFor = (docId: string, fieldKey: string) => `${docId}::${fieldKey}`
 const SummaryTablePage = () => {
   const { packetId } = useParams<{ packetId: string }>()
   const { getBatch } = useBatchStore()
+  const latestPacketId = useRef<string | null>(null)
+  const runRef = useRef<symbol | null>(null)
+  const retryTimeoutRef = useRef<number | null>(null)
   const [batch, setBatch] = useState<BatchSummary | null>(null)
   const [review, setReview] = useState<ReviewResponse | null>(null)
+  const [report, setReport] = useState<BatchReportResponse | null>(null)
   const [validations, setValidations] = useState<ValidationResult[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -42,48 +59,180 @@ const SummaryTablePage = () => {
   const [modalValue, setModalValue] = useState<string>("")
   const [modalSaving, setModalSaving] = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const [reportPending, setReportPending] = useState(false)
 
-  const load = useCallback(async () => {
-    if (!packetId) return
-    setLoading(true)
-    try {
-      const [summary, reviewPayload, reportPayload] = await Promise.all([
-        getBatch(packetId, true),
-        fetchReview(packetId),
-        fetchReport(packetId),
-      ])
-      if (!summary) {
-        setBatch(null)
-        setReview(null)
-        setValidations([])
-        setError(TEXT.noBatch)
-        return
+  const processingWarnings = useMemo(() => {
+    const meta = report?.meta
+    if (!meta || typeof meta !== "object") return []
+    const raw = (meta as Record<string, unknown>).processing_warnings
+    if (!Array.isArray(raw)) return []
+    return raw.filter((item): item is string => typeof item === "string")
+  }, [report])
+
+  const warningMessages = useMemo(
+    () => processingWarnings.map((key) => WARNING_MESSAGE_LOOKUP[key] ?? key),
+    [processingWarnings],
+  )
+
+  useEffect(() => {
+    latestPacketId.current = packetId ?? null
+  }, [packetId])
+
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current !== null) {
+        window.clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
       }
-      setBatch(summary)
-      setReview(reviewPayload)
-      setValidations(reportPayload.validations)
-      setError(null)
-    } catch (err) {
-      console.error(err)
-      setError(TEXT.loadError)
-    } finally {
-      setLoading(false)
     }
-  }, [getBatch, packetId])
+  }, [])
+
+  const load = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (!packetId) return
+      const silent = options?.silent ?? false
+      if (!silent) {
+        setLoading(true)
+        setError(null)
+      }
+      if (retryTimeoutRef.current !== null) {
+        window.clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
+      }
+      try {
+        const summary = await getBatch(packetId, true)
+        if (!summary) {
+          setBatch(null)
+          setReview(null)
+          setReport(null)
+          setValidations([])
+          setReportPending(false)
+          setError(TEXT.noBatch)
+          return
+        }
+
+        const reviewPayload = await fetchReview(packetId)
+
+        setBatch(summary)
+        setReview(reviewPayload)
+        setError(null)
+        setReport(null)
+        setValidations([])
+        setReportPending(true)
+
+        const runId = Symbol("report-run")
+        runRef.current = runId
+        const currentPacketId = packetId
+
+        const run = async () => {
+          try {
+            await sleep(1000)
+            await completeReview(currentPacketId).catch((err) => {
+              console.warn("completeReview failed; continuing to fetch report", err)
+            })
+            const reportPayload = await fetchReport(currentPacketId)
+            if (runRef.current !== runId || latestPacketId.current !== currentPacketId) {
+              return
+            }
+            setReport(reportPayload)
+            setValidations(reportPayload?.validations ?? [])
+            setReportPending(!reportPayload)
+            if (reportPayload) {
+              if (retryTimeoutRef.current !== null) {
+                window.clearTimeout(retryTimeoutRef.current)
+                retryTimeoutRef.current = null
+              }
+            } else if (latestPacketId.current === currentPacketId) {
+              if (retryTimeoutRef.current !== null) {
+                window.clearTimeout(retryTimeoutRef.current)
+              }
+              retryTimeoutRef.current = window.setTimeout(() => {
+                if (latestPacketId.current === currentPacketId) {
+                  load({ silent: true }).catch(() => undefined)
+                }
+              }, 3000)
+            }
+          } catch (err) {
+            console.error(err)
+            if (runRef.current === runId && latestPacketId.current === currentPacketId) {
+              setReportPending(true)
+              if (retryTimeoutRef.current !== null) {
+                window.clearTimeout(retryTimeoutRef.current)
+              }
+              retryTimeoutRef.current = window.setTimeout(() => {
+                if (latestPacketId.current === currentPacketId) {
+                  load({ silent: true }).catch(() => undefined)
+                }
+              }, 3000)
+            }
+          } finally {
+            if (runRef.current === runId) {
+              runRef.current = null
+            }
+          }
+        }
+
+        run().catch((err) => {
+          console.error(err)
+        })
+      } catch (err) {
+        console.error(err)
+        if (!silent) {
+          setError(TEXT.loadError)
+        }
+      } finally {
+        if (!silent) {
+          setLoading(false)
+        }
+      }
+    },
+    [getBatch, packetId],
+  )
   useEffect(() => {
     load().catch(() => undefined)
   }, [load])
 
   const fieldLookup = useMemo(() => {
     const map = new Map<string, Map<string, ReviewField>>()
-    if (!review) return map
-    for (const field of review.fields) {
-      const bucket = map.get(field.doc_id) ?? new Map<string, ReviewField>()
-      bucket.set(field.field_key, field)
-      map.set(field.doc_id, bucket)
+    if (review && review.fields.length > 0) {
+      for (const field of review.fields) {
+        const bucket = map.get(field.doc_id) ?? new Map<string, ReviewField>()
+        bucket.set(field.field_key, field)
+        map.set(field.doc_id, bucket)
+      }
+      return map
+    }
+    if (report && report.documents.length > 0) {
+      const threshold = review?.low_conf_threshold ?? 0
+      const batchDocs = batch ? batch.documents : []
+      const byId = new Map(batchDocs.map((doc) => [doc.id, doc]))
+      for (const doc of report.documents) {
+        const bucket = map.get(doc.doc_id) ?? new Map<string, ReviewField>()
+        const filename = doc.filename || byId.get(doc.doc_id)?.filename || doc.doc_id
+        const fields = Object.entries(doc.fields ?? {})
+        for (const [key, value] of fields) {
+          bucket.set(key, {
+            doc_id: doc.doc_id,
+            document_filename: filename,
+            field_key: key,
+            value: value?.value ?? null,
+            confidence: value?.confidence ?? 0,
+            required: false,
+            threshold,
+            source: value?.source ?? "report",
+            page: value?.page ?? null,
+            bbox: value?.bbox ?? null,
+            token_refs: null,
+            doc_type: doc.doc_type,
+          })
+        }
+        if (bucket.size > 0) {
+          map.set(doc.doc_id, bucket)
+        }
+      }
     }
     return map
-  }, [review])
+  }, [batch, report, review])
 
   const fieldKeys = useMemo(() => {
     const keys = new Set<string>()
@@ -106,7 +255,7 @@ const SummaryTablePage = () => {
   }, [validations])
 
   const handleDownload = async () => {
-    if (!packetId) return
+    if (!packetId || reportPending) return
     try {
       setDownloading(true)
       const blob = await downloadReport(packetId)
@@ -252,7 +401,18 @@ const SummaryTablePage = () => {
     )
   }
 
-  const documents = batch.documents
+  const documents = report && report.documents.length > 0
+    ? report.documents.map((doc) => {
+        const fallback = batch.documents.find((item) => item.id === doc.doc_id)
+        return {
+          id: doc.doc_id,
+          filename: doc.filename || fallback?.filename || doc.doc_id,
+          doc_type: doc.doc_type,
+          status: fallback?.status ?? doc.status,
+          pages: fallback?.pages ?? 0,
+        }
+      })
+    : batch.documents
   const hoverStyle = buildCutoutStyle(hoverField)
   const highlightStyle = buildCutoutStyle(highlightField)
   const modalCandidates = previewCandidatesForField(modalField)
@@ -273,10 +433,32 @@ const SummaryTablePage = () => {
         <p>{TEXT.subtitle}</p>
       </header>
       <div className="summary-toolbar">
-        <button type="button" className="btn-primary" onClick={handleDownload} disabled={downloading}>
+        <button
+          type="button"
+          className="btn-primary"
+          onClick={handleDownload}
+          disabled={downloading || reportPending}
+        >
           {TEXT.export}
         </button>
       </div>
+      {reportPending && (
+        <div className="callout info">
+          <strong>{TEXT.reportPendingTitle}</strong>
+          <p className="muted">{TEXT.reportPendingHint}</p>
+        </div>
+      )}
+      {warningMessages.length > 0 && (
+        <div className="callout warning">
+          <strong>{TEXT.processingWarningTitle}</strong>
+          <p className="muted">{TEXT.processingWarningHint}</p>
+          <ul>
+            {warningMessages.map((message, index) => (
+              <li key={`${message}-${index}`}>{message}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="summary-content">
         <div className="summary-table-wrapper">
           <table className="summary-table">
@@ -390,7 +572,6 @@ const SummaryTablePage = () => {
 }
 
 export default SummaryTablePage
-
 
 
 

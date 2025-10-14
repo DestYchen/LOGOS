@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -69,13 +69,14 @@ class FieldUpdateRequest(BaseModel):
 class ReviewCompleteResponse(BaseModel):
     batch_id: uuid.UUID
     status: BatchStatus
+    warnings: List[str] = Field(default_factory=list)
 
 
 class ValidationRef(BaseModel):
-    doc_id: Optional[uuid.UUID]
-    field_key: Optional[str]
-    page: Optional[int]
-    bbox: Optional[List[float]]
+    doc_id: Optional[uuid.UUID] = None
+    field_key: Optional[str] = None
+    page: Optional[int] = None
+    bbox: Optional[List[float]] = None
 
 
 class ValidationResult(BaseModel):
@@ -85,11 +86,29 @@ class ValidationResult(BaseModel):
     refs: List[ValidationRef] = Field(default_factory=list)
 
 
+class ReportFieldValue(BaseModel):
+    value: Optional[str] = None
+    confidence: Optional[float] = None
+    source: Optional[str] = None
+    page: Optional[int] = None
+    bbox: Optional[List[float]] = None
+
+
+class ReportDocument(BaseModel):
+    doc_id: uuid.UUID
+    filename: str
+    doc_type: DocumentType
+    status: DocumentStatus
+    fields: Dict[str, ReportFieldValue] = Field(default_factory=dict)
+
+
 class BatchReportResponse(BaseModel):
     batch_id: uuid.UUID
     status: BatchStatus
     validations: List[ValidationResult]
     meta: dict = Field(default_factory=dict)
+    documents: List[ReportDocument] = Field(default_factory=list)
+    generated_at: Optional[str] = None
 
 
 class ArchiveEntry(BaseModel):

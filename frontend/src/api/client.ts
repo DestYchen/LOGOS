@@ -70,8 +70,11 @@ export const fetchReview = async (batchId: string): Promise<ReviewResponse> => {
   return parseJson<ReviewResponse>(response)
 }
 
-export const fetchReport = async (batchId: string): Promise<BatchReportResponse> => {
+export const fetchReport = async (batchId: string): Promise<BatchReportResponse | null> => {
   const response = await fetch(`/batches/${batchId}/report`)
+  if (response.status === 404) {
+    return null
+  }
   return parseJson<BatchReportResponse>(response)
 }
 
@@ -94,8 +97,13 @@ export const updateReviewField = async (
   return parseJson<FieldUpdateResponse>(response)
 }
 
-export const completeReview = async (batchId: string): Promise<void> => {
-  const response = await fetch(`/batches/${batchId}/review/complete`, { method: "POST" })
+export const completeReview = async (batchId: string, options?: { force?: boolean }): Promise<void> => {
+  const params = new URLSearchParams()
+  if (options?.force) {
+    params.set("force", "true")
+  }
+  const query = params.toString()
+  const response = await fetch(`/batches/${batchId}/review/complete${query ? `?${query}` : ""}`, { method: "POST" })
   await ensureOk(response)
 }
 

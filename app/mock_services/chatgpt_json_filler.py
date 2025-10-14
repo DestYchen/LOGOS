@@ -256,7 +256,7 @@ def init_client() -> None:
 
         client = OpenAI(
             api_key=api_key,
-            base_url="http://192.168.1.64:1234/v1",
+            base_url="http://10.0.0.247:1234/v1",
             default_headers={
                 "HTTP-Referer": os.getenv("OPENROUTER_HTTP_REFERER", "http://localhost:8002"),
                 "X-Title": os.getenv("OPENROUTER_X_TITLE", "My OCR Adapter"),
@@ -308,9 +308,7 @@ async def fill(request: FillerRequest) -> FillerResponse:
         "Rules:"
         "1. Only fill the fields present in the template. Leave the others empty."
         "2. For every field you fill:"
-        "- value - copy the exact text from the document but strip any leading field labels/titles and punctuation like colons; return only the raw value."
-        "  Examples: 'INVOICE № 019246' -> '019246'; 'CONTAINER: PONU4832160' -> 'PONU4832160'."
-        "- dates - format as DD.MM.YYYY (e.g., '04 SEPTEMBER 2019' -> '04.09.2019')."
+        "- value - copy the exact text from the document (no normaliztion or guessing);"
         "- bbox - use the bounding box from the same token that supplied the value (if the value is composed from several tokens, you may provide multiple bounding boxes or leave it empty if coordinates are unknown);"
         "- token_refs - list the identifiers of the tokens (e.g., ['p1_t4', 'p1_t5']) from which you extracted the value."
         "3. If 'products' is present in the template, you MUST output it as an object where each entry is named product_1, product_2, ..., one per product row. Even when the entire table arrives as a single token (for example <table>...</table>), you must parse it row by row and behave as if each <tr> were separate input."

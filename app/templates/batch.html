@@ -39,6 +39,8 @@
       .validation-matrix td { white-space: pre-line; }
       .report-actions { margin: 0.75rem 0; }
       a.small-btn { display: inline-block; text-decoration: none; }
+      .previews { margin: 0.75rem 0 1rem; display: flex; flex-wrap: wrap; gap: 0.75rem; }
+      .previews img { max-width: 480px; height: auto; border: 1px solid #e5e7eb; border-radius: 4px; }
     </style>
   </head>
   <body>
@@ -88,6 +90,13 @@
         </form>
         <h2>Документ: {{ doc.filename }}</h2>
         <div class="meta">Тип: {{ doc.doc_type }} · Статус: {{ doc.status }}</div>
+        {% if doc.previews and doc.previews|length > 0 %}
+          <div class="previews">
+            {% for url in doc.previews %}
+              <img src="{{ url }}" alt="preview {{ loop.index }} for {{ doc.filename }}" />
+            {% endfor %}
+          </div>
+        {% endif %}
         {% if doc.doc_type == "UNKNOWN" and doc.status == "FAILED" %}
           <div class="set-type">
             <form action="/web/documents/{{ doc.id }}/set_type" method="post" class="set-type-form">

@@ -107,11 +107,29 @@ export interface ValidationResult {
   refs: ValidationRef[]
 }
 
+export interface ReportFieldValue {
+  value: string | null
+  confidence: number | null
+  source: string | null
+  page: number | null
+  bbox: number[] | null
+}
+
+export interface ReportDocument {
+  doc_id: string
+  filename: string
+  doc_type: DocumentType
+  status: DocumentStatus
+  fields: Record<string, ReportFieldValue>
+}
+
 export interface BatchReportResponse {
   batch_id: string
   status: BatchStatus
   validations: ValidationResult[]
   meta: Record<string, unknown>
+  documents: ReportDocument[]
+  generated_at?: string | null
 }
 
 export type UiBatchState =

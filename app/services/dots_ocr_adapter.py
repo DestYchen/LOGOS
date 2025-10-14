@@ -248,6 +248,11 @@ class DotsOCRAdapter:
                 raise DotsOCRError("pdf_without_pages")
             tokens: List[Dict[str, Any]] = []
             for page_idx, image in enumerate(images):
+                # Best-effort: save page preview before parsing
+                try:
+                    self._save_preview_image(file_path, doc_id, page_idx + 1, image)
+                except Exception:
+                    logger.debug("Failed to save preview image (pdf page)", exc_info=True)
                 cells, page_size, token_confidences = self._parse_page(
                     image,
                     page_idx,
@@ -260,6 +265,11 @@ class DotsOCRAdapter:
 
         if suffix in image_extensions:
             origin_image = fetch_image(str(file_path))
+            # Best-effort: save single-page preview before parsing
+            try:
+                self._save_preview_image(file_path, doc_id, 1, origin_image)
+            except Exception:
+                logger.debug("Failed to save preview image (single image)", exc_info=True)
             cells, page_size, token_confidences = self._parse_page(
                 origin_image,
                 0,
@@ -699,6 +709,54 @@ class DotsOCRAdapter:
         gc.collect()
         # Torch is not used; skip GPU cache management
 
+    def _save_preview_image(self, file_path: Path, doc_id: uuid.UUID, page_number: int, image_obj) -> None:
+        """Save a preview PNG under batches/<batch>/preview/<doc_id>/page_<n>.png.
+
+        Computes the batch base from the raw file path, resizes to configured max size,
+        and writes a PNG file. Best-effort; failures are logged and ignored.
+        """
+        try:
+            from PIL import Image  # type: ignore
+        except Exception as exc:  # pragma: no cover - optional dependency
+            logger.debug("PIL not available for preview saving: %s", exc)
+            return
+
+        # Compute base dir: <base>/raw/<filename> => <base>
+        # Windows paths supported via pathlib
+        raw_dir = file_path.parent
+        base_dir = raw_dir.parent
+        preview_dir = base_dir / "preview" / str(doc_id)
+        preview_dir.mkdir(parents=True, exist_ok=True)
+
+        # Coerce to PIL.Image
+        if hasattr(image_obj, "copy") and hasattr(image_obj, "save"):
+            pil_img = image_obj
+        else:
+            try:
+                pil_img = fetch_image(image_obj)
+            except Exception:
+                logger.debug("Unable to coerce preview image", exc_info=True)
+                return
+
+        # Resize respecting aspect ratio
+        max_w = 1280
+        max_h = 960
+        try:
+            if get_settings:
+                settings = get_settings()
+                max_w = int(getattr(settings, "preview_max_width", max_w))
+                max_h = int(getattr(settings, "preview_max_height", max_h))
+        except Exception:
+            pass
+
+        try:
+            img = pil_img.copy()
+            img.thumbnail((max_w, max_h))
+            out_path = preview_dir / f"page_{page_number}.png"
+            img.save(out_path, format="PNG")
+        except Exception:
+            logger.debug("Failed to write preview image", exc_info=True)
+
 
 _ADAPTER_INSTANCE: Optional[DotsOCRAdapter] = None
 _ADAPTER_INIT_LOCK = asyncio.Lock()
@@ -712,3 +770,7 @@ async def get_dots_ocr_adapter() -> DotsOCRAdapter:
         if _ADAPTER_INSTANCE is None:
             _ADAPTER_INSTANCE = DotsOCRAdapter()
     return _ADAPTER_INSTANCE
+try:
+    from app.core.config import get_settings  # lightweight config
+except Exception:  # pragma: no cover - adapter can run without settings during import
+    get_settings = None  # type: ignore[assignment]

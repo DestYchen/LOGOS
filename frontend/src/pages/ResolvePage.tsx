@@ -386,7 +386,7 @@ const ResolvePage = () => {
     if (!packetId) return
     setFinalizing(true)
     try {
-      await completeReview(packetId)
+      await completeReview(packetId, { force: true })
       await refreshHistory()
       navigate(`/table/${packetId}`)
     } catch (err) {
