@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from app.core.config import get_settings
 from app.services import text_extractor
 
-HARDCODED_OPENROUTER_API_KEY = "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"
+HARDCODED_OPENROUTER_API_KEY = ""
 
 OCR_PROMPT = os.getenv(
     "CHATGPT_OCR_PROMPT",
