@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,11 +31,56 @@ async def fetch_validations(session: AsyncSession, batch_id: uuid.UUID) -> List[
     return result.scalars().all()
 
 
+def _collapse_spaces(value: str) -> str:
+    return " ".join(value.split())
+
+
+def _normalize_name(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    trimmed = value.strip()
+    if not trimmed:
+        return None
+    return _collapse_spaces(trimmed).casefold()
+
+
+def _product_key(name: Optional[str], latin: Optional[str], size: Optional[str]):
+    name_k = _normalize_name(name)
+    latin_k = _normalize_name(latin)
+    size_k = (size.strip() if isinstance(size, str) else None) or None
+    if not name_k:
+        return None
+    if latin_k is None and size_k is None:
+        return (name_k,)
+    if latin_k is None:
+        return (name_k, size_k)
+    if size_k is None:
+        return (name_k, latin_k)
+    return (name_k, latin_k, size_k)
+
+
+def _collect_products_for_doc(fields_payload: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Optional[str]]]:
+    grouped: Dict[str, Dict[str, Optional[str]]] = {}
+    for key, payload in fields_payload.items():
+        if not key.startswith("products."):
+            continue
+        parts = key.split(".")
+        if len(parts) < 3:
+            continue
+        prod_id = parts[1]
+        sub_key = ".".join(parts[2:])
+        value = payload.get("value") if isinstance(payload, dict) else None
+        if isinstance(value, str) or value is None:
+            grouped.setdefault(prod_id, {})[sub_key] = value
+    return grouped
+
+
 async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[str, Any]:
     batch = await load_batch_with_fields(session, batch_id)
     validations = await fetch_validations(session, batch_id)
 
     documents_payload: List[Dict[str, Any]] = []
+    doc_fields_index: Dict[uuid.UUID, Dict[str, Dict[str, Any]]] = {}
     for document in batch.documents:
         fields_payload = {
             field.field_key: {
@@ -57,6 +102,7 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
                 "fields": fields_payload,
             }
         )
+        doc_fields_index[document.id] = fields_payload
 
     validations_payload = [
         {
@@ -79,6 +125,47 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
             }
         )
 
+    # Matched products across documents (for diagnostics/UI)
+    product_buckets: Dict[tuple, List[Dict[str, Any]]] = {}
+    for document in batch.documents:
+        fields_payload = doc_fields_index.get(document.id, {})
+        rows = _collect_products_for_doc(fields_payload)
+        for prod_id, sub in rows.items():
+            key = _product_key(sub.get("name_product"), sub.get("latin_name"), sub.get("size_product"))
+            if key is None:
+                continue
+            product_buckets.setdefault(key, []).append(
+                {
+                    "doc_id": str(document.id),
+                    "doc_type": document.doc_type.value,
+                    "product_id": prod_id,
+                    "fields": {k: v for k, v in sub.items()},
+                }
+            )
+
+    product_comparisons: List[Dict[str, Any]] = []
+    for key, items in product_buckets.items():
+        if len(items) < 2:
+            continue
+
+        def first_non_empty(extractor):
+            for it in items:
+                val = extractor(it)
+                if isinstance(val, str) and val.strip():
+                    return val
+            return None
+
+        product_comparisons.append(
+            {
+                "product_key": {
+                    "name_product": first_non_empty(lambda it: it["fields"].get("name_product")),
+                    "latin_name": first_non_empty(lambda it: it["fields"].get("latin_name")),
+                    "size_product": first_non_empty(lambda it: it["fields"].get("size_product")),
+                },
+                "documents": items,
+            }
+        )
+
     payload = {
         "batch_id": str(batch.id),
         "status": batch.status.value,
@@ -86,6 +173,7 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
         "documents": documents_payload,
         "validations": validations_payload,
         "meta": batch.meta or {},
+        "product_comparisons": product_comparisons,
     }
 
     report_path = batch_dir(str(batch_id)).report

@@ -108,13 +108,6 @@ EXPORT_DECLARATION_SCHEMA = DocumentSchema(
             anchors=("COUNTRY", "ORIGIN"),
         ),
         "destination": make_field("destination", "Destination"),
-        "name_product": make_field("name_product", "Product Name"),
-        "latin_name": make_field("latin_name", "Latin Name"),
-        "unit_box": make_field("unit_box", "Units per Box"),
-        "size_product": make_field("size_product", "Product Size"),
-        "packages": make_field("packages", "Packages"),
-        "net_weight": make_field("net_weight", "Net Weight"),
-        "gross_weight": make_field("gross_weight", "Gross Weight"),
         "producer": make_field("producer", "Producer"),
         "buyer": make_field("buyer", "Buyer"),
         "seller": make_field("seller", "Seller"),
@@ -263,12 +256,26 @@ QUALITY_CERTIFICATE_SCHEMA = DocumentSchema(
         ),
         "buyer": make_field("buyer", "Buyer"),
         "seller": make_field("seller", "Seller"),
-        "name_product": make_field("name_product", "Product Name"),
-        "latin_name": make_field("latin_name", "Latin Name"),
-        "net_weight": make_field("net_weight", "Net Weight"),
-        "date_of_production": make_field("date_of_production", "Date of Production"),
-        "packages": make_field("packages", "Packages"),
-        "size_product": make_field("size_product", "Product Size"),
+        # Align with docs_json/quality_certificate.json: products stored as rows
+        "products": make_field(
+            "products",
+            "Products",
+            children={
+                "product_template": make_field(
+                    "product",
+                    "Product Item",
+                    children={
+                        "name_product": make_field("name_product", "Product Name"),
+                        "latin_name": make_field("latin_name", "Latin Name"),
+                        "size_product": make_field("size_product", "Product Size"),
+                        "unit_box": make_field("unit_box", "Units per Box"),
+                        "packages": make_field("packages", "Packages"),
+                        "price_per_unit": make_field("price_per_unit", "Price per Unit"),
+                        "total_price": make_field("total_price", "Total Price"),
+                    },
+                )
+            },
+        ),
         "container_no": make_field("container_no", "Container Number"),
         "vessel": make_field("vessel", "Vessel"),
         "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
@@ -294,17 +301,13 @@ CERTIFICATE_OF_ORIGIN_SCHEMA = DocumentSchema(
         "seller": make_field("seller", "Seller"),
         "exporter": make_field("exporter", "Exporter"),
         "destination": make_field("destination", "Destination"),
-        "name_product": make_field("name_product", "Product Name"),
-        "latin_name": make_field("latin_name", "Latin Name"),
-        "unit_box": make_field("unit_box", "Units per Box"),
-        "packages": make_field("packages", "Packages"),
-        "net_weight": make_field("net_weight", "Net Weight"),
-        "gross_weight": make_field("gross_weight", "Gross Weight"),
         "container_no": make_field("container_no", "Container Number"),
         "vessel": make_field("vessel", "Vessel"),
         "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
         "linear_seal": make_field("linear_seal", "Linear Seal"),
         "importer": make_field("importer", "Importer"),
+        # Align with docs_json: move product attributes under products rows
+        "products": build_products_field(),
     },
 )
 
@@ -324,11 +327,13 @@ VETERINARY_CERTIFICATE_SCHEMA = DocumentSchema(
         "exporter": make_field("exporter", "Exporter"),
         "vessel": make_field("vessel", "Vessel"),
         "container_no": make_field("container_no", "Container Number"),
-        "packages": make_field("packages", "Packages"),
-        "name_product": make_field("name_product", "Product Name"),
-        "latin_name": make_field("latin_name", "Latin Name"),
-        "unit_box": make_field("unit_box", "Units per Box"),
-        "net_weight": make_field("net_weight", "Net Weight"),
+        # Mock templates contain per-product rows for veterinary certificates
+        "products": build_products_field(
+            extra_fields={
+                # Ensure per-row net weight is available, as in mock JSON
+                "net_weight": make_field("net_weight", "Net Weight"),
+            }
+        ),
         "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
         "country_of_origin": make_field("country_of_origin", "Country of Origin"),
     },
@@ -355,7 +360,12 @@ PROFORMA_SCHEMA = DocumentSchema(
         "unit_box": make_field("unit_box", "Units per Box"),
         "packages": make_field("packages", "Packages"),
         "commodity_code": make_field("commodity_code", "Commodity Code"),
-        "products": build_products_field(),
+        # Align products with mock templates: include commodity_code per product
+        "products": build_products_field(
+            extra_fields={
+                "commodity_code": make_field("commodity_code", "Commodity Code"),
+            }
+        ),
     },
 )
 

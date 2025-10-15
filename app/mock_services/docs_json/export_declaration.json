@@ -42,33 +42,62 @@
             "value": "",
             "bbox": []
         },
-        "name_product": {
-            "value": "",
-            "bbox": []
-        },
-        "latin_name": {
-            "value": "",
-            "bbox": []
-        },
-        "unit_box": {
-            "value": "",
-            "bbox": []
-        },
-        "size_product": {
-            "value": "",
-            "bbox": []
-        },
-        "packages": {
-            "value": "",
-            "bbox": []
-        },
-        "net_weight": {
-            "value": "",
-            "bbox": []
-        },
-        "gross_weight": {
-            "value": "",
-            "bbox": []
+        "products": {
+            "product_1": {
+                "name_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "latin_name": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "size_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "unit_box": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "packages": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "price_per_unit": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "total_price": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "net_weight": {
+                    "value": "",
+                    "bbox": [],
+                    "required": true
+                },
+                "gross_weight": {
+                    "value": "",
+                    "bbox": [],
+                    "required": true
+                }
+            },
+            "product_2": {}
         },
         "container_no": {
             "value": "",

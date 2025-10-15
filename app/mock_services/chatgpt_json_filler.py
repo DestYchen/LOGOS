@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from app.core.enums import DocumentType
 from app.mock_services.templates import get_template_definition
 
-HARDCODED_OPENAI_API_KEY = ""
+HARDCODED_OPENAI_API_KEY = "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"
 FILLER_PROMPT = os.getenv(
     "CHATGPT_FILLER_PROMPT",
     (

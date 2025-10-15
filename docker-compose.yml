@@ -3,6 +3,7 @@ version: "3.9"
 services:
   db:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: supplyhub
       POSTGRES_USER: supplyhub
@@ -17,6 +18,7 @@ services:
 
   redis:
     image: redis:7-alpine
+    restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -26,6 +28,7 @@ services:
 
   app:
     build: .
+    restart: unless-stopped
     depends_on:
       init-db:
         condition: service_completed_successfully
@@ -49,6 +52,7 @@ services:
 
   worker:
     build: .
+    restart: unless-stopped
     depends_on:
       init-db:
         condition: service_completed_successfully

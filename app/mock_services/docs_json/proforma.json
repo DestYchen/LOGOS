@@ -101,12 +101,6 @@
                     "bbox": [],
                     "token_refs": [],
                     "required": true
-                },
-                "commodity_code": {
-                    "value": "",
-                    "bbox": [],
-                    "token_refs": [],
-                    "required": true
                 }
             }
         }

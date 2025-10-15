@@ -5,20 +5,21 @@ import logging
 import json
 import os
 import re
+import time
 import uuid
 import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 import fitz  # type: ignore import-not-found
-from fastapi import FastAPI, HTTPException
-from openai import OpenAI
+from fastapi import FastAPI, HTTPException, Request
+from openai import OpenAI, AuthenticationError
 from pydantic import BaseModel, Field
 
 from app.core.config import get_settings
 from app.services import text_extractor
 
-HARDCODED_OPENROUTER_API_KEY = ""
+HARDCODED_OPENROUTER_API_KEY = "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"
 
 OCR_PROMPT = os.getenv(
     "CHATGPT_OCR_PROMPT",
@@ -63,11 +64,64 @@ class OCRResponse(BaseModel):
 app = FastAPI(title="OpenRouter OCR Adapter")
 
 
+def _configure_logging() -> None:
+    level_name = os.getenv("CHATGPT_OCR_LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    root = logging.getLogger()
+    if not root.handlers:
+        handler = logging.StreamHandler()
+        formatter = logging.Formatter(
+            fmt="%(asctime)s %(levelname)s %(name)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+        )
+        handler.setFormatter(formatter)
+        root.addHandler(handler)
+    root.setLevel(level)
+    logging.getLogger("httpx").setLevel(max(level, logging.WARNING))
+    logging.getLogger("uvicorn").setLevel(level)
+    logging.getLogger("uvicorn.error").setLevel(level)
+    logging.getLogger("uvicorn.access").setLevel(level)
+
+
+@app.middleware("http")
+async def _log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    path = str(request.url.path)
+    method = request.method
+    try:
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.info(
+            "http_request method=%s path=%s status=%s duration_ms=%.1f",
+            method,
+            path,
+            getattr(response, "status_code", "-"),
+            duration_ms,
+        )
+        return response
+    except HTTPException as exc:
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.warning(
+            "http_exception method=%s path=%s status=%s duration_ms=%.1f detail=%s",
+            method,
+            path,
+            exc.status_code,
+            duration_ms,
+            getattr(exc, "detail", None),
+        )
+        raise
+    except Exception:
+        duration_ms = (time.perf_counter() - start) * 1000
+        logger.exception("http_error method=%s path=%s duration_ms=%.1f", method, path, duration_ms)
+        raise
+
+
 @app.on_event("startup")
 def init_client() -> None:
     global client
+    _configure_logging()
     if client is None:
-        api_key = "".strip()
+        api_key = os.getenv("OPENROUTER_API_KEY", HARDCODED_OPENROUTER_API_KEY).strip()
         if not api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set and HARDCODED_OPENROUTER_API_KEY is empty")
 
@@ -79,15 +133,24 @@ def init_client() -> None:
                 "X-Title": "My OCR Adapter",
             },
         )
+    logger.info("chatgpt_ocr service started; model=%s", OPENAI_MODEL)
 
 
 @app.post("/v1/ocr", response_model=OCRResponse)
 async def run_ocr(request: OCRRequest) -> OCRResponse:
     path = Path(request.file_path)
-    logger.debug("Received OCR request doc_id=%s path=%s file_name=%s suffix=%s has_bytes=%s", request.doc_id, path, request.file_name, request.file_suffix, bool(request.file_bytes))
+    logger.info(
+        "ocr_request doc_id=%s file_name=%s file_path=%s suffix=%s has_bytes=%s",
+        request.doc_id,
+        request.file_name,
+        path,
+        request.file_suffix,
+        bool(request.file_bytes),
+    )
     try:
         doc_uuid = uuid.UUID(request.doc_id)
     except ValueError as exc:
+        logger.warning("invalid_doc_id doc_id=%s", request.doc_id)
         raise HTTPException(status_code=400, detail="invalid_doc_id") from exc
 
     file_bytes: Optional[bytes] = None
@@ -96,6 +159,7 @@ async def run_ocr(request: OCRRequest) -> OCRResponse:
             file_bytes = base64.b64decode(request.file_bytes)
             logger.debug("Decoded file_bytes length=%s for doc_id=%s", len(file_bytes), request.doc_id)
         except (ValueError, TypeError) as exc:
+            logger.warning("invalid_file_bytes (base64 decode) doc_id=%s", request.doc_id)
             raise HTTPException(status_code=400, detail="invalid_file_bytes") from exc
 
     suffix_candidates = [
@@ -114,8 +178,12 @@ async def run_ocr(request: OCRRequest) -> OCRResponse:
                 os.close(fd)
                 temp_path = Path(tmp_name)
                 temp_path.write_bytes(file_bytes)
-                return OCRResponse(**_stub_ocr(doc_uuid, temp_path))
-            return OCRResponse(**_stub_ocr(doc_uuid, path))
+                resp = OCRResponse(**_stub_ocr(doc_uuid, temp_path))
+                logger.info("stub_ocr tokens=%s doc_id=%s", len(resp.tokens), request.doc_id)
+                return resp
+            resp = OCRResponse(**_stub_ocr(doc_uuid, path))
+            logger.info("stub_ocr tokens=%s doc_id=%s", len(resp.tokens), request.doc_id)
+            return resp
         finally:
             if temp_path and temp_path.exists():
                 try:
@@ -124,24 +192,34 @@ async def run_ocr(request: OCRRequest) -> OCRResponse:
                     pass
 
     tokens: List[dict[str, Any]]
-    if path.exists():
-        if path.suffix.lower() == ".pdf":
-            logger.debug("Processing PDF from path=%s doc_id=%s", path, request.doc_id)
-            tokens = await _tokens_from_pdf(path, request.doc_id)
-        else:
-            logger.debug("Processing single file from path=%s doc_id=%s", path, request.doc_id)
-            tokens = await _tokens_from_single_file(path, request.doc_id)
-    elif file_bytes is not None:
-        try:
-            logger.debug("Processing bytes input doc_id=%s suffix=%s len=%s", request.doc_id, suffix, len(file_bytes))
+    try:
+        if path.exists():
+            if path.suffix.lower() == ".pdf":
+                logger.info("process_pdf path=%s doc_id=%s", path, request.doc_id)
+                tokens = await _tokens_from_pdf(path, request.doc_id)
+            else:
+                logger.info("process_file path=%s suffix=%s doc_id=%s", path, path.suffix.lower(), request.doc_id)
+                tokens = await _tokens_from_single_file(path, request.doc_id)
+        elif file_bytes is not None:
+            logger.info(
+                "process_bytes doc_id=%s suffix=%s length=%s", request.doc_id, suffix, len(file_bytes) if file_bytes else 0
+            )
             tokens = await _tokens_from_bytes(file_bytes, suffix, request.doc_id)
-        except Exception as exc:
-            raise HTTPException(status_code=400, detail="invalid_file_bytes") from exc
-    else:
-        raise HTTPException(status_code=404, detail="file_not_found")
+        else:
+            logger.warning("file_not_found path=%s doc_id=%s", path, request.doc_id)
+            raise HTTPException(status_code=404, detail="file_not_found")
+    except AuthenticationError as exc:
+        logger.error("upstream_auth_failed doc_id=%s: %s", request.doc_id, exc)
+        raise HTTPException(status_code=502, detail="upstream_auth_failed") from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("processing_error doc_id=%s suffix=%s path_exists=%s", request.doc_id, suffix, path.exists())
+        raise HTTPException(status_code=400, detail="invalid_file_bytes") from exc
 
-    logger.debug("Collected tokens=%s for doc_id=%s", len(tokens), request.doc_id)
+    logger.info("tokens_collected count=%s doc_id=%s", len(tokens), request.doc_id)
     if not tokens:
+        logger.warning("empty_document doc_id=%s", request.doc_id)
         raise HTTPException(status_code=400, detail="empty_document")
 
     return OCRResponse(doc_id=request.doc_id, tokens=tokens)
