@@ -10,7 +10,7 @@ export const API_JSON_BASE = `${API_BASE}/api`;
 
 export function formatDateTime(value: string | null | undefined) {
   if (!value) {
-    return "â€”";
+    return "—";
   }
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) {
@@ -21,7 +21,7 @@ export function formatDateTime(value: string | null | undefined) {
 
 export function formatShortDate(value: string | null | undefined) {
   if (!value) {
-    return "â€”";
+    return "—";
   }
   const date = new Date(value);
   if (Number.isNaN(date.valueOf())) {

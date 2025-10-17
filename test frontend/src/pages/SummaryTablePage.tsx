@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import { Alert } from "../components/ui/alert";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Input } from "../components/ui/input";
 import { Spinner } from "../components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
@@ -14,7 +14,22 @@ import { confirmField, fetchBatchDetails, updateField } from "../lib/api";
 import { cn, formatDateTime, mapBatchStatus, statusLabel } from "../lib/utils";
 import type { BatchDetails, DocumentPayload, FieldState } from "../types/api";
 
-type CellRef = {
+type ValidationRef = {
+  doc_id?: string;
+  doc_type?: string;
+  field_key?: string;
+  label?: string;
+  message?: string;
+};
+
+type ValidationEntry = {
+  ruleId: string;
+  severity: string;
+  message: string;
+  refs: ValidationRef[];
+};
+
+type SelectedCell = {
   docId: string;
   fieldKey: string;
   value: string | null;
@@ -23,7 +38,7 @@ type CellRef = {
 
 function confidenceColor(confidence: number | null) {
   if (confidence === null || Number.isNaN(confidence)) return "transparent";
-  const clamped = Math.max(0, Math.min(1, confidence));
+  const clamped = Math.max(0, Math.min(confidence, 1));
   const start = [59, 130, 246];
   const end = [255, 255, 255];
   const rgb = start.map((component, index) => {
@@ -33,25 +48,26 @@ function confidenceColor(confidence: number | null) {
   return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.35)`;
 }
 
-function buildFieldMatrix(documents: DocumentPayload[]) {
-  const fieldSet = new Set<string>();
-  documents.forEach((doc) => {
-    doc.fields.forEach((field) => {
-      fieldSet.add(field.field_key);
-    });
-  });
-  const columns = Array.from(fieldSet);
-  const rows = documents.map((doc) => ({ doc, fields: doc.fields.reduce<Record<string, FieldState>>((acc, field) => {
-    acc[field.field_key] = field;
-    return acc;
-  }, {}) }));
-  return { columns, rows };
+function parseRefs(entry: Record<string, unknown>): ValidationRef[] {
+  const raw = entry?.refs;
+  if (typeof raw === "string" && raw.trim()) {
+    try {
+      return JSON.parse(raw) as ValidationRef[];
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(raw)) {
+    return raw as ValidationRef[];
+  }
+  return [];
 }
 
 function SummaryTablePage() {
   const params = useParams();
   const navigate = useNavigate();
   const { refresh } = useHistoryContext();
+
   const batchId = params.batchId;
 
   const [batch, setBatch] = useState<BatchDetails | null>(null);
@@ -59,58 +75,97 @@ function SummaryTablePage() {
   const [error, setError] = useState<Error | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [selectedCell, setSelectedCell] = useState<CellRef | null>(null);
+  const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
+  const fetchBatch = useCallback(async () => {
     if (!batchId) return;
-    let active = true;
-    setLoading(true);
-    setError(null);
-    fetchBatchDetails(batchId)
-      .then((response) => {
-        if (!active) return;
-        setBatch(response.batch);
-      })
-      .catch((err: unknown) => {
-        if (!active) return;
-        setError(err as Error);
-      })
-      .finally(() => {
-        if (!active) return;
-        setLoading(false);
-        void refresh();
-      });
-    return () => {
-      active = false;
-    };
+    const response = await fetchBatchDetails(batchId);
+    setBatch(response.batch);
+    void refresh();
   }, [batchId, refresh]);
 
-  const documents = batch?.documents ?? [];
-  const matrix = useMemo(() => buildFieldMatrix(documents), [documents]);
-
-  const handleCellSave = useCallback(
-    async (ref: CellRef, nextValue: string | null, confirmAfterSave: boolean) => {
-      if (!ref.docId) return;
-      try {
-        setSaving(true);
-        await updateField(ref.docId, ref.fieldKey, nextValue);
-        if (confirmAfterSave) {
-          await confirmField(ref.docId, ref.fieldKey);
+  useEffect(() => {
+    let cancelled = false;
+    if (!batchId) {
+      setError(new Error("Не указан идентификатор пакета."));
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    fetchBatch()
+      .catch((err) => {
+        if (!cancelled) {
+          setError(err as Error);
         }
-        setMessage("Изменения сохранены");
-        setSelectedCell(null);
-        if (!batchId) return;
-        const response = await fetchBatchDetails(batchId);
-        setBatch(response.batch);
-      } catch (err) {
-        setActionError((err as Error).message);
-      } finally {
-        setSaving(false);
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [batchId, fetchBatch]);
+
+  const documents = batch?.documents ?? [];
+  const documentMap = useMemo(() => {
+    const map = new Map<string, DocumentPayload>();
+    documents.forEach((doc) => map.set(doc.id, doc));
+    return map;
+  }, [documents]);
+
+  const validations: ValidationEntry[] = useMemo(() => {
+    if (!batch?.report.validation_matrix) {
+      return [];
+    }
+    const raw = (batch.report.validations ?? []) as Record<string, unknown>[];
+    const mapped = batch.report.validation_matrix.map((row: Record<string, unknown>, index: number) => {
+      const base = raw[index] ?? {};
+      const refs = parseRefs(base);
+      return {
+        ruleId: String(row.rule_id ?? base.rule_id ?? "Правило"),
+        severity: String(row.severity ?? base.severity ?? "info"),
+        message: String(row.message ?? base.message ?? ""),
+        refs,
+      };
+    });
+    return mapped.filter((entry) => entry.refs.some((ref) => ref.doc_id));
+  }, [batch]);
+
+  const openEditor = (docId: string, fieldKey: string) => {
+    const doc = documentMap.get(docId);
+    if (!doc) return;
+    const field = doc.fields.find((item) => item.field_key === fieldKey);
+    const confidence =
+      field && field.confidence !== null && field.confidence !== undefined ? Number(field.confidence) : null;
+    setSelectedCell({
+      docId,
+      fieldKey,
+      value: field?.value ?? null,
+      confidence,
+    });
+  };
+
+  const handleSave = async (confirmAfterSave: boolean) => {
+    if (!selectedCell) return;
+    const { docId, fieldKey, value } = selectedCell;
+    try {
+      setSaving(true);
+      await updateField(docId, fieldKey, value?.trim() ? value.trim() : null);
+      if (confirmAfterSave) {
+        await confirmField(docId, fieldKey);
       }
-    },
-    [batchId],
-  );
+      await fetchBatch();
+      setSelectedCell(null);
+      setMessage(confirmAfterSave ? "Поле сохранено и подтверждено" : "Поле сохранено");
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
 
   if (!batchId) {
     return <Alert variant="destructive">Не указан идентификатор пакета.</Alert>;
@@ -124,183 +179,127 @@ function SummaryTablePage() {
     );
   }
 
-  if (error || !batch) {
-    return <Alert variant="destructive">{error ? error.message : "Пакет не найден"}</Alert>;
+  if (error) {
+    return <Alert variant="destructive">{error.message}</Alert>;
   }
 
-  const mistakes = batch.report.validation_matrix;
+  if (!batch) {
+    return <Alert variant="info">Пакет недоступен.</Alert>;
+  }
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-2">
           <h1 className="text-2xl font-semibold">Итоговая таблица</h1>
           <p className="text-muted-foreground">
-            Пакет {batch.id.slice(0, 8)} • Статус: {statusLabel(mapBatchStatus(batch.status))} • Обновлён {formatDateTime(batch.updated_at)}
+            Пакет {batch.id.slice(0, 8)} · Статус: {statusLabel(mapBatchStatus(batch.status))} · Обновлён{" "}
+            {formatDateTime(batch.updated_at)}
           </p>
         </div>
-        <div className="space-x-2">
-          {batch.links.report_xlsx ? (
-            <Button variant="secondary" asChild>
-              <a href={batch.links.report_xlsx} target="_blank" rel="noopener noreferrer">
-                Экспортировать отчёт
-              </a>
-            </Button>
-          ) : (
-            <Button variant="secondary" disabled>
-              Экспортировать отчёт
-            </Button>
-          )}
-          <Button variant="ghost" asChild>
-            <Link to={`/resolve/${batch.id}`}>Документ — исправление ошибок</Link>
+        {batch.links?.report_xlsx ? (
+          <Button asChild variant="outline" className="self-start sm:self-end">
+            <a href={batch.links.report_xlsx} target="_blank" rel="noopener noreferrer" download>
+              Экспорт в XLSX
+            </a>
           </Button>
-        </div>
+        ) : null}
       </header>
 
       {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
       {message ? <Alert variant="success">{message}</Alert> : null}
 
-      <Card className="rounded-3xl border bg-background/95">
-        <CardHeader>
-          <CardTitle>Данные по документам</CardTitle>
-          <CardDescription>Нажмите на ячейку, чтобы исправить значение или подтвердить поле.</CardDescription>
-        </CardHeader>
-        <CardContent className="overflow-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="sticky left-0 z-10 bg-background">Документ</TableHead>
-                {matrix.columns.map((column) => (
-                  <TableHead key={column}>{column}</TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {matrix.rows.map(({ doc, fields }) => (
-                <TableRow key={doc.id}>
-                  <TableCell className="sticky left-0 z-10 bg-background font-medium">
-                    <div className="flex flex-col">
-                      <span className="truncate" title={doc.filename}>
-                        {doc.filename}
-                      </span>
-                      <span className="text-xs text-muted-foreground">{doc.doc_type}</span>
-                    </div>
-                  </TableCell>
-                  {matrix.columns.map((column) => {
-                    const field = fields[column];
-                    const confidence = field?.confidence ?? null;
-                    const background = confidenceColor(confidence);
-                    return (
-                      <TableCell key={column} className="align-top">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setSelectedCell({
-                              docId: doc.id,
-                              fieldKey: column,
-                              value: field?.value ?? null,
-                              confidence,
-                            })
-                          }
-                          className="group relative w-full text-left"
-                          style={{ backgroundColor: background }}
-                        >
-                          <div className="min-h-[48px] whitespace-pre-wrap text-sm">
-                            {field?.value ?? "—"}
-                          </div>
-                          {doc.previews.length ? (
-                            <div className="pointer-events-none absolute left-full top-1/2 z-20 hidden -translate-y-1/2 translate-x-3 rounded-xl border bg-background shadow-xl group-hover:block">
-                              <img src={doc.previews[0]} alt="Превью" className="max-h-[220px] w-auto rounded-xl" />
-                            </div>
-                          ) : null}
-                        </button>
-                      </TableCell>
-                    );
-                  })}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      {documents.some((doc) => doc.products.rows.length) ? (
-        <Card className="rounded-3xl border bg-background/95">
-          <CardHeader>
-            <CardTitle>Товарные позиции</CardTitle>
-            <CardDescription>Структурированные данные по позициям внутри документов.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            {documents.map((doc) => (
-              doc.products.rows.length ? (
-                <div key={doc.id} className="space-y-3">
-                  <h3 className="text-sm font-medium">{doc.filename}</h3>
-                  <div className="overflow-auto rounded-xl border">
-                    <table className="w-full text-sm">
-                      <thead className="bg-muted/30">
-                        <tr>
-                          {doc.products.columns.map((column) => (
-                            <th key={column.key} className="px-3 py-2 text-left font-medium">
-                              {column.label}
-                            </th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {doc.products.rows.map((row) => (
-                          <tr key={row.key} className="border-t">
-                            {doc.products.columns.map((column) => {
-                              const cell = row.cells[column.key];
-                              const background = confidenceColor(cell?.confidence ?? null);
-                              return (
-                                <td key={column.key} className="px-3 py-2" style={{ backgroundColor: background }}>
-                                  <div>{cell?.value ?? "—"}</div>
-                                  {cell?.confidence_display ? (
-                                    <div className="text-xs text-muted-foreground">{cell.confidence_display}</div>
-                                  ) : null}
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : null
-            ))}
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card className="rounded-3xl border bg-background/95">
+      <Card className="rounded-3xl border bg-background">
         <CardHeader>
           <CardTitle>Ошибки и предупреждения</CardTitle>
-          <CardDescription>Правила проверки, которые необходимо устранить.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
-          {mistakes.length ? (
-            mistakes.map((row, index) => (
-              <div key={`${row.rule_id}-${index}`} className="rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="text-sm font-medium">{row.rule_id as string}</span>
-                  <Badge variant="destructive">{row.severity as string}</Badge>
+        <CardContent className="space-y-6">
+          {!batch.report.available ? (
+            <Alert variant="info">Итоговый отчёт ещё не готов.</Alert>
+          ) : validations.length === 0 ? (
+            <Alert variant="success">Ошибок не обнаружено.</Alert>
+          ) : (
+            validations.map((validation) => (
+              <div key={validation.ruleId} className="rounded-2xl border border-muted bg-muted/10 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">{validation.ruleId}</p>
+                    <p className="text-sm text-muted-foreground">{validation.message}</p>
+                  </div>
+                  <Badge variant="destructive">{validation.severity}</Badge>
                 </div>
-                <p className="mt-2 text-sm text-muted-foreground">{row.message as string}</p>
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  {Object.entries(row.cells ?? {}).map(([key, value]) => (
-                    value ? (
-                      <div key={key} className="rounded-lg bg-background px-3 py-2 text-xs text-muted-foreground">
-                        <strong className="text-foreground">{key}:</strong>
-                        <span className="ml-2 whitespace-pre-wrap">{value as string}</span>
-                      </div>
-                    ) : null
-                  ))}
+                <div className="mt-3 overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Документ</TableHead>
+                        <TableHead>Поле</TableHead>
+                        <TableHead>Значение</TableHead>
+                        <TableHead>Комментарий</TableHead>
+                        <TableHead />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {validation.refs.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-sm text-muted-foreground">
+                            Нет детализированных ссылок.
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        validation.refs.map((ref, index) => {
+                          const doc = ref.doc_id ? documentMap.get(ref.doc_id) : undefined;
+                          const field: FieldState | undefined = doc?.fields.find(
+                            (item) => item.field_key === ref.field_key,
+                          );
+                          const confidence =
+                            field && field.confidence !== null && field.confidence !== undefined
+                              ? Number(field.confidence)
+                              : null;
+                          const preview = doc?.previews[0];
+                          return (
+                            <TableRow key={`${validation.ruleId}-${index}`}>
+                              <TableCell className="align-top">
+                                {doc ? (
+                                  <div>
+                                    <p className="text-sm font-medium">{doc.filename}</p>
+                                    <p className="text-xs text-muted-foreground">{doc.doc_type}</p>
+                                  </div>
+                                ) : (
+                                  <span className="text-sm text-muted-foreground">Неизвестно</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="align-top text-sm">{ref.field_key ?? "—"}</TableCell>
+                              <TableCell
+                                className={cn("align-top text-sm", preview && "group relative")}
+                                style={{ backgroundColor: confidenceColor(confidence) }}
+                              >
+                                <div>{field?.value ?? "—"}</div>
+                                {preview ? (
+                                  <div className="pointer-events-none absolute left-full top-1/2 hidden -translate-y-1/2 translate-x-3 rounded-xl border bg-background shadow-xl group-hover:block">
+                                    <img src={preview} alt="" className="max-h-48 rounded-xl" />
+                                  </div>
+                                ) : null}
+                              </TableCell>
+                              <TableCell className="align-top text-sm text-muted-foreground">
+                                {ref.message ?? ref.label ?? validation.message}
+                              </TableCell>
+                              <TableCell className="align-top">
+                                {doc && ref.field_key ? (
+                                  <Button size="sm" variant="outline" onClick={() => openEditor(doc.id, ref.field_key!)}>
+                                    Исправить
+                                  </Button>
+                                ) : null}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
             ))
-          ) : (
-            <p className="text-sm text-muted-foreground">Ошибки по правилам не обнаружены.</p>
           )}
         </CardContent>
       </Card>
@@ -308,14 +307,15 @@ function SummaryTablePage() {
       {selectedCell ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
           <div className="w-full max-w-lg rounded-3xl border bg-background p-6 shadow-xl">
-            <div className="flex items-start justify-between">
+            <div className="flex items-start justify-between gap-4">
               <div>
                 <h2 className="text-lg font-semibold">Редактирование поля</h2>
                 <p className="text-sm text-muted-foreground">
-                  Поле: {selectedCell.fieldKey} • Уверенность: {selectedCell.confidence ?? "—"}
+                  Поле: {selectedCell.fieldKey} · Уверенность:{" "}
+                  {selectedCell.confidence !== null ? selectedCell.confidence.toFixed(2) : "—"}
                 </p>
               </div>
-              <Button variant="ghost" onClick={() => setSelectedCell(null)}>
+              <Button variant="ghost" onClick={() => setSelectedCell(null)} disabled={saving}>
                 Закрыть
               </Button>
             </div>
@@ -324,67 +324,33 @@ function SummaryTablePage() {
                 <Textarea
                   rows={6}
                   value={selectedCell.value ?? ""}
-                  onChange={(event) => setSelectedCell({ ...selectedCell, value: event.target.value })}
+                  onChange={(event) =>
+                    setSelectedCell((prev) => (prev ? { ...prev, value: event.target.value } : prev))
+                  }
                 />
               ) : (
                 <Input
                   value={selectedCell.value ?? ""}
-                  onChange={(event) => setSelectedCell({ ...selectedCell, value: event.target.value })}
+                  onChange={(event) =>
+                    setSelectedCell((prev) => (prev ? { ...prev, value: event.target.value } : prev))
+                  }
                 />
               )}
             </div>
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-              <Button
-                variant="secondary"
-                onClick={() => setSelectedCell(selectedCell ? { ...selectedCell, value: null } : null)}
-              >
-                Очистить
+            <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+              <Button variant="ghost" onClick={() => setSelectedCell(null)} disabled={saving}>
+                Отмена
               </Button>
-              <div className="space-x-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => setSelectedCell(null)}
-                  disabled={saving}
-                >
-                  Отмена
-                </Button>
-                <Button
-                  onClick={() =>
-                    selectedCell &&
-                    handleCellSave(selectedCell, selectedCell.value ?? null, false)
-                  }
-                  disabled={saving}
-                >
-                  Сохранить
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    selectedCell &&
-                    handleCellSave(selectedCell, selectedCell.value ?? null, true)
-                  }
-                  disabled={saving}
-                >
-                  Сохранить и подтвердить
-                </Button>
-              </div>
+              <Button onClick={() => void handleSave(false)} disabled={saving}>
+                Сохранить
+              </Button>
+              <Button variant="secondary" onClick={() => void handleSave(true)} disabled={saving}>
+                Сохранить и подтвердить
+              </Button>
             </div>
           </div>
         </div>
       ) : null}
-
-      <Card className="rounded-3xl border bg-background/95">
-        <CardHeader>
-          <CardTitle>Следующие шаги</CardTitle>
-          <CardDescription>После подтверждения всех полей можно закрыть пакет.</CardDescription>
-        </CardHeader>
-        <CardFooter className="flex flex-wrap items-center justify-between gap-3">
-          <Button variant="secondary" asChild>
-            <Link to="/history">История</Link>
-          </Button>
-          <Button variant="default" onClick={() => navigate("/new")}>Новый пакет</Button>
-        </CardFooter>
-      </Card>
     </div>
   );
 }

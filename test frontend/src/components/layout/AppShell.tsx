@@ -35,7 +35,7 @@ function AppShell({ children }: AppShellProps) {
         <div className="flex h-screen w-full flex-col">
           <div className="border-b px-6 pb-5 pt-6">
             <Link to="/new" className="inline-flex items-center gap-3">
-              <img src={logomark} alt="Логос" className="h-10 w-auto" />
+              <img src={logomark} alt="Логос" className="h-5 w-auto" />
             </Link>
           </div>
 
