@@ -54,7 +54,7 @@ FILLER_PROMPT = os.getenv(
         "BE CONCISE: output only the JSON object that satisfies the contract above."
     ),
 )
-OPENAI_MODEL = "openai/gpt-oss-20b"
+OPENAI_MODEL = "qwen/qwen3-32b"
 
 client: Optional[OpenAI] = None
 logger = logging.getLogger(__name__)

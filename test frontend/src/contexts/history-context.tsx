@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
-import { fetchBatches } from "../lib/api";
+import { deleteBatch, fetchBatches } from "../lib/api";
 import type { BatchSummary } from "../types/api";
 
 type HistoryContextValue = {
@@ -10,6 +10,7 @@ type HistoryContextValue = {
   refresh: () => Promise<void>;
   markAsRecent: (batchId: string | null) => void;
   recentBatchId: string | null;
+  removeBatch: (batchId: string) => Promise<void>;
 };
 
 const HistoryContext = createContext<HistoryContextValue | undefined>(undefined);
@@ -41,6 +42,22 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
     setRecentBatchId(batchId);
   }, []);
 
+  const removeBatch = useCallback(
+    async (batchId: string) => {
+      try {
+        await deleteBatch(batchId);
+        setBatches((prev) => prev.filter((item) => item.id !== batchId));
+        if (recentBatchId === batchId) {
+          setRecentBatchId(null);
+        }
+      } catch (err) {
+        setError(err as Error);
+        throw err;
+      }
+    },
+    [recentBatchId],
+  );
+
   const value = useMemo<HistoryContextValue>(
     () => ({
       batches,
@@ -49,8 +66,9 @@ export function HistoryProvider({ children }: { children: React.ReactNode }) {
       refresh: load,
       markAsRecent,
       recentBatchId,
+      removeBatch,
     }),
-    [batches, loading, error, load, markAsRecent, recentBatchId],
+    [batches, loading, error, load, markAsRecent, recentBatchId, removeBatch],
   );
 
   return <HistoryContext.Provider value={value}>{children}</HistoryContext.Provider>;

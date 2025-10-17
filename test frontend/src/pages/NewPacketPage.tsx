@@ -1,21 +1,19 @@
+
 import { ChangeEvent, DragEvent, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import pdfIcon from "../assets/pdf_icon.png";
-import wordIcon from "../assets/word_icon.png";
-import excelIcon from "../assets/excel_icon.png";
-import otherIcon from "../assets/other_icon.png";
+import { FileTile, type FileEntry } from "../components/upload/FileTile";
+import { UploadIllustration } from "../components/upload/file-assets";
 import { useHistoryContext } from "../contexts/history-context";
 import { uploadDocuments } from "../lib/api";
 import { cn } from "../lib/utils";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { Spinner } from "../components/ui/spinner";
 
 const MAX_FILE_SIZE_MB = 50;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
-const SUPPORTED_EXT = ["pdf", "doc", "docx", "xls", "xlsx", "txt"];
+const SUPPORTED_EXT = ["pdf", "doc", "docx", "xls", "xlsx", "txt", "png", "jpg", "jpeg"];
 
 type ListedFile = {
   id: string;
@@ -23,24 +21,9 @@ type ListedFile = {
   error?: string;
 };
 
-function iconForFile(file: File) {
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  if (!ext) return otherIcon;
-  if (ext === "pdf") return pdfIcon;
-  if (ext === "doc" || ext === "docx") return wordIcon;
-  if (ext === "xls" || ext === "xlsx") return excelIcon;
-  return otherIcon;
-}
-
-function describeSize(size: number) {
-  if (size < 1024) return `${size} Б`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} КБ`;
-  return `${(size / (1024 * 1024)).toFixed(1)} МБ`;
-}
-
 function validateFile(file: File, existing: ListedFile[]) {
   const errors: string[] = [];
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
   if (!SUPPORTED_EXT.includes(ext)) {
     errors.push("Неподдерживаемый формат");
   }
@@ -54,6 +37,12 @@ function validateFile(file: File, existing: ListedFile[]) {
   return errors;
 }
 
+function formatSize(size: number) {
+  if (size < 1024) return `${size} Б`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} КБ`;
+  return `${(size / (1024 * 1024)).toFixed(1)} МБ`;
+}
+
 function NewPacketPage() {
   const navigate = useNavigate();
   const { markAsRecent } = useHistoryContext();
@@ -61,26 +50,34 @@ function NewPacketPage() {
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const validFiles = useMemo(() => items.filter((item) => !item.error).map((item) => item.file), [items]);
+  const displayItems: FileEntry[] = useMemo(
+    () =>
+      items.map((item) => ({
+        id: item.id,
+        name: item.file.name,
+        size: item.file.size,
+        meta: formatSize(item.file.size),
+        error: item.error,
+      })),
+    [items],
+  );
 
   const appendFiles = (files: File[]) => {
-    setItems((prev) => {
-      const next = [...prev];
+    setItems((previous) => {
+      const next = [...previous];
       files.forEach((file) => {
-        const errors = validateFile(file, next);
+        const issues = validateFile(file, next);
         next.push({
           id: `${file.name}-${file.size}-${crypto.randomUUID()}`,
           file,
-          error: errors.length ? errors.join(", ") : undefined,
+          error: issues.length ? issues.join(", ") : undefined,
         });
       });
       return next;
     });
-    setSuccess(null);
     setError(null);
   };
 
@@ -113,7 +110,7 @@ function NewPacketPage() {
   };
 
   const removeFile = (id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
+    setItems((prev) => prev.filter((entry) => entry.id !== id));
   };
 
   const handleUpload = async () => {
@@ -123,10 +120,7 @@ function NewPacketPage() {
     }
     try {
       setUploading(true);
-      setError(null);
       const response = await uploadDocuments(validFiles);
-      setSuccess(`Загружено ${response.documents} документ(ов).`);
-      setItems([]);
       markAsRecent(response.batch_id);
       navigate(`/queue?batch=${response.batch_id}`, { replace: true });
     } catch (err) {
@@ -137,103 +131,51 @@ function NewPacketPage() {
   };
 
   return (
-    <div className="space-y-8">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">Новый пакет</h1>
-        <p className="max-w-2xl text-muted-foreground">
-          Загрузите документы, чтобы создать новый пакет. Поддерживаются PDF, Word, Excel и текстовые файлы.
-        </p>
-      </header>
-
-      <Card className="mx-auto max-w-3xl border-dashed border-primary/40 bg-background shadow-sm">
-        <CardHeader className="text-center">
-          <CardTitle className="text-lg">Перетащите файлы сюда</CardTitle>
-          <CardDescription>
-            или
-            <button
-              type="button"
-              className="ml-1 text-primary underline"
-              onClick={() => inputRef.current?.click()}
-            >
-              Выбрать файлы
-            </button>
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div
-            onDrop={onDrop}
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            className={cn(
-              "flex min-h-[220px] flex-col items-center justify-center rounded-2xl border-2 border-dashed transition-colors",
-              dragActive ? "border-primary bg-primary/5" : "border-muted-foreground/30",
-            )}
-          >
-            <p className="text-sm text-muted-foreground">
-              Перетащите файлы или нажмите «Выбрать файлы» для добавления документов
-            </p>
-            <p className="mt-2 text-xs text-muted-foreground">
-              Макс. размер {MAX_FILE_SIZE_MB} МБ на файл. Поддерживаемые форматы: PDF, DOCX, XLSX, TXT.
-            </p>
-            <input
-              ref={inputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={onInputChange}
-              accept=".pdf,.doc,.docx,.xls,.xlsx,.txt"
-            />
-            <Button className="mt-6" variant="secondary" onClick={() => inputRef.current?.click()}>
-              Выбрать файлы
-            </Button>
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-col items-stretch gap-4">
-          {items.length > 0 ? (
-            <div className="max-h-64 space-y-2 overflow-y-auto">
-              {items.map((item) => (
-                <div
-                  key={item.id}
-                  className={cn(
-                    "flex items-center justify-between rounded-xl border px-4 py-3",
-                    item.error ? "border-destructive/50 bg-destructive/10" : "border-muted bg-muted/40",
-                  )}
-                >
-                  <div className="flex min-w-0 items-center gap-3">
-                    <img src={iconForFile(item.file)} alt="" className="h-8 w-8" />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium" title={item.file.name}>
-                        {item.file.name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {describeSize(item.file.size)}
-                        {item.error ? ` • ${item.error}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={() => removeFile(item.id)}>
-                    Удалить
-                  </Button>
-                </div>
+    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-4xl flex-col items-center justify-center gap-10">
+      <div
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        className={cn(
+          "w-full rounded-3xl border-2 border-dashed border-primary/40 bg-background/95 p-8 shadow-xl transition-colors",
+          dragActive && "border-primary bg-primary/5",
+        )}
+      >
+        <div className="flex min-h-[320px] flex-col items-center justify-center gap-6">
+          {items.length === 0 ? (
+            <>
+              <UploadIllustration className="h-24" />
+              <p className="text-lg font-semibold text-muted-foreground">
+                Загрузите файлы PDF, Word, Excel или картинки
+              </p>
+              <Button variant="secondary" onClick={() => inputRef.current?.click()}>
+                Выбрать файлы
+              </Button>
+            </>
+          ) : (
+            <div className="grid w-full gap-4 sm:grid-cols-2 md:grid-cols-3">
+              {displayItems.map((item) => (
+                <FileTile key={item.id} item={item} onRemove={removeFile} />
               ))}
             </div>
-          ) : (
-            <p className="text-center text-sm text-muted-foreground">Файлы пока не выбраны.</p>
           )}
-
-          <div className="flex items-center justify-end gap-3">
-            {uploading && <Spinner size="sm" />}
-            <Button onClick={handleUpload} disabled={uploading || !validFiles.length}>
-              Продолжить
-            </Button>
-          </div>
-        </CardFooter>
-      </Card>
-
-      <div className="space-y-3">
-        {error ? <Alert variant="destructive">{error}</Alert> : null}
-        {success ? <Alert variant="success">{success}</Alert> : null}
+        </div>
+        <input
+          ref={inputRef}
+          type="file"
+          multiple
+          className="hidden"
+          accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.png,.jpg,.jpeg"
+          onChange={onInputChange}
+        />
       </div>
+      <div className="flex items-center gap-4">
+        {uploading ? <Spinner /> : null}
+        <Button onClick={handleUpload} disabled={uploading || !validFiles.length}>
+          Продолжить
+        </Button>
+      </div>
+      {error ? <Alert variant="destructive">{error}</Alert> : null}
     </div>
   );
 }

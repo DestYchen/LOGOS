@@ -1,5 +1,5 @@
-﻿
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 import { Alert } from "../components/ui/alert";
@@ -32,6 +32,24 @@ type HighlightState = {
   bbox?: number[] | null;
   page?: number | null;
 };
+type OverlayBox = HighlightRegion & {
+  fieldKey: string;
+};
+
+type OverlayRenderItem = {
+  key: string;
+  style: CSSProperties;
+  color: string;
+  thickness: number;
+};
+
+const CALIBRATION: CalibrationState = {
+  scaleX: 0.41,
+  scaleY: 0.41,
+  offsetX: 8,
+  offsetY: 0,
+};
+
 
 const REFRESH_DELAY_MS = 2000;
 
@@ -54,6 +72,7 @@ function usePendingMap() {
 }
 
 type HighlightRegion = {
+  fieldKey?: string;
   bbox?: number[] | null;
   page?: number | null;
 };
@@ -65,19 +84,26 @@ type CalibrationState = {
   offsetY: number;
 };
 
-function DocumentViewer({ previews, highlight }: { previews: string[]; highlight: HighlightRegion | null }) {
+function DocumentViewer({
+  previews,
+  highlight,
+  boxes,
+  showBoxes,
+}: {
+  previews: string[];
+  highlight: HighlightRegion | null;
+  boxes: OverlayBox[];
+  showBoxes: boolean;
+}) {
   const [origin, setOrigin] = useState({ x: 50, y: 50 });
   const [dims, setDims] = useState({ naturalWidth: 0, naturalHeight: 0, width: 0, height: 0 });
   const [isHovered, setIsHovered] = useState(false);
-  const [calibration, setCalibration] = useState<CalibrationState>({
-    scaleX: 1,
-    scaleY: 1,
-    offsetX: 0,
-    offsetY: 0,
-  });
   const imgRef = useRef<HTMLImageElement | null>(null);
 
+  const calibration = CALIBRATION;
+
   const imageIndex = highlight?.page && highlight.page > 0 ? Math.min(highlight.page - 1, previews.length - 1) : 0;
+  const currentPage = imageIndex + 1;
   const src = previews[imageIndex] ?? previews[0];
 
   const updateSizes = useCallback(() => {
@@ -100,40 +126,79 @@ function DocumentViewer({ previews, highlight }: { previews: string[]; highlight
     return () => observer.disconnect();
   }, [updateSizes, src]);
 
-  const overlayStyle = useMemo(() => {
-    const bbox = highlight?.bbox;
-    if (!bbox || bbox.length !== 4 || dims.naturalWidth === 0 || dims.naturalHeight === 0) {
-      return null;
+  const createOverlay = useCallback(
+    (fieldKey: string, bbox?: number[] | null, color = "hsl(var(--primary) / 0.45)", thickness = 3): OverlayRenderItem | null => {
+      if (!bbox || bbox.length !== 4 || dims.naturalWidth === 0 || dims.naturalHeight === 0) return null;
+      const [x1, y1, x2, y2] = bbox;
+      const baseScaleX = dims.width / dims.naturalWidth;
+      const baseScaleY = dims.height / dims.naturalHeight;
+      const adjustedScaleX = baseScaleX * calibration.scaleX;
+      const adjustedScaleY = baseScaleY * calibration.scaleY;
+      const width = Math.max((x2 - x1) * adjustedScaleX, 1.5);
+      const height = Math.max((y2 - y1) * adjustedScaleY, 1.5);
+      const left = x1 * adjustedScaleX + calibration.offsetX;
+      const top = y1 * adjustedScaleY + calibration.offsetY;
+      return {
+        key: fieldKey,
+        style: {
+          left: `${left - 10}px`,
+          top: `${top - 10}px`,
+          width: `${width + 20}px`,
+          height: `${height + 20}px`,
+        },
+        color,
+        thickness,
+      };
+    },
+    [dims, calibration],
+  );
+
+  const baseOverlays = useMemo(() => {
+    if (!boxes.length) return [] as OverlayRenderItem[];
+    return boxes
+      .filter((box) => (box.page && box.page > 0 ? box.page : 1) === currentPage)
+      .map((box) => createOverlay(box.fieldKey, box.bbox ?? null))
+      .filter((item): item is OverlayRenderItem => Boolean(item));
+  }, [boxes, currentPage, createOverlay]);
+
+  const highlightOverlay = useMemo(() => {
+    if (!highlight) return null;
+    const pageNumber = highlight.page && highlight.page > 0 ? highlight.page : 1;
+    if (pageNumber !== currentPage) return null;
+    return createOverlay(highlight.fieldKey ?? "highlight", highlight.bbox ?? null, "hsl(var(--primary))", 4);
+  }, [highlight, currentPage, createOverlay]);
+
+  const overlaysToRender = useMemo(() => {
+    const items: OverlayRenderItem[] = [];
+    if (showBoxes) {
+      items.push(...baseOverlays.filter((item) => item.key !== highlightOverlay?.key));
     }
-    const [x1, y1, x2, y2] = bbox;
-    const baseScaleX = dims.width / dims.naturalWidth;
-    const baseScaleY = dims.height / dims.naturalHeight;
-    const adjustedScaleX = baseScaleX * calibration.scaleX;
-    const adjustedScaleY = baseScaleY * calibration.scaleY;
-    const adjustedWidth = Math.max((x2 - x1) * adjustedScaleX, 2);
-    const adjustedHeight = Math.max((y2 - y1) * adjustedScaleY, 2);
-    return {
-      left: `${x1 * adjustedScaleX + calibration.offsetX}px`,
-      top: `${y1 * adjustedScaleY + calibration.offsetY}px`,
-      width: `${adjustedWidth}px`,
-      height: `${adjustedHeight}px`,
-      transformOrigin: `${origin.x}% ${origin.y}%`,
-      transform: `scale(${isHovered ? 3 : 1})`,
-    };
-  }, [highlight, dims, origin, isHovered, calibration]);
+    if (highlightOverlay) {
+      items.push(highlightOverlay);
+    }
+    return items;
+  }, [showBoxes, baseOverlays, highlightOverlay]);
+
+  const zoomScale = isHovered ? 3 : 1;
+  const transformOriginValue = `${origin.x}% ${origin.y}%`;
+  const sharedTransformStyle = {
+    transformOrigin: transformOriginValue,
+    transform: `scale(${zoomScale})`,
+  };
 
   const highlightCoversDocument = Boolean(highlight) && (!highlight?.bbox || highlight.bbox.length !== 4);
 
-  const handleCalibrationChange = useCallback(
-    (key: keyof CalibrationState) => (event: React.ChangeEvent<HTMLInputElement>) => {
-      setCalibration((prev) => ({ ...prev, [key]: Number(event.target.value) }));
-    },
-    [],
+  const renderOverlay = (overlay: OverlayRenderItem) => (
+    <div
+      key={overlay.key}
+      className="pointer-events-none absolute"
+      style={{
+        ...overlay.style,
+        border: `${overlay.thickness}px solid ${overlay.color}`,
+        boxShadow: "0 0 8px rgba(0,0,0,0.2)",
+      }}
+    />
   );
-
-  const resetCalibration = useCallback(() => {
-    setCalibration({ scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 });
-  }, []);
 
   return (
     <div className="space-y-4">
@@ -151,100 +216,20 @@ function DocumentViewer({ previews, highlight }: { previews: string[]; highlight
             <img
               ref={imgRef}
               src={src}
-              alt="РџСЂРµРґРїСЂРѕСЃРјРѕС‚СЂ РґРѕРєСѓРјРµРЅС‚Р°"
+              alt=" "
               onLoad={updateSizes}
-              style={{
-                transformOrigin: `${origin.x}% ${origin.y}%`,
-                transform: `scale(${isHovered ? 3 : 1})`,
-              }}
+              style={sharedTransformStyle}
               className="h-full w-full object-contain transition-transform duration-200 ease-out"
             />
-            {overlayStyle ? (
-              <div
-                className="pointer-events-none absolute border-4 border-primary/80 bg-primary/10 shadow-lg transition-transform"
-                style={overlayStyle}
-              />
-            ) : null}
+            <div className="pointer-events-none absolute inset-0" style={sharedTransformStyle}>
+              {overlaysToRender.map(renderOverlay)}
+            </div>
           </>
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-            РџСЂРµРІСЊСЋ РґРѕРєСѓРјРµРЅС‚Р° РЅРµРґРѕСЃС‚СѓРїРЅРѕ
+              
           </div>
         )}
-      </div>
-
-      <div className="rounded-2xl border border-dashed border-primary/40 bg-primary/5 p-4 text-xs">
-        <div className="mb-3 flex items-center justify-between">
-          <span className="font-medium text-foreground">BBox tuning (temporary)</span>
-          <Button size="sm" variant="ghost" onClick={resetCalibration}>
-            Reset
-          </Button>
-        </div>
-        <p className="mb-3 text-muted-foreground">
-          Use these sliders to align the highlight box. Values are not persisted.
-        </p>
-        <div className="grid gap-3 text-foreground">
-          <div>
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-              <span>Scale X</span>
-              <span>{calibration.scaleX.toFixed(2)}</span>
-            </div>
-            <input
-              type="range"
-              min="0.5"
-              max="1.5"
-              step="0.01"
-              value={calibration.scaleX}
-              onChange={handleCalibrationChange("scaleX")}
-              className="mt-1 w-full"
-            />
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-              <span>Scale Y</span>
-              <span>{calibration.scaleY.toFixed(2)}</span>
-            </div>
-            <input
-              type="range"
-              min="0.5"
-              max="1.5"
-              step="0.01"
-              value={calibration.scaleY}
-              onChange={handleCalibrationChange("scaleY")}
-              className="mt-1 w-full"
-            />
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-              <span>Offset X</span>
-              <span>{Math.round(calibration.offsetX)}</span>
-            </div>
-            <input
-              type="range"
-              min="-200"
-              max="200"
-              step="1"
-              value={calibration.offsetX}
-              onChange={handleCalibrationChange("offsetX")}
-              className="mt-1 w-full"
-            />
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-wide text-muted-foreground">
-              <span>Offset Y</span>
-              <span>{Math.round(calibration.offsetY)}</span>
-            </div>
-            <input
-              type="range"
-              min="-200"
-              max="200"
-              step="1"
-              value={calibration.offsetY}
-              onChange={handleCalibrationChange("offsetY")}
-              className="mt-1 w-full"
-            />
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -266,6 +251,7 @@ function ResolvePage() {
   const [activeIndex, setActiveIndex] = useState(0);
   const [drafts, setDrafts] = useState<DraftState>({});
   const [highlightedField, setHighlightedField] = useState<HighlightState | null>(null);
+  const [showBoxes, setShowBoxes] = useState(false);
 
   const fetchAndSelect = useCallback(
     async (targetIndex?: number) => {
@@ -290,7 +276,7 @@ function ResolvePage() {
   useEffect(() => {
     let cancelled = false;
     if (!batchId) {
-      setError(new Error("РќРµ СѓРєР°Р·Р°РЅ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РїР°РєРµС‚Р°"));
+      setError(new Error("Не указан идентификатор пакета"));
       setLoading(false);
       return;
     }
@@ -313,6 +299,18 @@ function ResolvePage() {
 
   const documents = batch?.documents ?? [];
   const currentDoc = documents[activeIndex];
+  const overlayBoxes = useMemo<OverlayBox[]>(() => {
+    if (!currentDoc) return [];
+    return currentDoc.fields.map((field) => ({
+      fieldKey: field.field_key,
+      bbox: Array.isArray(field.bbox) ? field.bbox : null,
+      page: field.page ?? null,
+    }));
+  }, [currentDoc]);
+
+  useEffect(() => {
+    setShowBoxes(false);
+  }, [activeIndex]);
 
   const grouped = useMemo(() => {
     if (!currentDoc) {
@@ -377,7 +375,7 @@ function ResolvePage() {
     await withAction(`doc:${doc.id}:type`, async () => {
       await setDocumentType(doc.id, docType);
       await waitForDocument(doc.id);
-      setMessage("РўРёРї РґРѕРєСѓРјРµРЅС‚Р° СЃРѕС…СЂР°РЅС‘РЅ");
+      setMessage("Тип документа сохранён");
     });
   };
 
@@ -385,18 +383,18 @@ function ResolvePage() {
     await withAction(`doc:${doc.id}:refill`, async () => {
       await refillDocument(doc.id);
       await waitForDocument(doc.id);
-      setMessage("Р”РѕРєСѓРјРµРЅС‚ РїРµСЂРµСЂР°СЃС‡РёС‚Р°РЅ");
+      setMessage("Документ перерасчитан");
     });
   };
 
   const handleDelete = async (doc: DocumentPayload) => {
-    if (!window.confirm("РЈРґР°Р»РёС‚СЊ РґРѕРєСѓРјРµРЅС‚ РёР· РїР°РєРµС‚Р°?")) {
+    if (!window.confirm("Удалить документ из пакета?")) {
       return;
     }
     await withAction(`doc:${doc.id}:delete`, async () => {
       await deleteDocument(doc.id);
       await fetchAndSelect(Math.max(activeIndex - 1, 0));
-      setMessage("Р”РѕРєСѓРјРµРЅС‚ СѓРґР°Р»С‘РЅ");
+      setMessage("Документ удалён");
     });
   };
 
@@ -405,7 +403,7 @@ function ResolvePage() {
     await withAction(`field:${doc.id}:${field.field_key}:save`, async () => {
       await updateField(doc.id, field.field_key, value === "" ? null : value);
       await fetchAndSelect(activeIndex);
-      setMessage("РџРѕР»Рµ СЃРѕС…СЂР°РЅРµРЅРѕ");
+      setMessage("Поле сохранено");
     });
   };
 
@@ -413,7 +411,7 @@ function ResolvePage() {
     await withAction(`field:${doc.id}:${field.field_key}:confirm`, async () => {
       await confirmField(doc.id, field.field_key);
       await fetchAndSelect(activeIndex);
-      setMessage("РџРѕР»Рµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРѕ");
+      setMessage("Поле подтверждено");
     });
   };
 
@@ -421,7 +419,7 @@ function ResolvePage() {
     if (!batch) return;
     await withAction(`batch:${batch.id}:complete`, async () => {
       await completeBatch(batch.id);
-      setMessage("РџР°РєРµС‚ РѕС‚РїСЂР°РІР»РµРЅ РЅР° РїСЂРѕРІРµСЂРєСѓ");
+      setMessage("Пакет отправлен на проверку");
       setTimeout(() => navigate(`/table/${batch.id}`), 1000);
     });
   };
@@ -433,13 +431,13 @@ function ResolvePage() {
   };
 
   if (!batchId) {
-    return <Alert variant="destructive">РќРµ СѓРєР°Р·Р°РЅ РёРґРµРЅС‚РёС„РёРєР°С‚РѕСЂ РїР°РєРµС‚Р°.</Alert>;
+    return <Alert variant="destructive">Не указан идентификатор пакета.</Alert>;
   }
 
   if (loading) {
     return (
       <div className="flex h-80 items-center justify-center text-muted-foreground">
-        <Spinner className="mr-3" /> Р—Р°РіСЂСѓР·РєР° РїР°РєРµС‚Р°...
+        <Spinner className="mr-3" /> Загрузка пакета...
       </div>
     );
   }
@@ -449,7 +447,7 @@ function ResolvePage() {
   }
 
   if (!batch || !currentDoc) {
-    return <Alert variant="info">Р”РѕРєСѓРјРµРЅС‚С‹ РЅРµРґРѕСЃС‚СѓРїРЅС‹ РґР»СЏ РѕР±СЂР°Р±РѕС‚РєРё.</Alert>;
+    return <Alert variant="info">Документы недоступны для обработки.</Alert>;
   }
 
   const totalDocs = documents.length;
@@ -459,12 +457,12 @@ function ResolvePage() {
   return (
     <div className="space-y-8">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">Р”РѕРєСѓРјРµРЅС‚ вЂ” РёСЃРїСЂР°РІР»РµРЅРёРµ РѕС€РёР±РѕРє</h1>
-        <p className="text-muted-foreground">РџР°РєРµС‚ {batch.id.slice(0, 8)} В· РЎС‚Р°С‚СѓСЃ РїР°РєРµС‚Р°:</p>
+        <h1 className="text-2xl font-semibold">Документ — исправление ошибок</h1>
+        <p className="text-muted-foreground">Пакет {batch.id.slice(0, 8)} · Статус пакета:</p>
         <div className="mt-1">
           <StatusPill status={mapBatchStatus(batch.status)} />
         </div>
-        <p className="text-sm text-muted-foreground">РЎРѕР·РґР°РЅ {formatDateTime(batch.created_at)} В· Р”РѕРєСѓРјРµРЅС‚РѕРІ: {totalDocs}</p>
+        <p className="text-sm text-muted-foreground">Создан {formatDateTime(batch.created_at)} · Документов: {totalDocs}</p>
       </header>
 
       {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
@@ -472,7 +470,7 @@ function ResolvePage() {
 
       <div className="flex items-center gap-3">
         <span className="text-sm text-muted-foreground">
-          Р”РѕРєСѓРјРµРЅС‚ {activeIndex + 1} РёР· {totalDocs}
+          Документ {activeIndex + 1} из {totalDocs}
         </span>
         <div className="flex items-center gap-2">
           {documents.map((doc, index) => (
@@ -484,7 +482,7 @@ function ResolvePage() {
                 "h-3 w-3 rounded-full transition-colors",
                 index === activeIndex ? "bg-primary" : "bg-muted-foreground/40 hover:bg-primary/60",
               )}
-              aria-label={`Р”РѕРєСѓРјРµРЅС‚ ${index + 1}`}
+              aria-label={`Документ ${index + 1}`}
             />
           ))}
         </div>
@@ -498,14 +496,14 @@ function ResolvePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <Label>РўРёРї РґРѕРєСѓРјРµРЅС‚Р°</Label>
+                <Label>Тип документа</Label>
                 <Select
                   value={currentDoc.doc_type}
                   onValueChange={(value) => void handleSetType(currentDoc, value)}
                   disabled={isPending(`doc:${currentDoc.id}:type`)}
                 >
                   <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Р’С‹Р±РµСЂРёС‚Рµ С‚РёРї" />
+                    <SelectValue placeholder="Выберите тип" />
                   </SelectTrigger>
                   <SelectContent>
                     {batch.doc_types.map((docType) => (
@@ -523,7 +521,7 @@ function ResolvePage() {
                   onClick={() => void handleDelete(currentDoc)}
                   disabled={isPending(`doc:${currentDoc.id}:delete`)}
                 >
-                  РЈРґР°Р»РёС‚СЊ РґРѕРєСѓРјРµРЅС‚
+                  Удалить документ
                 </Button>
                 <Button
                   variant="secondary"
@@ -531,7 +529,7 @@ function ResolvePage() {
                   onClick={() => void handleRefill(currentDoc)}
                   disabled={isPending(`doc:${currentDoc.id}:refill`)}
                 >
-                  РЎРѕС…СЂР°РЅРёС‚СЊ Рё РїРµСЂРµСЃС‡РёС‚Р°С‚СЊ
+                  Сохранить и пересчитать
                 </Button>
               </div>
             </CardContent>
@@ -539,22 +537,22 @@ function ResolvePage() {
 
           <Card className="rounded-3xl border bg-background">
             <CardHeader>
-              <CardTitle className="text-lg">РџСЂРѕР±Р»РµРјС‹ РґР»СЏ РёСЃРїСЂР°РІР»РµРЅРёСЏ</CardTitle>
+              <CardTitle className="text-lg">Проблемы для исправления</CardTitle>
             </CardHeader>
             <CardContent className="space-y-5">
               <section className="space-y-3">
-                <h2 className="text-sm font-semibold">РћР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РїРѕР»СЏ</h2>
+                <h2 className="text-sm font-semibold">Обязательные поля</h2>
                 {grouped.required.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Р’СЃРµ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РїРѕР»СЏ Р·Р°РїРѕР»РЅРµРЅС‹.</p>
+                  <p className="text-sm text-muted-foreground">Все обязательные поля заполнены.</p>
                 ) : (
                   grouped.required.map((field) => (
                     <div key={field.field_key} className="rounded-xl border border-amber-400/40 bg-amber-500/10 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <p className="text-sm font-medium">{field.field_key}</p>
-                          <p className="text-xs text-muted-foreground">РўСЂРµР±СѓРµС‚СЃСЏ Р·Р°РїРѕР»РЅРёС‚СЊ РїРѕР»Рµ</p>
+                          <p className="text-xs text-muted-foreground">Требуется заполнить поле</p>
                         </div>
-                        <Badge variant="warning">РћР±СЏР·Р°С‚РµР»СЊРЅРѕ</Badge>
+                        <Badge variant="warning">Обязательно</Badge>
                       </div>
                       <Input
                         className="mt-3"
@@ -568,14 +566,14 @@ function ResolvePage() {
                           onClick={() => void handleSaveField(currentDoc, field)}
                           disabled={isPending(`field:${currentDoc.id}:${field.field_key}:save`)}
                         >
-                          РЎРѕС…СЂР°РЅРёС‚СЊ Рё РїСЂРѕРґРѕР»Р¶РёС‚СЊ
+                          Сохранить и продолжить
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => setHighlightedField({ fieldKey: field.field_key, bbox: field.bbox ?? null, page: field.page ?? null })}
                         >
-                          РџРѕРєР°Р·Р°С‚СЊ РЅР° РґРѕРєСѓРјРµРЅС‚Рµ
+                          Показать на документе
                         </Button>
                       </div>
                     </div>
@@ -584,9 +582,9 @@ function ResolvePage() {
               </section>
 
               <section className="space-y-3">
-                <h2 className="text-sm font-semibold">РџРѕР»СЏ СЃ РЅРёР·РєРѕР№ СѓРІРµСЂРµРЅРЅРѕСЃС‚СЊСЋ</h2>
+                <h2 className="text-sm font-semibold">Поля с низкой уверенностью</h2>
                 {grouped.lowConfidence.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">РќРµС‚ РїРѕР»РµР№ СЃ РЅРёР·РєРѕР№ СѓРІРµСЂРµРЅРЅРѕСЃС‚СЊСЋ.</p>
+                  <p className="text-sm text-muted-foreground">Нет полей с низкой уверенностью.</p>
                 ) : (
                   grouped.lowConfidence.map((field) => (
                     <div key={field.field_key} className="rounded-xl border border-primary/30 bg-primary/5 p-4">
@@ -594,11 +592,11 @@ function ResolvePage() {
                         <div>
                           <p className="text-sm font-medium">{field.field_key}</p>
                           <p className="text-xs text-muted-foreground">
-                            РЈРІРµСЂРµРЅРЅРѕСЃС‚СЊ: {field.confidence_display ?? "вЂ”"}
+                            Уверенность: {field.confidence_display ?? "—"}
                           </p>
                         </div>
                         <Button size="sm" variant="ghost" onClick={() => setHighlightedField({ fieldKey: field.field_key, bbox: field.bbox ?? null, page: field.page ?? null })}>
-                          РџРѕРєР°Р·Р°С‚СЊ РЅР° РґРѕРєСѓРјРµРЅС‚Рµ
+                          Показать на документе
                         </Button>
                       </div>
                       <Textarea
@@ -614,7 +612,7 @@ function ResolvePage() {
                           onClick={() => void handleSaveField(currentDoc, field)}
                           disabled={isPending(`field:${currentDoc.id}:${field.field_key}:save`)}
                         >
-                          РР·РјРµРЅРёС‚СЊ
+                          Изменить
                         </Button>
                         <Button
                           size="sm"
@@ -622,7 +620,7 @@ function ResolvePage() {
                           onClick={() => void handleConfirmField(currentDoc, field)}
                           disabled={isPending(`field:${currentDoc.id}:${field.field_key}:confirm`)}
                         >
-                          РџРѕРґС‚РІРµСЂРґРёС‚СЊ
+                          Подтвердить
                         </Button>
                       </div>
                     </div>
@@ -638,7 +636,7 @@ function ResolvePage() {
                     onClick={() => setHighlightedField(null)}
                     className="text-sm"
                   >
-                    РЎРЅСЏС‚СЊ РїРѕРґСЃРІРµС‚РєСѓ
+                    Снять подсветку
                   </Button>
                   <div className="space-y-2 rounded-xl border border-muted bg-muted/20 p-3">
                     {grouped.other.map((field) => (
@@ -647,7 +645,7 @@ function ResolvePage() {
                           <span className="font-medium">{field.field_key}</span>
                           <span className="text-xs text-muted-foreground">{field.reason}</span>
                         </div>
-                        <p className="mt-1 text-sm text-muted-foreground">{field.value ?? "вЂ”"}</p>
+                        <p className="mt-1 text-sm text-muted-foreground">{field.value ?? "—"}</p>
                       </div>
                     ))}
                   </div>
@@ -665,7 +663,7 @@ function ResolvePage() {
                     }
                   }}
                 >
-                  РЎР»РµРґСѓСЋС‰РёР№ РґРѕРєСѓРјРµРЅС‚
+                  Следующий документ
                 </Button>
               ) : null}
             </CardFooter>
@@ -673,21 +671,32 @@ function ResolvePage() {
         </div>
 
         <div className="space-y-6">
-          <DocumentViewer previews={currentDoc.previews} highlight={highlightedField} />
+          <div className="space-y-3">
+            <DocumentViewer previews={currentDoc.previews} highlight={highlightedField} boxes={overlayBoxes} showBoxes={showBoxes} />
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                variant={showBoxes ? "outline" : "secondary"}
+                onClick={() => setShowBoxes((prev) => !prev)}
+              >
+                {showBoxes ? "Скрыть подсветку" : "Показать подсветку"}
+              </Button>
+            </div>
+          </div>
           {isLastDocument && (
             <Card className="rounded-3xl border bg-background">
               <CardHeader>
-                <CardTitle className="text-lg">РћС‚РїСЂР°РІРєР° РїР°РєРµС‚Р°</CardTitle>
+                <CardTitle className="text-lg">Отправка пакета</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>РџСЂРѕРІРµСЂСЊС‚Рµ, С‡С‚Рѕ РІСЃРµ РѕР±СЏР·Р°С‚РµР»СЊРЅС‹Рµ РїРѕР»СЏ Р·Р°РїРѕР»РЅРµРЅС‹ Рё РїРѕРґС‚РІРµСЂР¶РґРµРЅС‹.</p>
+                <p>Проверьте, что все обязательные поля заполнены и подтверждены.</p>
               </CardContent>
               <CardFooter>
                 <Button
                   onClick={() => void handleComplete()}
                   disabled={!canSubmit || isPending(`batch:${batch.id}:complete`)}
                 >
-                  РћС‚РїСЂР°РІРёС‚СЊ РЅР° РїСЂРѕРІРµСЂРєСѓ
+                  Отправить на проверку
                 </Button>
               </CardFooter>
             </Card>

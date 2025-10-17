@@ -39,6 +39,9 @@ export type FieldState = {
   needs_confirmation: boolean;
   actionable: boolean;
   editable: boolean;
+  bbox?: number[] | null;
+  page?: number | null;
+  token_refs?: string[] | null;
 };
 
 export type ProductColumn = {

@@ -16,6 +16,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        "/files": {
+          target: backendOrigin,
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
   };

@@ -1,40 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
 
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+
+import { FileTile, type FileEntry } from "../components/upload/FileTile";
+import { UploadIllustration } from "../components/upload/file-assets";
 import { useHistoryContext } from "../contexts/history-context";
 import { fetchBatchDetails } from "../lib/api";
-import { cn, formatDateTime, mapBatchStatus } from "../lib/utils";
+import { cn, mapBatchStatus, statusLabel } from "../lib/utils";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "../components/ui/card";
 import { Spinner } from "../components/ui/spinner";
 import { StatusPill } from "../components/status/StatusPill";
 import type { BatchDetails } from "../types/api";
 
-function DisabledUploadCard() {
-  return (
-    <div className="gradient-border">
-      <Card className="mx-auto max-w-3xl rounded-3xl bg-background/95 shadow-lg">
-        <CardHeader className="text-center">
-          <CardTitle className="text-lg">Документы в очереди</CardTitle>
-          <CardDescription>Загрузка недоступна, пакет уже обрабатывается.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex min-h-[220px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-primary/40 bg-muted/40 text-muted-foreground">
-            <p className="text-sm">Документы находятся в очереди на обработку.</p>
-            <p className="mt-2 text-xs">Пожалуйста, дождитесь завершения обработки или перейдите к следующему шагу.</p>
-          </div>
-        </CardContent>
-        <CardFooter className="flex items-center justify-center text-sm text-muted-foreground">
-          Активация новой загрузки станет доступна после завершения текущего пакета.
-        </CardFooter>
-      </Card>
-    </div>
-  );
-}
-
 function QueuePage() {
-  const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { refresh } = useHistoryContext();
   const [batch, setBatch] = useState<BatchDetails | null>(null);
@@ -43,107 +23,115 @@ function QueuePage() {
 
   const batchId = searchParams.get("batch");
 
+  const files: FileEntry[] = useMemo(() => {
+    if (!batch) return [];
+    return batch.documents.map((doc) => ({
+      id: doc.id,
+      name: doc.filename,
+      size: doc.pending_count,
+      meta: statusLabel(mapBatchStatus(doc.status)),
+    }));
+  }, [batch]);
+
   useEffect(() => {
-    let active = true;
+    let cancelled = false;
     if (!batchId) {
       setBatch(null);
       return () => {
-        active = false;
+        cancelled = true;
       };
     }
     setLoading(true);
     setError(null);
     fetchBatchDetails(batchId)
       .then((response) => {
-        if (active) {
+        if (!cancelled) {
           setBatch(response.batch);
         }
       })
-      .catch((err: unknown) => {
-        if (active) {
+      .catch((err) => {
+        if (!cancelled) {
           setError(err as Error);
         }
       })
       .finally(() => {
-        if (active) {
+        if (!cancelled) {
           setLoading(false);
           void refresh();
         }
       });
     return () => {
-      active = false;
+      cancelled = true;
     };
   }, [batchId, refresh]);
 
-  const documents = useMemo(() => batch?.documents ?? [], [batch]);
+  useEffect(() => {
+    if (!batchId) return;
+    if (!batch) return;
+    if (!batch.awaiting_processing && batch.pending_total === 0) {
+      navigate(`/resolve/${batch.id}`, { replace: true });
+      return;
+    }
+    const interval = window.setInterval(async () => {
+      try {
+        const response = await fetchBatchDetails(batchId);
+        setBatch(response.batch);
+        if (!response.batch.awaiting_processing && response.batch.pending_total === 0) {
+          window.clearInterval(interval);
+          navigate(`/resolve/${response.batch.id}`, { replace: true });
+        }
+      } catch (err) {
+        setError(err as Error);
+      }
+    }, 2000);
+    return () => window.clearInterval(interval);
+  }, [batch, batchId, navigate]);
 
   return (
-    <div className="space-y-8">
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">В очереди</h1>
-          <p className="text-muted-foreground">Текущий пакет ожидает обработки. Статус обновляется автоматически.</p>
-        </div>
-        {batch ? <StatusPill status={mapBatchStatus(batch.status)} /> : null}
-      </header>
-
-      <DisabledUploadCard />
-
-      {loading ? (
-        <div className="flex items-center gap-3 rounded-xl border border-muted bg-background px-4 py-4 text-sm text-muted-foreground">
-          <Spinner />
-          Пакет обрабатывается...
+    <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-4xl flex-col items-center justify-center gap-10">
+      {batch ? (
+        <div className="flex w-full items-center justify-between">
+          <StatusPill status={mapBatchStatus(batch.status)} />
+          <span className="text-sm text-muted-foreground">Документов: {batch.documents_count}</span>
         </div>
       ) : null}
 
-      {!batchId ? (
-        <Alert variant="info">Выберите пакет из истории или загрузите новый, чтобы увидеть детали очереди.</Alert>
-      ) : null}
+      <div className="gradient-border w-full rounded-[26px]">
+        <div className={cn("w-full rounded-[24px] border border-transparent bg-background/95 p-8 shadow-xl")}>
+          <div className="flex min-h-[320px] flex-col items-center justify-center gap-6">
+            {!batch ? (
+              <>
+                <UploadIllustration className="h-24" />
+                <p className="text-sm text-muted-foreground">
+                  Выберите пакет из истории, чтобы отследить его очередь обработки.
+                </p>
+              </>
+            ) : files.length === 0 ? (
+              <>
+                <UploadIllustration className="h-24" />
+                <p className="text-sm text-muted-foreground">Документы пакета появятся здесь после загрузки.</p>
+              </>
+            ) : (
+              <div className="grid w-full gap-4 sm:grid-cols-2 md:grid-cols-3">
+                {files.map((item) => (
+                  <FileTile key={item.id} item={item} locked />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        {loading || (batch && batch.awaiting_processing) ? <Spinner /> : null}
+        <Button variant="secondary" disabled className="pointer-events-none">
+          Обработка
+        </Button>
+      </div>
 
       {error ? <Alert variant="destructive">{error.message}</Alert> : null}
-
-      {batch ? (
-        <Card className="rounded-3xl border bg-background/95">
-          <CardHeader>
-            <CardTitle>Пакет {batch.id.slice(0, 8)}</CardTitle>
-            <CardDescription>
-              Создан {formatDateTime(batch.created_at)} • Документов: {batch.documents_count}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-3 sm:grid-cols-2">
-              {documents.map((doc) => (
-                <div key={doc.id} className="rounded-xl border border-muted bg-muted/20 px-4 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium" title={doc.filename}>
-                        {doc.filename}
-                      </p>
-                      <p className="text-xs text-muted-foreground">Статус: {doc.status}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{doc.pending_count} полей</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 px-4 py-3 text-sm text-primary">
-              Когда обработка завершится, вы автоматически перейдёте к следующему шагу.
-            </div>
-          </CardContent>
-          <CardFooter className="flex flex-wrap items-center justify-between gap-3">
-            <Button asChild variant="ghost">
-              <Link to={location.state?.from ?? "/new"}>Назад</Link>
-            </Button>
-            <div className="space-x-2">
-              <Button asChild variant="secondary" disabled={batch.awaiting_processing}>
-                <Link to={`/resolve/${batch.id}`}>Документ — исправление ошибок</Link>
-              </Button>
-              <Button asChild variant="default" disabled={!batch.can_complete}>
-                <Link to={`/table/${batch.id}`}>Итоговая таблица</Link>
-              </Button>
-            </div>
-          </CardFooter>
-        </Card>
+      {!batch && !error ? (
+        <Alert variant="info">Загрузите или выберите пакет, чтобы увидеть его состояние очереди.</Alert>
       ) : null}
     </div>
   );

@@ -285,6 +285,7 @@ async def update_field(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document_not_found")
 
+    batch_id = document.batch_id
     new_value = payload.get("value")
     if isinstance(new_value, str):
         clean_value = new_value.strip()
@@ -308,6 +309,8 @@ async def update_field(
         edited_by="web",
     )
     await session.flush()
+    await session.commit()
+    await pipeline.run_validation_pipeline(batch_id)
     return {
         "status": "ok",
         "message": "field_saved",
@@ -505,11 +508,20 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
         reason: str,
         actionable: bool,
         editable: bool,
+        source: Optional[FilledField],
     ) -> None:
         nonlocal pending
         needs_confirmation = reason in {"missing", "low_confidence"}
         if needs_confirmation:
             pending += 1
+        bbox = None
+        page = None
+        token_refs: Optional[List[str]] = None
+        if source is not None:
+            bbox = list(source.bbox) if isinstance(source.bbox, list) else source.bbox
+            page = int(source.page) if source.page is not None else None
+            if source.token_refs is not None:
+                token_refs = list(source.token_refs)
         fields.append(
             {
                 "doc_id": str(document.id),
@@ -522,6 +534,9 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
                 "needs_confirmation": needs_confirmation,
                 "actionable": actionable,
                 "editable": editable,
+                "bbox": bbox,
+                "page": page,
+                "token_refs": token_refs,
             }
         )
 
@@ -538,6 +553,7 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
             reason="unknown_type",
             actionable=False,
             editable=False,
+            source=None,
         )
         for key, field in latest_fields.items():
             value = field.value
@@ -551,6 +567,7 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
                     reason="missing",
                     actionable=False,
                     editable=True,
+                    source=field,
                 )
             elif confidence is not None and confidence < settings.low_conf_threshold:
                 add_field(
@@ -561,6 +578,7 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
                     reason="low_confidence",
                     actionable=True,
                     editable=True,
+                    source=field,
                 )
             else:
                 add_field(
@@ -571,6 +589,7 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
                     reason="ok",
                     actionable=False,
                     editable=False,
+                    source=field,
                 )
         return fields, pending
 
@@ -591,6 +610,7 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
                 reason="missing",
                 actionable=False,
                 editable=True,
+                source=field,
             )
         elif confidence is not None and confidence < settings.low_conf_threshold:
             add_field(
@@ -601,6 +621,7 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
                 reason="low_confidence",
                 actionable=True,
                 editable=True,
+                source=field,
             )
         else:
             add_field(
@@ -611,6 +632,7 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
                 reason="ok",
                 actionable=False,
                 editable=False,
+                source=field,
             )
         processed_keys.add(key)
 
@@ -626,6 +648,7 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
             reason="extra",
             actionable=False,
             editable=False,
+            source=field,
         )
 
     return fields, pending
