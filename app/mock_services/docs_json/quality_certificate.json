@@ -14,29 +14,52 @@
             "value": "",
             "bbox": []
         },
-        "name_product":{
-            "value": "",
-            "bbox": []
-        },
-        "latin_name":{
-            "value": "",
-            "bbox": []
-        },
-        "net_weight":{
-            "value": "",
-            "bbox": []
-        },
-        "date_of_production":{
-            "value": "",
-            "bbox": []
-        },
-        "packages":{
-            "value": "",
-            "bbox": []
-        },
-        "size_product":{
-            "value": "",
-            "bbox": []
+        "products": {
+            "product_1": {
+                "name_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "latin_name": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "size_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "unit_box": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "packages": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "price_per_unit": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "total_price": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                }
+            },
+            "product_2": {}
         },
         "container_no":{
             "value": "",

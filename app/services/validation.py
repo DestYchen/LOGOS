@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.enums import DocumentType, ValidationSeverity
 from app.core.schema import get_schema
 from app.models import Document, FilledField, Validation
-from datetime import datetime
+from datetime import datetime, date
 
 
 @dataclass
@@ -80,9 +80,73 @@ class InvalidFieldRecord:
     field: FilledField
 
 
+def _build_ref(
+    *,
+    doc_id: uuid.UUID,
+    field_key: str,
+    value: Optional[str] = None,
+    normalized: Optional[Any] = None,
+    present: Optional[bool] = None,
+    page: Optional[int] = None,
+    bbox: Optional[Any] = None,
+    token_refs: Optional[Any] = None,
+    note: Optional[str] = None,
+    doc_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    ref: Dict[str, Any] = {
+        "doc_id": doc_id,
+        "field_key": field_key,
+    }
+    if value is not None:
+        ref["value"] = value
+    if normalized is not None:
+        ref["normalized"] = normalized
+    if present is not None:
+        ref["present"] = present
+    if page is not None:
+        ref["page"] = page
+    if bbox is not None:
+        ref["bbox"] = bbox
+    if token_refs is not None:
+        ref["token_refs"] = token_refs
+    if note is not None:
+        ref["note"] = note
+    if doc_type is not None:
+        ref["doc_type"] = doc_type
+    return ref
+
+
+def _ref_from_field(document: Document, field: Optional[FilledField], *, normalized: Optional[Any] = None, note: Optional[str] = None) -> Dict[str, Any]:
+    if field is None:
+        return _build_ref(
+            doc_id=document.id,
+            field_key="",
+            value=None,
+            normalized=normalized,
+            present=False,
+            note=note,
+        )
+    return _build_ref(
+        doc_id=document.id,
+        field_key=field.field_key,
+        value=field.value,
+        normalized=normalized,
+        present=True,
+        page=getattr(field, "page", None),
+        bbox=getattr(field, "bbox", None),
+        token_refs=getattr(field, "token_refs", None),
+        note=note,
+    )
+
 def _json_safe(value: Any) -> Any:
     if isinstance(value, uuid.UUID):
         return str(value)
+    # Normalize date/datetime to ISO strings for JSONB
+    if isinstance(value, (datetime, date)):
+        try:
+            return value.isoformat()
+        except Exception:
+            return str(value)
     if isinstance(value, dict):
         return {key: _json_safe(val) for key, val in value.items()}
     if isinstance(value, (list, tuple)):
@@ -316,16 +380,59 @@ def _compare_products(
     anchor_ms, anchor_buckets = _build_product_multiset(anchor_rows)
     target_ms, target_buckets = _build_product_multiset(target_rows)
 
+    # Normalizer used across all product comparisons
+    def _value_for_compare(field_key: str, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        if field_key in ("name_product", "latin_name"):
+            return _normalize_name_for_key(value)
+        return value.strip()
+
     # Missing in target
     for key, cnt in anchor_ms.items():
         delta = cnt - target_ms.get(key, 0)
         if delta > 0:
+            # Collect detailed refs for missing rows from anchor
+            start_idx = target_ms.get(key, 0)
+            detailed_refs: List[Dict[str, Any]] = []
+            PRODUCT_COMPARE_FIELDS = [
+                "name_product",
+                "latin_name",
+                "net_weight",
+                "size_product",
+                "unit_box",
+                "packages",
+                "gross_weight",
+                "price_per_unit",
+                "total_price",
+                "commodity_code",
+            ]
+            for idx in range(start_idx, cnt):
+                row_a = anchor_buckets[key][idx]
+                prod_id_a = row_a.get("__id", "?")
+                for fkey in PRODUCT_COMPARE_FIELDS:
+                    if fkey in row_a and row_a.get(fkey) is not None:
+                        val = row_a.get(fkey)
+                        norm = _value_for_compare(fkey, val)
+                        detailed_refs.append(
+                            _build_ref(
+                                doc_id=anchor_doc.id,
+                                field_key=f"products.{prod_id_a}.{fkey}",
+                                value=val,
+                                normalized=norm,
+                                present=True,
+                            )
+                        )
+            # Add summary ref for target products node with a note
+            detailed_refs.append(
+                _build_ref(doc_id=target_doc.id, field_key="products", note="missing_rows")
+            )
             validations.append(
                 ValidationMessage(
                     rule_id=f"products_missing_in_{target_doc.doc_type.name}",
                     severity=ValidationSeverity.ERROR,
                     message=f"{delta} product(s) missing in {target_doc.doc_type.name} compared to {anchor_doc.doc_type.name}",
-                    refs=[{"doc_id": target_doc.id, "field_key": "products"}],
+                    refs=detailed_refs,
                 )
             )
 
@@ -333,12 +440,46 @@ def _compare_products(
     for key, cnt in target_ms.items():
         delta = cnt - anchor_ms.get(key, 0)
         if delta > 0:
+            # Detailed refs for extra rows from target
+            start_idx = anchor_ms.get(key, 0)
+            detailed_refs: List[Dict[str, Any]] = []
+            PRODUCT_COMPARE_FIELDS = [
+                "name_product",
+                "latin_name",
+                "net_weight",
+                "size_product",
+                "unit_box",
+                "packages",
+                "gross_weight",
+                "price_per_unit",
+                "total_price",
+                "commodity_code",
+            ]
+            for idx in range(start_idx, cnt):
+                row_b = target_buckets[key][idx]
+                prod_id_b = row_b.get("__id", "?")
+                for fkey in PRODUCT_COMPARE_FIELDS:
+                    if fkey in row_b and row_b.get(fkey) is not None:
+                        val = row_b.get(fkey)
+                        norm = _value_for_compare(fkey, val)
+                        detailed_refs.append(
+                            _build_ref(
+                                doc_id=target_doc.id,
+                                field_key=f"products.{prod_id_b}.{fkey}",
+                                value=val,
+                                normalized=norm,
+                                present=True,
+                            )
+                        )
+            detailed_refs.append(
+                _build_ref(doc_id=target_doc.id, field_key="products", note="extra_rows")
+            )
             validations.append(
                 ValidationMessage(
                     rule_id=f"products_extra_in_{target_doc.doc_type.name}",
                     severity=ValidationSeverity.WARN,
                     message=f"{delta} extra product(s) in {target_doc.doc_type.name} versus {anchor_doc.doc_type.name}",
-                    refs=[{"doc_id": target_doc.id, "field_key": "products"}],
+                    refs=detailed_refs,
             )
         )
 
@@ -346,12 +487,57 @@ def _compare_products(
     for key in set(anchor_ms.keys()).intersection(set(target_ms.keys())):
         a, b = anchor_ms[key], target_ms[key]
         if a != b:
+            detailed_refs: List[Dict[str, Any]] = []
+            # Include context for existing paired rows
+            pairs = min(a, b)
+            for idx in range(pairs):
+                row_a = anchor_buckets[key][idx]
+                row_b = target_buckets[key][idx]
+                prod_id_a = row_a.get("__id", "?")
+                prod_id_b = row_b.get("__id", "?")
+                for fkey in [
+                    "name_product",
+                    "latin_name",
+                    "net_weight",
+                    "size_product",
+                    "unit_box",
+                    "packages",
+                    "gross_weight",
+                    "price_per_unit",
+                    "total_price",
+                    "commodity_code",
+                ]:
+                    vala = row_a.get(fkey)
+                    valb = row_b.get(fkey)
+                    if vala is not None:
+                        detailed_refs.append(
+                            _build_ref(
+                                doc_id=anchor_doc.id,
+                                field_key=f"products.{prod_id_a}.{fkey}",
+                                value=vala,
+                                normalized=_value_for_compare(fkey, vala),
+                                present=True,
+                            )
+                        )
+                    if valb is not None:
+                        detailed_refs.append(
+                            _build_ref(
+                                doc_id=target_doc.id,
+                                field_key=f"products.{prod_id_b}.{fkey}",
+                                value=valb,
+                                normalized=_value_for_compare(fkey, valb),
+                                present=True,
+                            )
+                        )
+            # Summary refs for counts
+            detailed_refs.append(_build_ref(doc_id=anchor_doc.id, field_key="products", note=f"count={a}"))
+            detailed_refs.append(_build_ref(doc_id=target_doc.id, field_key="products", note=f"count={b}"))
             validations.append(
                 ValidationMessage(
                     rule_id=f"products_count_mismatch_{target_doc.doc_type.name}",
                     severity=ValidationSeverity.WARN,
                     message=f"Product count for a matched key differs: {a} vs {b}",
-                    refs=[{"doc_id": target_doc.id, "field_key": "products"}],
+                    refs=detailed_refs,
                 )
             )
 
@@ -369,12 +555,6 @@ def _compare_products(
         "commodity_code",
     ]
 
-    def _value_for_compare(field_key: str, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        if field_key in ("name_product", "latin_name"):
-            return _normalize_name_for_key(value)
-        return value.strip()
 
     for key in set(anchor_ms.keys()).intersection(set(target_ms.keys())):
         pairs = min(anchor_ms[key], target_ms[key])
@@ -399,8 +579,20 @@ def _compare_products(
                                 f"Field '{fkey}' differs between {anchor_doc.doc_type.name} and {target_doc.doc_type.name}"
                             ),
                             refs=[
-                                {"doc_id": anchor_doc.id, "field_key": f"products.{prod_id_a}.{fkey}"},
-                                {"doc_id": target_doc.id, "field_key": f"products.{prod_id_b}.{fkey}"},
+                                _build_ref(
+                                    doc_id=anchor_doc.id,
+                                    field_key=f"products.{prod_id_a}.{fkey}",
+                                    value=av,
+                                    normalized=va,
+                                    present=True,
+                                ),
+                                _build_ref(
+                                    doc_id=target_doc.id,
+                                    field_key=f"products.{prod_id_b}.{fkey}",
+                                    value=bv,
+                                    normalized=vb,
+                                    present=True,
+                                ),
                             ],
                         )
                     )
@@ -680,34 +872,34 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
         ],
         value_kind="string-casefold",
     ),
-    AnchoredEqualityRule(
-        rule_id="total_price_consistency",
-        description="Итоговая цена в инвойсе должна совпадать с другими документами",
-        anchor=_ref("INVOICE", "total_price", "Total price"),
-        targets=[
-            _ref("PROFORMA", "total_price"),
-            _ref("SPECIFICATION", "total_price"),
-            _ref("EXPORT_DECLARATION", "total_price"),
-            _ref("PRICE_LIST_1", "total_price"),
-            _ref("PRICE_LIST_2", "total_price"),
-        ],
-        value_kind="string",
-    ),
-    AnchoredEqualityRule(
-        rule_id="packages_consistency",
-        description="Количество упаковок в пакинг листе должно совпадать с другими документами",
-        anchor=_ref("PACKING_LIST", "packages", "Packages"),
-        targets=[
-            _ref("INVOICE", "packages"),
-            _ref("BILL_OF_LANDING", "packages"),
-            _ref("CERTIFICATE_OF_ORIGIN", "packages"),
-            _ref("VETERINARY_CERTIFICATE", "packages"),
-            _ref("EXPORT_DECLARATION", "packages"),
-            _ref("SPECIFICATION", "packages"),
-            _ref("QUALITY_CERTIFICATE", "packages"),
-        ],
-        value_kind="number",
-    ),
+    # AnchoredEqualityRule(
+    #     rule_id="total_price_consistency",
+    #     description="Итоговая цена в инвойсе должна совпадать с другими документами",
+    #     anchor=_ref("INVOICE", "total_price", "Total price"),
+    #     targets=[
+    #         _ref("PROFORMA", "total_price"),
+    #         _ref("SPECIFICATION", "total_price"),
+    #         _ref("EXPORT_DECLARATION", "total_price"),
+    #         _ref("PRICE_LIST_1", "total_price"),
+    #         _ref("PRICE_LIST_2", "total_price"),
+    #     ],
+    #     value_kind="string",
+    # ),
+    # AnchoredEqualityRule(
+    #     rule_id="packages_consistency",
+    #     description="Количество упаковок в пакинг листе должно совпадать с другими документами",
+    #     anchor=_ref("PACKING_LIST", "packages", "Packages"),
+    #     targets=[
+    #         _ref("INVOICE", "packages"),
+    #         _ref("BILL_OF_LANDING", "packages"),
+    #         _ref("CERTIFICATE_OF_ORIGIN", "packages"),
+    #         _ref("VETERINARY_CERTIFICATE", "packages"),
+    #         _ref("EXPORT_DECLARATION", "packages"),
+    #         _ref("SPECIFICATION", "packages"),
+    #         _ref("QUALITY_CERTIFICATE", "packages"),
+    #     ],
+    #     value_kind="number",
+    # ),
     AnchoredEqualityRule(
         rule_id="invoice_number_consistency",
         description="Номер инвойса должен совпадать с другими документами",
@@ -739,24 +931,24 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
             _ref("PACKING_LIST", "linear_seal"),
         ],
     ),
-    AnchoredEqualityRule(
-        rule_id="name_product_consistency",
-        description="Наименование продукта должно совпадать с другими документами",
-        anchor=_ref("INVOICE", "name_product", "Product name"),
-        targets=_refs(ALL_DOC_TYPES, "name_product", exclude=["INVOICE"]),
-    ),
-    AnchoredEqualityRule(
-        rule_id="latin_name_consistency",
-        description="Латинское наименование в ветеринарном сертификате должно совпадать с другими документами",
-        anchor=_ref("VETERINARY_CERTIFICATE", "latin_name", "Latin name"),
-        targets=_refs(ALL_DOC_TYPES, "latin_name", exclude=["VETERINARY_CERTIFICATE"]),
-    ),
-    AnchoredEqualityRule(
-        rule_id="commodity_code_consistency",
-        description="Commodity code must match the invoice across documents",
-        anchor=_ref("INVOICE", "commodity_code", "Commodity code"),
-        targets=_refs(ALL_DOC_TYPES, "commodity_code", exclude=["INVOICE"]),
-    ),
+    # AnchoredEqualityRule(
+    #     rule_id="name_product_consistency",
+    #     description="Наименование продукта должно совпадать с другими документами",
+    #     anchor=_ref("INVOICE", "name_product", "Product name"),
+    #     targets=_refs(ALL_DOC_TYPES, "name_product", exclude=["INVOICE"]),
+    # ),
+    # AnchoredEqualityRule(
+    #     rule_id="latin_name_consistency",
+    #     description="Латинское наименование в ветеринарном сертификате должно совпадать с другими документами",
+    #     anchor=_ref("VETERINARY_CERTIFICATE", "latin_name", "Latin name"),
+    #     targets=_refs(ALL_DOC_TYPES, "latin_name", exclude=["VETERINARY_CERTIFICATE"]),
+    # ),
+    # AnchoredEqualityRule(
+    #     rule_id="commodity_code_consistency",
+    #     description="Commodity code must match the invoice across documents",
+    #     anchor=_ref("INVOICE", "commodity_code", "Commodity code"),
+    #     targets=_refs(ALL_DOC_TYPES, "commodity_code", exclude=["INVOICE"]),
+    # ),
 ]
 
 
@@ -848,28 +1040,69 @@ def _collect_records_for_rule(
         )
 
     if collection.unknown_doc_type:
+        # Emit placeholder ref for unknown doc type
         add(
             f"{description}: document type '{ref.doc_type}' is not defined in the system",
-            [],
+            [
+                _build_ref(
+                    doc_id=uuid.UUID(int=0),
+                    field_key=ref.field_key,
+                    value=None,
+                    normalized=None,
+                    present=False,
+                    note="unknown_doc_type",
+                )
+            ],
         )
         return []
 
     if collection.doc_type_missing:
+        # Placeholder ref for missing document type
         add(
             f"{description}: documents of type {_doc_label(ref.doc_type)} are missing in the batch",
-            [],
+            [
+                _build_ref(
+                    doc_id=uuid.UUID(int=0),
+                    field_key=ref.field_key,
+                    value=None,
+                    normalized=None,
+                    present=False,
+                    note="missing_doc_type",
+                )
+            ],
         )
 
     for doc in collection.missing_docs:
         add(
             f"{description}: field {context.field_label(ref)} missing in {doc.filename} ({ValidationContext.doc_label(doc)})",
-            [{"doc_id": doc.id, "field_key": ref.field_key}],
+            [
+                _build_ref(
+                    doc_id=doc.id,
+                    field_key=ref.field_key,
+                    value=None,
+                    normalized=None,
+                    present=False,
+                    note="missing_field",
+                )
+            ],
         )
 
     for record in collection.invalid_records:
         add(
             f"{description}: field {context.field_label(ref)} in {record.document.filename} ({ValidationContext.doc_label(record.document)}) has unparseable value '{record.field.value}'",
-            [{"doc_id": record.document.id, "field_key": record.field.field_key, "value": record.field.value}],
+            [
+                _build_ref(
+                    doc_id=record.document.id,
+                    field_key=record.field.field_key,
+                    value=record.field.value,
+                    normalized=None,
+                    present=True,
+                    page=getattr(record.field, "page", None),
+                    bbox=getattr(record.field, "bbox", None),
+                    token_refs=getattr(record.field, "token_refs", None),
+                    note="invalid_value",
+                )
+            ],
         )
 
     return collection.records
@@ -887,201 +1120,311 @@ def _format_value(value: Any) -> str:
 
 
 def _apply_date_rules(context: ValidationContext, validations: List[ValidationMessage]) -> None:
+    def _gather_refs(ref: FieldRef) -> Tuple[List[Dict[str, Any]], List[FieldValueRecord], bool]:
+        coll = context.collect(ref, _normalize_date)
+        refs: List[Dict[str, Any]] = []
+        has_valid = False
+        if coll.unknown_doc_type:
+            refs.append(_build_ref(doc_id=uuid.UUID(int=0), field_key=ref.field_key, present=False, note="unknown_doc_type"))
+        if coll.doc_type_missing:
+            refs.append(_build_ref(doc_id=uuid.UUID(int=0), field_key=ref.field_key, present=False, note="missing_doc_type"))
+        for doc in coll.missing_docs:
+            refs.append(_build_ref(doc_id=doc.id, field_key=ref.field_key, present=False, note="missing_field"))
+        for rec in coll.records:
+            refs.append(_ref_from_field(rec.document, rec.field, normalized=rec.normalized))
+            has_valid = True
+        for inv in coll.invalid_records:
+            refs.append(
+                _build_ref(
+                    doc_id=inv.document.id,
+                    field_key=inv.field.field_key,
+                    value=inv.field.value,
+                    normalized=None,
+                    present=True,
+                    page=getattr(inv.field, "page", None),
+                    bbox=getattr(inv.field, "bbox", None),
+                    token_refs=getattr(inv.field, "token_refs", None),
+                    note="invalid_value",
+                )
+            )
+        return refs, coll.records, has_valid
+
+    def _dedupe(refs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        key_map: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+        for r in refs:
+            did = str(r.get("doc_id"))
+            fkey = r.get("field_key") or ""
+            note = r.get("note") or ""
+            k = (did, fkey, note)
+            prev = key_map.get(k)
+            if prev is None:
+                key_map[k] = r
+            else:
+                # prefer present=True over present=False
+                if prev.get("present") is False and r.get("present") is True:
+                    key_map[k] = r
+        return list(key_map.values())
+
     for rule in DATE_RULES:
-        anchor_records = _collect_records_for_rule(
-            context,
-            rule.anchor,
-            "date",
-            rule.rule_id,
-            rule.description,
-            validations,
-        )
-        if not anchor_records:
+        anchor_refs, anchor_recs, anchor_valid = _gather_refs(rule.anchor)
+        all_refs: List[Dict[str, Any]] = list(anchor_refs)
+        any_other_valid = False
+        comparators: List[Tuple[DateComparison, List[FieldValueRecord]]] = []
+        for comparison in rule.comparisons:
+            other_refs, other_recs, other_valid = _gather_refs(comparison.other)
+            all_refs.extend(other_refs)
+            any_other_valid = any_other_valid or other_valid
+            comparators.append((comparison, other_recs))
+
+        merged_refs = _dedupe(all_refs)
+
+        if not anchor_valid or not any_other_valid:
+            validations.append(
+                ValidationMessage(
+                    rule_id=f"{rule.rule_id}_availability",
+                    severity=ValidationSeverity.WARN,
+                    message=f"{rule.description}: missing or invalid inputs for date comparison",
+                    refs=merged_refs,
+                )
+            )
             continue
 
-        for comparison in rule.comparisons:
-            other_records = _collect_records_for_rule(
-                context,
-                comparison.other,
-                "date",
-                rule.rule_id,
-                rule.description,
-                validations,
-            )
-            if not other_records:
-                continue
-
+        # Compare all valid pairs and collect mismatches
+        op_results: List[Dict[str, Any]] = []
+        for comparison, other_recs in comparators:
             op_func = _OPERATOR_FUNC.get(comparison.operator)
             op_text = _OPERATOR_TEXT.get(comparison.operator, comparison.operator)
             if op_func is None:
                 continue
-
             note_suffix = f" ({comparison.note})" if comparison.note else ""
-
-            for anchor in anchor_records:
-                for other in other_records:
-                    if not op_func(anchor.normalized, other.normalized):
-                        message = (
-                            f"{rule.description}: {context.field_label(rule.anchor)} in {anchor.document.filename}"
-                            f" ({ValidationContext.doc_label(anchor.document)}) = '{_format_value(anchor.field.value)}' must be {op_text}"
-                            f" {context.field_label(comparison.other)} in {other.document.filename}"
-                            f" ({ValidationContext.doc_label(other.document)}) = '{_format_value(other.field.value)}'{note_suffix}"
-                        )
-                        refs = [
+            for a in anchor_recs:
+                for b in other_recs:
+                    if not op_func(a.normalized, b.normalized):
+                        op_results.append(
                             {
-                                "doc_id": anchor.document.id,
-                                "field_key": anchor.field.field_key,
-                                "value": anchor.field.value,
-                            },
-                            {
-                                "doc_id": other.document.id,
-                                "field_key": other.field.field_key,
-                                "value": other.field.value,
-                            },
-                        ]
-                        validations.append(
-                            ValidationMessage(
-                                rule_id=rule.rule_id,
-                                severity=rule.severity,
-                                message=message,
-                                refs=refs,
-                            )
+                                "message": (
+                                    f"{rule.description}: {context.field_label(rule.anchor)} in {a.document.filename}"
+                                    f" ({ValidationContext.doc_label(a.document)}) = '{_format_value(a.field.value)}' must be {op_text}"
+                                    f" {context.field_label(comparison.other)} in {b.document.filename}"
+                                    f" ({ValidationContext.doc_label(b.document)}) = '{_format_value(b.field.value)}'{note_suffix}"
+                                )
+                            }
                         )
+        if op_results:
+            # Emit single violation block with merged refs; use first message for readability
+            validations.append(
+                ValidationMessage(
+                    rule_id=rule.rule_id,
+                    severity=rule.severity,
+                    message=op_results[0]["message"],
+                    refs=merged_refs,
+                )
+            )
 
 
 def _apply_anchored_equality_rules(context: ValidationContext, validations: List[ValidationMessage]) -> None:
-    for rule in ANCHORED_EQUALITY_RULES:
-        anchor_records = _collect_records_for_rule(
-            context,
-            rule.anchor,
-            rule.value_kind,
-            rule.rule_id,
-            rule.description,
-            validations,
-        )
-        if not anchor_records:
-            continue
+    def _norm_kind(kind: str):
+        if kind == "date":
+            return _normalize_date
+        return lambda v: _normalize_value(v, kind)
 
-        canonical = anchor_records[0].normalized
-        if canonical is None:
-            continue
-
-        for anchor in anchor_records[1:]:
-            if anchor.normalized != canonical:
-                message = (
-                    f"{rule.description}: anchor documents disagree on value of {context.field_label(rule.anchor)}"
-                    f" ({anchor_records[0].document.filename} = '{_format_value(anchor_records[0].field.value)}',"
-                    f" {anchor.document.filename} = '{_format_value(anchor.field.value)}')"
+    def _gather(ref: FieldRef, kind: str) -> Tuple[List[Dict[str, Any]], List[FieldValueRecord], bool]:
+        coll = context.collect(ref, _norm_kind(kind))
+        refs: List[Dict[str, Any]] = []
+        has_valid = False
+        if coll.unknown_doc_type:
+            refs.append(_build_ref(doc_id=uuid.UUID(int=0), field_key=ref.field_key, present=False, note="unknown_doc_type", doc_type=ref.doc_type))
+        if coll.doc_type_missing:
+            refs.append(_build_ref(doc_id=uuid.UUID(int=0), field_key=ref.field_key, present=False, note="missing_doc_type", doc_type=ref.doc_type))
+        for doc in coll.missing_docs:
+            refs.append(_build_ref(doc_id=doc.id, field_key=ref.field_key, present=False, note="missing_field", doc_type=ref.doc_type))
+        for rec in coll.records:
+            refs.append(_ref_from_field(rec.document, rec.field, normalized=rec.normalized))
+            has_valid = True
+        for inv in coll.invalid_records:
+            refs.append(
+                _build_ref(
+                    doc_id=inv.document.id,
+                    field_key=inv.field.field_key,
+                    value=inv.field.value,
+                    normalized=None,
+                    present=True,
+                    page=getattr(inv.field, "page", None),
+                    bbox=getattr(inv.field, "bbox", None),
+                    token_refs=getattr(inv.field, "token_refs", None),
+                    note="invalid_value",
+                    doc_type=ref.doc_type,
                 )
-                refs = [
-                    {
-                        "doc_id": anchor_records[0].document.id,
-                        "field_key": anchor_records[0].field.field_key,
-                        "value": anchor_records[0].field.value,
-                    },
-                    {
-                        "doc_id": anchor.document.id,
-                        "field_key": anchor.field.field_key,
-                        "value": anchor.field.value,
-                    },
-                ]
-                validations.append(
-                    ValidationMessage(
-                        rule_id=rule.rule_id,
-                        severity=rule.severity,
-                        message=message,
-                        refs=refs,
-                    )
-                )
-
-        for target in rule.targets:
-            target_records = _collect_records_for_rule(
-                context,
-                target,
-                rule.value_kind,
-                rule.rule_id,
-                rule.description,
-                validations,
             )
-            for record in target_records:
-                if record.normalized != canonical:
-                    message = (
-                        f"{rule.description}: {context.field_label(target)} in {record.document.filename}"
-                        f" ({ValidationContext.doc_label(record.document)}) = '{_format_value(record.field.value)}'"
-                        f" does not match anchor value '{_format_value(anchor_records[0].field.value)}'"
-                    )
-                    refs = [
-                        {
-                            "doc_id": anchor_records[0].document.id,
-                            "field_key": anchor_records[0].field.field_key,
-                            "value": anchor_records[0].field.value,
-                        },
-                        {
-                            "doc_id": record.document.id,
-                            "field_key": record.field.field_key,
-                            "value": record.field.value,
-                        },
-                    ]
-                    validations.append(
-                        ValidationMessage(
-                            rule_id=rule.rule_id,
-                            severity=rule.severity,
-                            message=message,
-                            refs=refs,
-                        )
-                    )
+        return refs, coll.records, has_valid
+
+    def _dedupe(refs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        key_map: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
+        for r in refs:
+            did = str(r.get("doc_id"))
+            fkey = r.get("field_key") or ""
+            note = r.get("note") or ""
+            dtype = r.get("doc_type") or ""
+            k = (did, fkey, note, dtype)
+            prev = key_map.get(k)
+            if prev is None:
+                key_map[k] = r
+            else:
+                if prev.get("present") is False and r.get("present") is True:
+                    key_map[k] = r
+        return list(key_map.values())
+
+    for rule in ANCHORED_EQUALITY_RULES:
+        all_refs: List[Dict[str, Any]] = []
+        anchor_refs, anchor_recs, anchor_valid = _gather(rule.anchor, rule.value_kind)
+        all_refs.extend(anchor_refs)
+        targets_data: List[Tuple[FieldRef, List[FieldValueRecord], bool]] = []
+        any_target_valid = False
+        for t in rule.targets:
+            rrefs, rrecs, rvalid = _gather(t, rule.value_kind)
+            all_refs.extend(rrefs)
+            targets_data.append((t, rrecs, rvalid))
+            any_target_valid = any_target_valid or rvalid
+
+        merged_refs = _dedupe(all_refs)
+
+        if not anchor_valid or not any_target_valid:
+            validations.append(
+                ValidationMessage(
+                    rule_id=f"{rule.rule_id}_availability",
+                    severity=ValidationSeverity.WARN,
+                    message=f"{rule.description}: missing or invalid inputs for comparison",
+                    refs=merged_refs,
+                )
+            )
+            continue
+
+        # Determine canonical from first anchor record
+        canonical = anchor_recs[0].normalized
+        if canonical is None:
+            validations.append(
+                ValidationMessage(
+                    rule_id=f"{rule.rule_id}_availability",
+                    severity=ValidationSeverity.WARN,
+                    message=f"{rule.description}: missing or invalid anchor value",
+                    refs=merged_refs,
+                )
+            )
+            continue
+
+        mismatch_found = False
+        # Check disagreement between anchors
+        for a in anchor_recs[1:]:
+            if a.normalized != canonical:
+                mismatch_found = True
+                break
+        # Check targets
+        if not mismatch_found:
+            for t, recs, _ in targets_data:
+                for rec in recs:
+                    if rec.normalized != canonical:
+                        mismatch_found = True
+                        break
+                if mismatch_found:
+                    break
+
+        if mismatch_found:
+            validations.append(
+                ValidationMessage(
+                    rule_id=rule.rule_id,
+                    severity=rule.severity,
+                    message=f"{rule.description}: values are not consistent with anchor",
+                    refs=merged_refs,
+                )
+            )
 
 
 def _apply_group_equality_rules(context: ValidationContext, validations: List[ValidationMessage]) -> None:
-    for rule in GROUP_EQUALITY_RULES:
-        all_records: List[Tuple[FieldRef, FieldValueRecord]] = []
-        for ref in rule.refs:
-            records = _collect_records_for_rule(
-                context,
-                ref,
-                rule.value_kind,
-                rule.rule_id,
-                rule.description,
-                validations,
-            )
-            all_records.extend((ref, record) for record in records)
+    def _norm_kind(kind: str):
+        if kind == "date":
+            return _normalize_date
+        return lambda v: _normalize_value(v, kind)
 
-        if len(all_records) <= 1:
-            continue
-
-        values_map: Dict[Any, List[Tuple[FieldRef, FieldValueRecord]]] = {}
-        for ref, record in all_records:
-            values_map.setdefault(record.normalized, []).append((ref, record))
-
-        if len(values_map) <= 1:
-            continue
-
-        parts = []
-        refs: List[Dict[str, object]] = []
-        for normalized_value, records in values_map.items():
-            doc_parts = []
-            for ref, record in records:
-                doc_parts.append(f"{record.document.filename} ({ValidationContext.doc_label(record.document)})")
-                refs.append(
-                    {
-                        "doc_id": record.document.id,
-                        "field_key": record.field.field_key,
-                        "value": record.field.value,
-                    }
+    def _gather(ref: FieldRef, kind: str) -> Tuple[List[Dict[str, Any]], List[FieldValueRecord], bool]:
+        coll = context.collect(ref, _norm_kind(kind))
+        refs: List[Dict[str, Any]] = []
+        has_valid = False
+        if coll.unknown_doc_type:
+            refs.append(_build_ref(doc_id=uuid.UUID(int=0), field_key=ref.field_key, present=False, note="unknown_doc_type", doc_type=ref.doc_type))
+        if coll.doc_type_missing:
+            refs.append(_build_ref(doc_id=uuid.UUID(int=0), field_key=ref.field_key, present=False, note="missing_doc_type", doc_type=ref.doc_type))
+        for doc in coll.missing_docs:
+            refs.append(_build_ref(doc_id=doc.id, field_key=ref.field_key, present=False, note="missing_field", doc_type=ref.doc_type))
+        for rec in coll.records:
+            refs.append(_ref_from_field(rec.document, rec.field, normalized=rec.normalized))
+            has_valid = True
+        for inv in coll.invalid_records:
+            refs.append(
+                _build_ref(
+                    doc_id=inv.document.id,
+                    field_key=inv.field.field_key,
+                    value=inv.field.value,
+                    normalized=None,
+                    present=True,
+                    page=getattr(inv.field, "page", None),
+                    bbox=getattr(inv.field, "bbox", None),
+                    token_refs=getattr(inv.field, "token_refs", None),
+                    note="invalid_value",
+                    doc_type=ref.doc_type,
                 )
-            parts.append(
-                f"'{_format_value(records[0][1].field.value)}' in {', '.join(doc_parts)}"
             )
+        return refs, coll.records, has_valid
 
-        message = f"{rule.description}: values differ across documents: " + "; ".join(parts)
-        validations.append(
-            ValidationMessage(
-                rule_id=rule.rule_id,
-                severity=rule.severity,
-                message=message,
-                refs=refs,
+    def _dedupe(refs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        key_map: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
+        for r in refs:
+            did = str(r.get("doc_id"))
+            fkey = r.get("field_key") or ""
+            note = r.get("note") or ""
+            dtype = r.get("doc_type") or ""
+            k = (did, fkey, note, dtype)
+            prev = key_map.get(k)
+            if prev is None:
+                key_map[k] = r
+            else:
+                if prev.get("present") is False and r.get("present") is True:
+                    key_map[k] = r
+        return list(key_map.values())
+
+    for rule in GROUP_EQUALITY_RULES:
+        all_refs: List[Dict[str, Any]] = []
+        groups: Dict[Any, List[FieldValueRecord]] = {}
+        has_any_valid = False
+        for ref in rule.refs:
+            rrefs, rrecs, rvalid = _gather(ref, rule.value_kind)
+            all_refs.extend(rrefs)
+            if rvalid:
+                has_any_valid = True
+            for rec in rrecs:
+                groups.setdefault(rec.normalized, []).append(rec)
+
+        merged_refs = _dedupe(all_refs)
+
+        if not has_any_valid or len(groups) == 0:
+            validations.append(
+                ValidationMessage(
+                    rule_id=f"{rule.rule_id}_availability",
+                    severity=ValidationSeverity.WARN,
+                    message=f"{rule.description}: missing or invalid inputs for comparison",
+                    refs=merged_refs,
+                )
             )
-        )
+            continue
+
+        if len(groups) > 1:
+            validations.append(
+                ValidationMessage(
+                    rule_id=rule.rule_id,
+                    severity=rule.severity,
+                    message=f"{rule.description}: values are not equal across documents",
+                    refs=merged_refs,
+                )
+            )
 
 
 # --- Legacy helpers and validations (to be refactored into new rule engine) ---
@@ -1135,13 +1478,29 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
         doc_fields = fields_by_doc.get(document.id, {})
         for key, field_schema in schema.fields.items():
             field = doc_fields.get(key)
-            if field_schema.required and (field is None or not field.value):
+            if not field_schema.required:
+                continue
+            if field is None or (field.value in (None, "")):
+                note = "missing_required" if field is None else "empty_required"
+                refs = [
+                    _build_ref(
+                        doc_id=document.id,
+                        field_key=key,
+                        value=(field.value if field else None),
+                        normalized=None,
+                        present=bool(field),
+                        page=(getattr(field, "page", None) if field else None),
+                        bbox=(getattr(field, "bbox", None) if field else None),
+                        token_refs=(getattr(field, "token_refs", None) if field else None),
+                        note=note,
+                    )
+                ]
                 validations.append(
                     ValidationMessage(
                         rule_id="required_fields",
                         severity=ValidationSeverity.ERROR,
                         message=f"Missing required field {key} in {document.filename}",
-                        refs=[{"doc_id": document.id, "field_key": key}],
+                        refs=refs,
                     )
                 )
 
