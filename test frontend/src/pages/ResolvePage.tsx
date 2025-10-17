@@ -23,6 +23,7 @@ import {
   updateField,
 } from "../lib/api";
 import { cn, formatDateTime, mapBatchStatus } from "../lib/utils";
+import { formatPacketTimestamp } from "../lib/packet";
 import type { BatchDetails, DocumentPayload, FieldState } from "../types/api";
 
 type DraftState = Record<string, string>;
@@ -458,7 +459,7 @@ function ResolvePage() {
     <div className="space-y-8">
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Документ — исправление ошибок</h1>
-        <p className="text-muted-foreground">Пакет {batch.id.slice(0, 8)} · Статус пакета:</p>
+        <p className="text-muted-foreground">Пакет {formatPacketTimestamp(batch.created_at)} · Статус пакета:</p>
         <div className="mt-1">
           <StatusPill status={mapBatchStatus(batch.status)} />
         </div>

@@ -12,6 +12,7 @@ import { Textarea } from "../components/ui/textarea";
 import { useHistoryContext } from "../contexts/history-context";
 import { confirmField, fetchBatchDetails, updateField } from "../lib/api";
 import { cn, formatDateTime, mapBatchStatus, statusLabel } from "../lib/utils";
+import { formatPacketTimestamp } from "../lib/packet";
 import type { BatchDetails, DocumentPayload, FieldState } from "../types/api";
 
 type ValidationRef = {
@@ -193,7 +194,7 @@ function SummaryTablePage() {
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">Итоговая таблица</h1>
           <p className="text-muted-foreground">
-            Пакет {batch.id.slice(0, 8)} · Статус: {statusLabel(mapBatchStatus(batch.status))} · Обновлён{" "}
+            Пакет {formatPacketTimestamp(batch.created_at)} · Статус: {statusLabel(mapBatchStatus(batch.status))} · Обновлён{" "}
             {formatDateTime(batch.updated_at)}
           </p>
         </div>

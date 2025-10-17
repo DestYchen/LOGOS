@@ -1,9 +1,9 @@
-
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useHistoryContext } from "../contexts/history-context";
-import { deriveHistoryRoute, formatShortDate, mapBatchStatus, statusLabel } from "../lib/utils";
+import { deriveHistoryRoute, mapBatchStatus } from "../lib/utils";
+import { formatPacketTimestamp } from "../lib/packet";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
@@ -11,7 +11,7 @@ import { Spinner } from "../components/ui/spinner";
 import { StatusPill } from "../components/status/StatusPill";
 
 function HistoryPage() {
-  const { batches, loading, error, refresh, removeBatch } = useHistoryContext();
+  const { batches, loading, error, removeBatch } = useHistoryContext();
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [menuId, setMenuId] = useState<string | null>(null);
 
@@ -35,14 +35,11 @@ function HistoryPage() {
 
   return (
     <div className="space-y-8">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+      <header className="flex flex-wrap items-start gap-4">
         <div>
           <h1 className="text-2xl font-semibold">История</h1>
           <p className="text-muted-foreground">Свежие пакеты показываются сверху.</p>
         </div>
-        <Button variant="secondary" onClick={() => refresh()} disabled={loading}>
-          Обновить
-        </Button>
       </header>
 
       {loading ? (
@@ -69,15 +66,12 @@ function HistoryPage() {
             return (
               <div key={item.id} className="relative flex flex-wrap items-center justify-between gap-4 py-3">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                  <StatusPill status={mapBatchStatus(item.status)} />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <Link to={route} className="block truncate text-sm font-medium text-primary hover:underline">
-                      Пакет {item.id}
+                      Пакет {formatPacketTimestamp(item.created_at)}
                     </Link>
-                    <p className="text-xs text-muted-foreground">
-                      Создан {formatShortDate(item.created_at)} · Статус: {statusLabel(mapBatchStatus(item.status))}
-                    </p>
                   </div>
+                  <StatusPill status={mapBatchStatus(item.status)} className="shrink-0" />
                 </div>
                 <div className="relative">
                   <Button

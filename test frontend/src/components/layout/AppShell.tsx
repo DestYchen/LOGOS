@@ -4,6 +4,7 @@ import { Link, useLocation } from "react-router-dom";
 import logomark from "../../assets/logo.png";
 import { useHistoryContext } from "../../contexts/history-context";
 import { cn, deriveHistoryRoute, formatShortDate, mapBatchStatus, type StatusKey } from "../../lib/utils";
+import { formatPacketTimestamp } from "../../lib/packet";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { StatusPill } from "../status/StatusPill";
@@ -91,7 +92,7 @@ function AppShell({ children }: AppShellProps) {
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
                             <p className="truncate text-sm font-medium" title={batch.id}>
-                              Пакет {batch.id.slice(0, 8)}
+                              Пакет {formatPacketTimestamp(batch.created_at)}
                             </p>
                             <p className="truncate text-xs text-muted-foreground">{formatShortDate(batch.created_at)}</p>
                           </div>
