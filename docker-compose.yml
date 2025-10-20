@@ -39,7 +39,7 @@ services:
     environment:
       SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
       SUPPLYHUB_REDIS_URL: redis://redis:6379/0
-      SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:9002/v1/fill
+      SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:8002/v1/fill
       SUPPLYHUB_CELERY_BROKER_URL: redis://redis:6379/1
       SUPPLYHUB_CELERY_RESULT_BACKEND: redis://redis:6379/2
       SUPPLYHUB_BASE_DIR: /data/storage
@@ -77,7 +77,7 @@ services:
         condition: service_healthy
     environment:
       SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
-      SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:9002/v1/fill
+      SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:8002/v1/fill
       SUPPLYHUB_REDIS_URL: redis://redis:6379/0
       SUPPLYHUB_CELERY_BROKER_URL: redis://redis:6379/1
       SUPPLYHUB_CELERY_RESULT_BACKEND: redis://redis:6379/2

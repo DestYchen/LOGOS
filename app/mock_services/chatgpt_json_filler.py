@@ -51,10 +51,10 @@ FILLER_PROMPT = os.getenv(
         "6) For non-leaf sections (nested objects), ONLY include children that you confidently fill; otherwise omit the whole branch."
         "7) The JSON MUST be strictly valid and parseable. No trailing text."
 
-        "BE CONCISE: output only the JSON object that satisfies the contract above."
+        "BE CONCISE: output only the JSON object that satisfies the rules above."
     ),
 )
-OPENAI_MODEL = "qwen/qwen3-32b"
+OPENAI_MODEL = "openai/gpt-oss-20b"
 
 client: Optional[OpenAI] = None
 logger = logging.getLogger(__name__)
@@ -249,7 +249,7 @@ app = FastAPI(title="ChatGPT JSON Filler Adapter")
 def init_client() -> None:
     global client
     if client is None:
-        api_key = HARDCODED_OPENAI_API_KEY.strip()
+        api_key = "dssdds"
         if not api_key:
             raise RuntimeError("OPENROUTER_API_KEY is not set and HARDCODED_OPENROUTER_API_KEY is empty")
         
@@ -306,7 +306,7 @@ async def fill(request: FillerRequest) -> FillerResponse:
         "- when present, a product_template object that shows the structure for items inside the 'products' map."
 
         "Rules:"
-        "1. Only fill the fields present in the template. Leave the others empty."
+        "1. Only fill the fields present in the template. Leave the others empty. Clean data from '\n' or other different signs/"
         "2. For every field you fill:"
         "- value - copy the exact text from the document (no normaliztion or guessing);"
         "- bbox - use the bounding box from the same token that supplied the value (if the value is composed from several tokens, you may provide multiple bounding boxes or leave it empty if coordinates are unknown);"

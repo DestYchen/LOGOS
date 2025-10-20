@@ -6,7 +6,7 @@ import { FileTile, type FileEntry } from "../components/upload/FileTile";
 import { UploadIllustration } from "../components/upload/file-assets";
 import { useHistoryContext } from "../contexts/history-context";
 import { uploadDocuments } from "../lib/api";
-import { cn } from "../lib/utils";
+import { cn, safeRandomId } from "../lib/utils";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
 import { Spinner } from "../components/ui/spinner";
@@ -71,7 +71,7 @@ function NewPacketPage() {
       files.forEach((file) => {
         const issues = validateFile(file, next);
         next.push({
-          id: `${file.name}-${file.size}-${crypto.randomUUID()}`,
+          id: `${file.name}-${file.size}-${safeRandomId()}`,
           file,
           error: issues.length ? issues.join(", ") : undefined,
         });

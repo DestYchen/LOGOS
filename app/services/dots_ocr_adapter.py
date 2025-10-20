@@ -6,6 +6,7 @@ import importlib.util
 import logging
 import math
 import os
+import pickle
 import sys
 import tempfile
 import uuid
@@ -14,6 +15,8 @@ from pathlib import Path
 from time import perf_counter
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from types import ModuleType
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +104,186 @@ try:
     DEFAULT_TEXT_REFINE_MAX_TOKENS = int(os.getenv("DOTS_OCR_VLLM_TEXT_MAX_TOKENS", "768"))
 except Exception:
     DEFAULT_TEXT_REFINE_MAX_TOKENS = 768
+
+
+# ML Confidence Model Globals
+_ML_MODEL = None
+_ML_SCALER = None
+_ML_FEATURE_NAMES = None
+_ML_LOADED = False
+
+
+def _load_ml_model():
+    """Load ML confidence model from assets folder."""
+    global _ML_MODEL, _ML_SCALER, _ML_FEATURE_NAMES, _ML_LOADED
+    
+    if _ML_LOADED:
+        return _ML_MODEL is not None
+    
+    try:
+        # Assets folder at app/assets/ml_confidence/
+        assets_dir = Path(__file__).parent.parent / "assets" / "ml_confidence"
+        
+        model_path = assets_dir / "best_model.pkl"
+        scaler_path = assets_dir / "scaler.pkl"
+        feature_names_path = assets_dir / "feature_names.txt"
+        
+        if not model_path.exists():
+            logger.info("ML confidence model not found at %s, using raw logprobs", model_path)
+            _ML_LOADED = True
+            return False
+        
+        with open(model_path, 'rb') as f:
+            _ML_MODEL = pickle.load(f)
+        
+        with open(scaler_path, 'rb') as f:
+            _ML_SCALER = pickle.load(f)
+        
+        with open(feature_names_path, 'r') as f:
+            _ML_FEATURE_NAMES = [line.strip() for line in f]
+        
+        _ML_LOADED = True
+        logger.info("ML confidence model loaded successfully: %s features", len(_ML_FEATURE_NAMES))
+        return True
+        
+    except Exception as e:
+        logger.warning("Failed to load ML confidence model: %s", e)
+        _ML_LOADED = True
+        return False
+
+
+def _compute_ml_features(
+    token_texts: List[str],
+    max_probs: List[float],
+    entropies: List[float],
+    top5_masses: List[float],
+    bbox_width: int,
+    bbox_height: int
+) -> Optional[Dict]:
+    """Compute 48 ML features from token details."""
+    
+    if not max_probs:
+        return None
+    
+    n_tokens = len(max_probs)
+    
+    # Probability stats
+    prob_mean = np.mean(max_probs)
+    prob_median = np.median(max_probs)
+    prob_std = np.std(max_probs)
+    prob_min = np.min(max_probs)
+    prob_max = np.max(max_probs)
+    prob_range = prob_max - prob_min
+    prob_p10 = np.percentile(max_probs, 10)
+    prob_p25 = np.percentile(max_probs, 25)
+    prob_p75 = np.percentile(max_probs, 75)
+    prob_p90 = np.percentile(max_probs, 90)
+    prob_geom = np.exp(np.mean(np.log(np.maximum(max_probs, 1e-10))))
+    prob_cv = prob_std / prob_mean if prob_mean > 0 else 0
+    avg_logprob = np.mean(np.log(np.maximum(max_probs, 1e-10)))
+    
+    # Entropy stats
+    ent_mean = np.mean(entropies) if entropies else 0
+    ent_std = np.std(entropies) if entropies else 0
+    ent_max = np.max(entropies) if entropies else 0
+    
+    # Top5 mass
+    top5_mean = np.mean(top5_masses) if top5_masses else 0
+    top5_min = np.min(top5_masses) if top5_masses else 0
+    
+    # Low confidence patterns
+    pct_below_80 = sum(1 for p in max_probs if p < 0.8) / n_tokens if n_tokens > 0 else 0
+    pct_below_90 = sum(1 for p in max_probs if p < 0.9) / n_tokens if n_tokens > 0 else 0
+    pct_below_95 = sum(1 for p in max_probs if p < 0.95) / n_tokens if n_tokens > 0 else 0
+    
+    def longest_streak(probs, threshold):
+        max_streak = current_streak = 0
+        for p in probs:
+            if p < threshold:
+                current_streak += 1
+                max_streak = max(max_streak, current_streak)
+            else:
+                current_streak = 0
+        return max_streak
+    
+    max_streak_90 = longest_streak(max_probs, 0.9)
+    max_streak_95 = longest_streak(max_probs, 0.95)
+    
+    # Position-based
+    first_token_conf = max_probs[0] if len(max_probs) > 0 else 0
+    last_token_conf = max_probs[-1] if len(max_probs) > 0 else 0
+    first_3_avg = np.mean(max_probs[:3]) if len(max_probs) >= 3 else first_token_conf
+    last_3_avg = np.mean(max_probs[-3:]) if len(max_probs) >= 3 else last_token_conf
+    
+    # Token characteristics
+    token_lengths = [len(t) for t in token_texts]
+    avg_token_len = np.mean(token_lengths) if token_lengths else 0
+    max_token_len = max(token_lengths) if token_lengths else 0
+    
+    # Character types
+    all_text = ''.join(token_texts)
+    n_chars = len(all_text)
+    n_digits = sum(1 for c in all_text if c.isdigit())
+    n_alpha = sum(1 for c in all_text if c.isalpha())
+    n_special = sum(1 for c in all_text if not c.isalnum() and not c.isspace())
+    
+    pct_digits = n_digits / n_chars if n_chars > 0 else 0
+    pct_alpha = n_alpha / n_chars if n_chars > 0 else 0
+    pct_special = n_special / n_chars if n_chars > 0 else 0
+    
+    recognized_len = n_chars
+    recognized_words = n_tokens
+    
+    # Distribution shape
+    mid = len(max_probs) // 2
+    if mid > 0:
+        half_diff = abs(np.mean(max_probs[:mid]) - np.mean(max_probs[mid:]))
+    else:
+        half_diff = 0
+    
+    if len(max_probs) > 1:
+        x = np.arange(len(max_probs))
+        slope = np.polyfit(x, max_probs, 1)[0]
+    else:
+        slope = 0
+    
+    if prob_std > 0:
+        skewness = np.mean(((max_probs - prob_mean) / prob_std) ** 3)
+        kurtosis = np.mean(((max_probs - prob_mean) / prob_std) ** 4) - 3
+    else:
+        skewness = kurtosis = 0
+    
+    # Image metadata
+    aspect_ratio = bbox_width / bbox_height if bbox_height > 0 else 0
+    pixel_area = bbox_width * bbox_height
+    char_density = n_chars / pixel_area if pixel_area > 0 else 0
+    
+    # Synthetic features
+    uncertainty_score = (1 - prob_mean) * (ent_mean + 1)
+    instability_score = prob_cv * (max_streak_90 / n_tokens if n_tokens > 0 else 0)
+    size_conf_ratio = bbox_width * prob_mean
+    
+    return {
+        'n_tokens': n_tokens, 'n_chars': n_chars,
+        'prob_mean': prob_mean, 'prob_median': prob_median, 'prob_std': prob_std,
+        'prob_min': prob_min, 'prob_max': prob_max, 'prob_range': prob_range,
+        'prob_p10': prob_p10, 'prob_p25': prob_p25, 'prob_p75': prob_p75, 'prob_p90': prob_p90,
+        'prob_geom': prob_geom, 'prob_cv': prob_cv, 'avg_logprob': avg_logprob,
+        'ent_mean': ent_mean, 'ent_std': ent_std, 'ent_max': ent_max,
+        'top5_mean': top5_mean, 'top5_min': top5_min,
+        'pct_below_80': pct_below_80, 'pct_below_90': pct_below_90, 'pct_below_95': pct_below_95,
+        'max_streak_90': max_streak_90, 'max_streak_95': max_streak_95,
+        'first_token_conf': first_token_conf, 'last_token_conf': last_token_conf,
+        'first_3_avg': first_3_avg, 'last_3_avg': last_3_avg,
+        'avg_token_len': avg_token_len, 'max_token_len': max_token_len,
+        'pct_digits': pct_digits, 'pct_alpha': pct_alpha, 'pct_special': pct_special,
+        'recognized_len': recognized_len, 'recognized_words': recognized_words,
+        'half_diff': half_diff, 'slope': slope, 'skewness': skewness, 'kurtosis': kurtosis,
+        'img_width': bbox_width, 'img_height': bbox_height, 'font_size': 0,
+        'aspect_ratio': aspect_ratio, 'char_density': char_density,
+        'uncertainty_score': uncertainty_score, 'instability_score': instability_score,
+        'size_conf_ratio': size_conf_ratio,
+    }
 
 
 class DotsOCRError(RuntimeError):
@@ -589,6 +772,7 @@ class DotsOCRAdapter:
         prompt: str,
         max_new_tokens: Optional[int] = None,
     ) -> Tuple[str, List[float]]:
+        """Enhanced to capture entropy and top5_mass for ML confidence."""
         assert self._vllm_base is not None
 
         if self._vllm_client is None:
@@ -622,24 +806,67 @@ class DotsOCRAdapter:
             "temperature": 0.0,
             "top_p": 1.0,
             "logprobs": True,
-            "top_logprobs": 1,
+            "top_logprobs": 5,  # Changed from 1 to 5 for entropy calculation
             "max_tokens": max_new_tokens or DEFAULT_MAX_COMPLETION_TOKENS,
         }
 
         resp = self._vllm_client.chat.completions.create(**params)
         text = resp.choices[0].message.content or ""
+        
+        # Enhanced confidence extraction
         token_confidences: List[float] = []
+        token_entropies: List[float] = []
+        token_top5_masses: List[float] = []
+        token_texts: List[str] = []
 
         try:
             logprobs_data = resp.choices[0].logprobs
             if logprobs_data and logprobs_data.content:
                 for token_data in logprobs_data.content:
+                    # Get token text
+                    token_texts.append(getattr(token_data, 'token', ''))
+                    
+                    # Max probability
                     logprob = token_data.logprob
                     if logprob is not None:
-                        prob = math.exp(float(logprob))
-                        token_confidences.append(max(0.0, min(1.0, prob)))
+                        max_prob = math.exp(float(logprob))
+                        token_confidences.append(max(0.0, min(1.0, max_prob)))
+                    else:
+                        token_confidences.append(0.5)
+                        token_entropies.append(1.0)
+                        token_top5_masses.append(0.5)
+                        continue
+                    
+                    # Entropy and top-5 mass
+                    top_logprobs = getattr(token_data, 'top_logprobs', [])
+                    if top_logprobs:
+                        probs = [math.exp(float(lp.logprob)) for lp in top_logprobs]
+                        probs = [max(0.0, min(1.0, p)) for p in probs]
+                        
+                        # Normalize
+                        total = sum(probs)
+                        if total > 0:
+                            probs = [p/total for p in probs]
+                        
+                        # Entropy: -sum(p * log(p))
+                        entropy = -sum(p * math.log(p + 1e-10) for p in probs if p > 0)
+                        token_entropies.append(entropy)
+                        
+                        # Top-5 mass
+                        token_top5_masses.append(sum(probs))
+                    else:
+                        token_entropies.append(1.0)
+                        token_top5_masses.append(token_confidences[-1])
         except (AttributeError, TypeError):
-            token_confidences = []
+            pass
+        
+        # Store enhanced metrics for ML confidence computation
+        self._last_token_details = {
+            'tokens': token_texts,
+            'max_probs': token_confidences,
+            'entropies': token_entropies,
+            'top5_masses': token_top5_masses,
+        }
 
         logger.debug(
             "vLLM generated %s tokens, conf: mean=%.3f, min=%.3f",
@@ -657,6 +884,14 @@ class DotsOCRAdapter:
         page_size: Tuple[int, int],
         token_confidences: List[float],
     ) -> List[Dict[str, Any]]:
+        """Convert cells to tokens with ML-based confidence."""
+        
+        # Try to load ML model on first use
+        if not _ML_LOADED:
+            _load_ml_model()
+        
+        use_ml = _ML_MODEL is not None
+        
         tokens: List[Dict[str, Any]] = []
         page_width, page_height = page_size
 
@@ -672,34 +907,82 @@ class DotsOCRAdapter:
                 min(page_height, int(round(y2))),
             ]
 
+        # Get enhanced token details if available
+        token_details = getattr(self, '_last_token_details', None)
+        all_token_texts = token_details.get('tokens', []) if token_details else []
+        all_max_probs = token_details.get('max_probs', []) if token_details else []
+        all_entropies = token_details.get('entropies', []) if token_details else []
+        all_top5_masses = token_details.get('top5_masses', []) if token_details else []
+        
         conf_iter = iter(token_confidences)
+        token_idx = 0
 
         for idx, cell in enumerate(cells):
             text = cell.get("text", "")
             if not text:
                 continue
+            
             try:
                 bbox = _normalize_bbox(cell.get("bbox", [0, 0, 0, 0]))
             except Exception:
                 bbox = [0, 0, 0, 0]
 
             try:
-                conf = float(next(conf_iter))
-            except StopIteration:
-                conf = 0.0
-            except Exception:
-                conf = 0.0
+                raw_conf = float(next(conf_iter))
+            except (StopIteration, Exception):
+                raw_conf = 0.0
+            
+            # Compute ML confidence if model is available
+            ml_conf = raw_conf  # Default to raw
+            
+            if use_ml and len(text) < 500:  # Skip very long fields (tables)
+                try:
+                    # Estimate token count for this field
+                    estimated_tokens = max(1, len(text.split()))
+                    
+                    # Get tokens for this field
+                    field_texts = all_token_texts[token_idx:token_idx + estimated_tokens]
+                    field_probs = all_max_probs[token_idx:token_idx + estimated_tokens]
+                    field_entropies = all_entropies[token_idx:token_idx + estimated_tokens] if all_entropies else []
+                    field_top5 = all_top5_masses[token_idx:token_idx + estimated_tokens] if all_top5_masses else []
+                    
+                    token_idx += estimated_tokens
+                    
+                    if field_probs:
+                        # Compute ML features
+                        bbox_width = bbox[2] - bbox[0]
+                        bbox_height = bbox[3] - bbox[1]
+                        
+                        features = _compute_ml_features(
+                            field_texts, field_probs, field_entropies, field_top5,
+                            bbox_width, bbox_height
+                        )
+                        
+                        if features:
+                            # Create feature vector
+                            feature_vector = [features.get(name, 0) for name in _ML_FEATURE_NAMES]
+                            X = np.array(feature_vector).reshape(1, -1)
+                            X_scaled = _ML_SCALER.transform(X)
+                            
+                            # Predict
+                            pred_proba = _ML_MODEL.predict_proba(X_scaled)[0]
+                            ml_conf = float(pred_proba[0])  # P(correct)
+                except Exception as e:
+                    logger.debug("ML confidence failed for field %s, using raw: %s", idx, e)
+                    ml_conf = raw_conf
 
             token = {
                 "id": f"p{page_idx}_t{idx}",
                 "text": text,
-                "conf": max(0.0, min(1.0, conf)),
+                "conf": round(max(0.0, min(1.0, ml_conf)), 2),  # Use ML confidence
                 "bbox": bbox,
                 "page": page_idx + 1,
             }
+            
             category = cell.get("category")
             if category:
                 token["category"] = category
+            
             tokens.append(token)
 
         return tokens
@@ -770,6 +1053,8 @@ async def get_dots_ocr_adapter() -> DotsOCRAdapter:
         if _ADAPTER_INSTANCE is None:
             _ADAPTER_INSTANCE = DotsOCRAdapter()
     return _ADAPTER_INSTANCE
+
+
 try:
     from app.core.config import get_settings  # lightweight config
 except Exception:  # pragma: no cover - adapter can run without settings during import
