@@ -1,0 +1,1426 @@
+{
+  "batch": {
+    "id": "4532097f-2870-4d85-bcd8-62f79098b898",
+    "status": "DONE",
+    "created_at": "2025-10-20T02:41:12.457728+00:00",
+    "updated_at": "2025-10-20T02:44:37.224461+00:00",
+    "documents": [
+      {
+        "id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+        "filename": "INV_019246_04092019.pdf",
+        "status": "FILLED_REVIEWED",
+        "doc_type": "INVOICE",
+        "filled_json": "{\n  \"fields\": {\n    \"invoice_no\": {\n      \"value\": \"019246\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"invoice_date\": {\n      \"value\": \"04 SEPTEMBER 2019\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_1.name_product\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_1.latin_name\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_1.size_product\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_1.unit_box\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_1.packages\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_1.price_per_unit\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_1.total_price\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_2.name_product\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_2.latin_name\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_2.size_product\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_2.unit_box\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_2.packages\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_2.price_per_unit\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"products.product_2.total_price\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"required\": true,\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"producer\": {\n      \"value\": \"SALMONES ANTARTICA S.A.\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"incoterms\": {\n      \"value\": \"CFR SAINT-PETERSBURG (INCOTERMS 2010)\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"terms_of_payment\": {\n      \"value\": \"100% PREPAYMENT\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"bank_details\": {\n      \"value\": \"MUFG BANK, LTD, NEW YORK BRANCH\\nADDRESS: 1251 AVENUE OF THE AMERICAS,\\nNEW YORK, NY 10020-1104, USA\\n\\nSWIFT CODE: BOTKUS33\\n\\nBENEFICIARY NAME: SALMONES ANTARTICA S.A.\\nBENEFICIARY ACCOUNT NUMBER: 0810-016-710\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"buyer\": {\n      \"value\": \"OOO \\\"MOREODOR\\\"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"seller\": {\n      \"value\": \"SALMONES ANTARTICA S.A.\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"proforma_no\": {\n      \"value\": \"SAMO082019\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"container_no\": {\n      \"value\": \"PONU4832160\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"commodity_code\": {\n      \"value\": \"0303 14 2000\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    },\n    \"vessel\": {\n      \"value\": \"\",\n      \"bbox\": [],\n      \"token_refs\": [],\n      \"source\": \"llm\",\n      \"confidence\": 1.0\n    }\n  }\n}",
+        "fields": [
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "invoice_no",
+            "value": "019246",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": true,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "invoice_date",
+            "value": "04 SEPTEMBER 2019",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": true,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "buyer",
+            "value": "OOO \"MOREODOR\"",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": true,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "seller",
+            "value": "SALMONES ANTARTICA S.A.",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": true,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "producer",
+            "value": "SALMONES ANTARTICA S.A.",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "incoterms",
+            "value": "CFR SAINT-PETERSBURG (INCOTERMS 2010)",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "terms_of_payment",
+            "value": "100% PREPAYMENT",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "bank_details",
+            "value": "MUFG BANK, LTD, NEW YORK BRANCH\nADDRESS: 1251 AVENUE OF THE AMERICAS,\nNEW YORK, NY 10020-1104, USA\n\nSWIFT CODE: BOTKUS33\n\nBENEFICIARY NAME: SALMONES ANTARTICA S.A.\nBENEFICIARY ACCOUNT NUMBER: 0810-016-710",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "proforma_no",
+            "value": "SAMO082019",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "container_no",
+            "value": "PONU4832160",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "commodity_code",
+            "value": "0303 14 2000",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "vessel",
+            "value": "1",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "total_price",
+            "value": "154.000,00",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": true,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": null,
+            "page": null,
+            "token_refs": null
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products",
+            "value": ".",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "ok",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": null,
+            "page": null,
+            "token_refs": null
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_1.name_product",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_1.latin_name",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_1.size_product",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_1.unit_box",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_1.packages",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_1.price_per_unit",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_1.total_price",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_2.name_product",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_2.latin_name",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_2.size_product",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_2.unit_box",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_2.packages",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_2.price_per_unit",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          },
+          {
+            "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+            "field_key": "products.product_2.total_price",
+            "value": "",
+            "confidence": 1,
+            "confidence_display": "1.00",
+            "required": false,
+            "reason": "extra",
+            "needs_confirmation": false,
+            "actionable": false,
+            "editable": false,
+            "bbox": [],
+            "page": null,
+            "token_refs": []
+          }
+        ],
+        "pending_count": 0,
+        "processing": false,
+        "products": {
+          "columns": [
+            {
+              "key": "name_product",
+              "label": "Product Name"
+            },
+            {
+              "key": "latin_name",
+              "label": "Latin Name"
+            },
+            {
+              "key": "size_product",
+              "label": "Product Size"
+            },
+            {
+              "key": "unit_box",
+              "label": "Units per Box"
+            },
+            {
+              "key": "packages",
+              "label": "Packages"
+            },
+            {
+              "key": "net_weight",
+              "label": "Net Weight"
+            },
+            {
+              "key": "gross_weight",
+              "label": "Gross Weight"
+            },
+            {
+              "key": "price_per_unit",
+              "label": "Price per Unit"
+            },
+            {
+              "key": "total_price",
+              "label": "Total Price"
+            }
+          ],
+          "rows": []
+        },
+        "previews": [
+          "/files/batches/4532097f-2870-4d85-bcd8-62f79098b898/preview/769465ca-e89f-4427-aa7c-d2a93327b8d8/page_1.png"
+        ]
+      }
+    ],
+    "documents_count": 1,
+    "doc_types": [
+      "UNKNOWN",
+      "EXPORT_DECLARATION",
+      "INVOICE",
+      "PACKING_LIST",
+      "BILL_OF_LANDING",
+      "PROFORMA",
+      "SPECIFICATION",
+      "PRICE_LIST_1",
+      "PRICE_LIST_2",
+      "QUALITY_CERTIFICATE",
+      "CERTIFICATE_OF_ORIGIN",
+      "VETERINARY_CERTIFICATE"
+    ],
+    "pending_total": 0,
+    "awaiting_processing": false,
+    "can_complete": true,
+    "processing_warnings": [],
+    "report": {
+      "available": true,
+      "documents": [
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "invoice_no",
+          "value": "019246",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "invoice_date",
+          "value": "04 SEPTEMBER 2019",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_1.name_product",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_1.latin_name",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_1.size_product",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_1.unit_box",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_1.packages",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_1.price_per_unit",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_1.total_price",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_2.name_product",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_2.latin_name",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_2.size_product",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_2.unit_box",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_2.packages",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_2.price_per_unit",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products.product_2.total_price",
+          "value": "",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "producer",
+          "value": "SALMONES ANTARTICA S.A.",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "incoterms",
+          "value": "CFR SAINT-PETERSBURG (INCOTERMS 2010)",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "terms_of_payment",
+          "value": "100% PREPAYMENT",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "bank_details",
+          "value": "MUFG BANK, LTD, NEW YORK BRANCH\nADDRESS: 1251 AVENUE OF THE AMERICAS,\nNEW YORK, NY 10020-1104, USA\n\nSWIFT CODE: BOTKUS33\n\nBENEFICIARY NAME: SALMONES ANTARTICA S.A.\nBENEFICIARY ACCOUNT NUMBER: 0810-016-710",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "buyer",
+          "value": "OOO \"MOREODOR\"",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "seller",
+          "value": "SALMONES ANTARTICA S.A.",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "proforma_no",
+          "value": "SAMO082019",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "container_no",
+          "value": "PONU4832160",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "commodity_code",
+          "value": "0303 14 2000",
+          "confidence": 1,
+          "source": "llm",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "vessel",
+          "value": "1",
+          "confidence": 1,
+          "source": "user",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "total_price",
+          "value": "154.000,00",
+          "confidence": 1,
+          "source": "user",
+          "page": null
+        },
+        {
+          "doc_id": "769465ca-e89f-4427-aa7c-d2a93327b8d8",
+          "filename": "INV_019246_04092019.pdf",
+          "doc_type": "INVOICE",
+          "status": "FILLED_REVIEWED",
+          "field_key": "products",
+          "value": ".",
+          "confidence": 1,
+          "source": "user",
+          "page": null
+        }
+      ],
+      "validations": [
+        {
+          "rule_id": "date_export_declaration_after_bol_availability",
+          "severity": "warn",
+          "message": "Дата экспортной декларации должна быть позже или равна даты коноссамента: missing or invalid inputs for date comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"export_declaration_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"bill_of_landing_date\"}]"
+        },
+        {
+          "rule_id": "date_specification_not_after_invoice_availability",
+          "severity": "warn",
+          "message": "Дата спецификации должна быть не позже, чем дата инвойса: missing or invalid inputs for date comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"specification_date\"}, {\"bbox\": [], \"note\": \"invalid_value\", \"value\": \"04 SEPTEMBER 2019\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"invoice_date\", \"token_refs\": []}]"
+        },
+        {
+          "rule_id": "date_certificate_origin_after_invoice_availability",
+          "severity": "warn",
+          "message": "Дата сертификата происхождения должна быть позже или равно дате инвойса: missing or invalid inputs for date comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"certificate_of_origin_date\"}, {\"bbox\": [], \"note\": \"invalid_value\", \"value\": \"04 SEPTEMBER 2019\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"invoice_date\", \"token_refs\": []}]"
+        },
+        {
+          "rule_id": "contract_no_alignment_availability",
+          "severity": "warn",
+          "message": "Номер контракта должен быть одинаковым среди проформы, инвойса и спецификации: missing or invalid inputs for comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PROFORMA\", \"field_key\": \"contract_no\"}, {\"note\": \"missing_field\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": false, \"doc_type\": \"INVOICE\", \"field_key\": \"contract_no\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"SPECIFICATION\", \"field_key\": \"contract_no\"}]"
+        },
+        {
+          "rule_id": "additional_agreements_alignment_availability",
+          "severity": "warn",
+          "message": "Дополнительное соглашение дожно быть одинаковым среди профомы, инвойса и спецификации: missing or invalid inputs for comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PROFORMA\", \"field_key\": \"additional_agreements\"}, {\"note\": \"missing_field\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": false, \"doc_type\": \"INVOICE\", \"field_key\": \"additional_agreements\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"SPECIFICATION\", \"field_key\": \"additional_agreements\"}]"
+        },
+        {
+          "rule_id": "country_of_origin_consistency_availability",
+          "severity": "warn",
+          "message": "Страна происхождения в ветеринарном сертификате должна совпадать с другими документами: missing or invalid inputs for comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"VETERINARY_CERTIFICATE\", \"field_key\": \"country_of_origin\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PROFORMA\", \"field_key\": \"country_of_origin\"}, {\"note\": \"missing_field\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": false, \"doc_type\": \"INVOICE\", \"field_key\": \"country_of_origin\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PACKING_LIST\", \"field_key\": \"country_of_origin\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"BILL_OF_LANDING\", \"field_key\": \"country_of_origin\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PRICE_LIST_1\", \"field_key\": \"country_of_origin\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PRICE_LIST_2\", \"field_key\": \"country_of_origin\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"QUALITY_CERTIFICATE\", \"field_key\": \"country_of_origin\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"CERTIFICATE_OF_ORIGIN\", \"field_key\": \"country_of_origin\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"EXPORT_DECLARATION\", \"field_key\": \"country_of_origin\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"SPECIFICATION\", \"field_key\": \"country_of_origin\"}]"
+        },
+        {
+          "rule_id": "producer_consistency_availability",
+          "severity": "warn",
+          "message": "Производитель в ветеринарном сертификате должен совпадать с другими документами: missing or invalid inputs for comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"VETERINARY_CERTIFICATE\", \"field_key\": \"producer\"}, {\"bbox\": [], \"value\": \"SALMONES ANTARTICA S.A.\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"producer\", \"normalized\": \"salmones antartica s.a.\", \"token_refs\": []}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PACKING_LIST\", \"field_key\": \"producer\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PRICE_LIST_1\", \"field_key\": \"producer\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PRICE_LIST_2\", \"field_key\": \"producer\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"QUALITY_CERTIFICATE\", \"field_key\": \"producer\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"CERTIFICATE_OF_ORIGIN\", \"field_key\": \"producer\"}]"
+        },
+        {
+          "rule_id": "date_proforma_earliest_availability",
+          "severity": "warn",
+          "message": "Дата проформы должна быть самой ранней среди связанных документов: missing or invalid inputs for date comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"proforma_date\"}, {\"bbox\": [], \"note\": \"invalid_value\", \"value\": \"04 SEPTEMBER 2019\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"invoice_date\", \"token_refs\": []}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"bill_of_landing_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"packing_list_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"price_list_1_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"price_list_2_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"quality_certificate_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"veterinary_certificate_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"export_declaration_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"specification_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"certificate_of_origin_date\"}]"
+        },
+        {
+          "rule_id": "date_invoice_not_too_early_availability",
+          "severity": "warn",
+          "message": "Дата инвойса не должна быть раньше даты отгрузки и даты сертификатов: missing or invalid inputs for date comparison",
+          "refs": "[{\"bbox\": [], \"note\": \"invalid_value\", \"value\": \"04 SEPTEMBER 2019\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"invoice_date\", \"token_refs\": []}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"bill_of_landing_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"packing_list_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"quality_certificate_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"veterinary_certificate_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"export_declaration_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"specification_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"certificate_of_origin_date\"}]"
+        },
+        {
+          "rule_id": "date_bill_of_landing_after_sources_availability",
+          "severity": "warn",
+          "message": "Дата коноссамента должна быть позже дат проформы, инвойса и прайс листов: missing or invalid inputs for date comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"bill_of_landing_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"proforma_date\"}, {\"bbox\": [], \"note\": \"invalid_value\", \"value\": \"04 SEPTEMBER 2019\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"invoice_date\", \"token_refs\": []}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"price_list_1_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"price_list_2_date\"}]"
+        },
+        {
+          "rule_id": "date_packing_list_before_ship_availability",
+          "severity": "warn",
+          "message": "Дата пакинг листа должна быть раньше чем дата коносамента и не позже чем дата инвойса: missing or invalid inputs for date comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"packing_list_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"bill_of_landing_date\"}, {\"bbox\": [], \"note\": \"invalid_value\", \"value\": \"04 SEPTEMBER 2019\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"invoice_date\", \"token_refs\": []}]"
+        },
+        {
+          "rule_id": "date_price_list_1_before_proforma_availability",
+          "severity": "warn",
+          "message": "Дата прайс листа 1 должна быть раньше или равна дате проформы: missing or invalid inputs for date comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"price_list_1_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"proforma_date\"}]"
+        },
+        {
+          "rule_id": "date_price_list_2_between_proforma_invoice_availability",
+          "severity": "warn",
+          "message": "Дата прайс листа 2 должна быть позже даты профомы и не позжедаты инвойса: missing or invalid inputs for date comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"price_list_2_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"proforma_date\"}, {\"bbox\": [], \"note\": \"invalid_value\", \"value\": \"04 SEPTEMBER 2019\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"invoice_date\", \"token_refs\": []}]"
+        },
+        {
+          "rule_id": "date_quality_certificate_after_bol_availability",
+          "severity": "warn",
+          "message": "Дата сертификатат качества должна быть позже или равна дате коноссамента: missing or invalid inputs for date comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"quality_certificate_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"bill_of_landing_date\"}]"
+        },
+        {
+          "rule_id": "date_veterinary_certificate_before_bol_availability",
+          "severity": "warn",
+          "message": "Дата ветеринарного сертификата должна быть раньше чем дата коноссамента: missing or invalid inputs for date comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"veterinary_certificate_date\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"field_key\": \"bill_of_landing_date\"}]"
+        },
+        {
+          "rule_id": "incoterms_consistency_availability",
+          "severity": "warn",
+          "message": "Условия доставки из инвойса должны совпадать с другими документами: missing or invalid inputs for comparison",
+          "refs": "[{\"bbox\": [], \"value\": \"CFR SAINT-PETERSBURG (INCOTERMS 2010)\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"incoterms\", \"normalized\": \"CFR SAINT-PETERSBURG (INCOTERMS 2010)\", \"token_refs\": []}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PROFORMA\", \"field_key\": \"incoterms\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PRICE_LIST_1\", \"field_key\": \"incoterms\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PRICE_LIST_2\", \"field_key\": \"incoterms\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"EXPORT_DECLARATION\", \"field_key\": \"incoterms\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"SPECIFICATION\", \"field_key\": \"incoterms\"}]"
+        },
+        {
+          "rule_id": "terms_of_payment_consistency_availability",
+          "severity": "warn",
+          "message": "Условия оплаты из инвойса должны совпадать с другими документами: missing or invalid inputs for comparison",
+          "refs": "[{\"bbox\": [], \"value\": \"100% PREPAYMENT\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"terms_of_payment\", \"normalized\": \"100% prepayment\", \"token_refs\": []}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PROFORMA\", \"field_key\": \"terms_of_payment\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"SPECIFICATION\", \"field_key\": \"terms_of_payment\"}]"
+        },
+        {
+          "rule_id": "bank_details_consistency_availability",
+          "severity": "warn",
+          "message": "Банковские данные должны совпадать в инвойсе и проформе: missing or invalid inputs for comparison",
+          "refs": "[{\"bbox\": [], \"value\": \"MUFG BANK, LTD, NEW YORK BRANCH\\nADDRESS: 1251 AVENUE OF THE AMERICAS,\\nNEW YORK, NY 10020-1104, USA\\n\\nSWIFT CODE: BOTKUS33\\n\\nBENEFICIARY NAME: SALMONES ANTARTICA S.A.\\nBENEFICIARY ACCOUNT NUMBER: 0810-016-710\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"bank_details\", \"normalized\": \"mufg bank, ltd, new york branch address: 1251 avenue of the americas, new york, ny 10020-1104, usa swift code: botkus33 beneficiary name: salmones antartica s.a. beneficiary account number: 0810-016-710\", \"token_refs\": []}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PROFORMA\", \"field_key\": \"bank_details\"}]"
+        },
+        {
+          "rule_id": "exporter_consistency_availability",
+          "severity": "warn",
+          "message": "Экспортер в ветеринарном сертификате должен совпадать с другими: missing or invalid inputs for comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"VETERINARY_CERTIFICATE\", \"field_key\": \"exporter\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"BILL_OF_LANDING\", \"field_key\": \"exporter\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"CERTIFICATE_OF_ORIGIN\", \"field_key\": \"exporter\"}]"
+        },
+        {
+          "rule_id": "invoice_number_consistency_availability",
+          "severity": "warn",
+          "message": "Номер инвойса должен совпадать с другими документами: missing or invalid inputs for comparison",
+          "refs": "[{\"bbox\": [], \"value\": \"019246\", \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\", \"present\": true, \"field_key\": \"invoice_no\", \"normalized\": \"019246\", \"token_refs\": []}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PACKING_LIST\", \"field_key\": \"invoice_no\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"EXPORT_DECLARATION\", \"field_key\": \"invoice_no\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"CERTIFICATE_OF_ORIGIN\", \"field_key\": \"invoice_no\"}]"
+        },
+        {
+          "rule_id": "veterinary_seal_consistency_availability",
+          "severity": "warn",
+          "message": "Ветеринарная пломба в ветеринарном сертификате должна совпадать с другими документами: missing or invalid inputs for comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"VETERINARY_CERTIFICATE\", \"field_key\": \"veterinary_seal\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"BILL_OF_LANDING\", \"field_key\": \"veterinary_seal\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"QUALITY_CERTIFICATE\", \"field_key\": \"veterinary_seal\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"CERTIFICATE_OF_ORIGIN\", \"field_key\": \"veterinary_seal\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PACKING_LIST\", \"field_key\": \"veterinary_seal\"}]"
+        },
+        {
+          "rule_id": "linear_seal_consistency_availability",
+          "severity": "warn",
+          "message": "Линейная прлобма в коноссаменте должна совпадать с другими документами: missing or invalid inputs for comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"BILL_OF_LANDING\", \"field_key\": \"linear_seal\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"QUALITY_CERTIFICATE\", \"field_key\": \"linear_seal\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"CERTIFICATE_OF_ORIGIN\", \"field_key\": \"linear_seal\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"PACKING_LIST\", \"field_key\": \"linear_seal\"}]"
+        },
+        {
+          "rule_id": "importer_alignment_availability",
+          "severity": "warn",
+          "message": "Импортер должен быть одинаковым у коноссамента и сертификата происхождения: missing or invalid inputs for comparison",
+          "refs": "[{\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"BILL_OF_LANDING\", \"field_key\": \"importer\"}, {\"note\": \"missing_doc_type\", \"doc_id\": \"00000000-0000-0000-0000-000000000000\", \"present\": false, \"doc_type\": \"CERTIFICATE_OF_ORIGIN\", \"field_key\": \"importer\"}]"
+        }
+      ],
+      "product_comparisons": [],
+      "product_matrix_columns": [],
+      "product_matrix": [],
+      "validation_matrix_columns": [
+        {
+          "key": "EXPORT_DECLARATION",
+          "label": "EXPORT_DECLARATION"
+        },
+        {
+          "key": "INVOICE",
+          "label": "INVOICE"
+        },
+        {
+          "key": "PACKING_LIST",
+          "label": "PACKING_LIST"
+        },
+        {
+          "key": "BILL_OF_LANDING",
+          "label": "BILL_OF_LANDING"
+        },
+        {
+          "key": "PROFORMA",
+          "label": "PROFORMA"
+        },
+        {
+          "key": "SPECIFICATION",
+          "label": "SPECIFICATION"
+        },
+        {
+          "key": "PRICE_LIST_1",
+          "label": "PRICE_LIST_1"
+        },
+        {
+          "key": "PRICE_LIST_2",
+          "label": "PRICE_LIST_2"
+        },
+        {
+          "key": "QUALITY_CERTIFICATE",
+          "label": "QUALITY_CERTIFICATE"
+        },
+        {
+          "key": "CERTIFICATE_OF_ORIGIN",
+          "label": "CERTIFICATE_OF_ORIGIN"
+        },
+        {
+          "key": "VETERINARY_CERTIFICATE",
+          "label": "VETERINARY_CERTIFICATE"
+        }
+      ],
+      "validation_matrix": [
+        {
+          "rule_id": "date_export_declaration_after_bol_availability",
+          "severity": "warn",
+          "message": "Дата экспортной декларации должна быть позже или равна даты коноссамента: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": null,
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "date_specification_not_after_invoice_availability",
+          "severity": "warn",
+          "message": "Дата спецификации должна быть не позже, чем дата инвойса: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · invoice_date",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "date_certificate_origin_after_invoice_availability",
+          "severity": "warn",
+          "message": "Дата сертификата происхождения должна быть позже или равно дате инвойса: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · invoice_date",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "contract_no_alignment_availability",
+          "severity": "warn",
+          "message": "Номер контракта должен быть одинаковым среди проформы, инвойса и спецификации: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · contract_no",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": "contract_no",
+            "SPECIFICATION": "contract_no",
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "additional_agreements_alignment_availability",
+          "severity": "warn",
+          "message": "Дополнительное соглашение дожно быть одинаковым среди профомы, инвойса и спецификации: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · additional_agreements",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": "additional_agreements",
+            "SPECIFICATION": "additional_agreements",
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "country_of_origin_consistency_availability",
+          "severity": "warn",
+          "message": "Страна происхождения в ветеринарном сертификате должна совпадать с другими документами: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": "country_of_origin",
+            "INVOICE": "INV_019246_04092019.pdf · country_of_origin",
+            "PACKING_LIST": "country_of_origin",
+            "BILL_OF_LANDING": "country_of_origin",
+            "PROFORMA": "country_of_origin",
+            "SPECIFICATION": "country_of_origin",
+            "PRICE_LIST_1": "country_of_origin",
+            "PRICE_LIST_2": "country_of_origin",
+            "QUALITY_CERTIFICATE": "country_of_origin",
+            "CERTIFICATE_OF_ORIGIN": "country_of_origin",
+            "VETERINARY_CERTIFICATE": "country_of_origin"
+          }
+        },
+        {
+          "rule_id": "producer_consistency_availability",
+          "severity": "warn",
+          "message": "Производитель в ветеринарном сертификате должен совпадать с другими документами: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · producer",
+            "PACKING_LIST": "producer",
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": "producer",
+            "PRICE_LIST_2": "producer",
+            "QUALITY_CERTIFICATE": "producer",
+            "CERTIFICATE_OF_ORIGIN": "producer",
+            "VETERINARY_CERTIFICATE": "producer"
+          }
+        },
+        {
+          "rule_id": "date_proforma_earliest_availability",
+          "severity": "warn",
+          "message": "Дата проформы должна быть самой ранней среди связанных документов: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · invoice_date",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "date_invoice_not_too_early_availability",
+          "severity": "warn",
+          "message": "Дата инвойса не должна быть раньше даты отгрузки и даты сертификатов: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · invoice_date",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "date_bill_of_landing_after_sources_availability",
+          "severity": "warn",
+          "message": "Дата коноссамента должна быть позже дат проформы, инвойса и прайс листов: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · invoice_date",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "date_packing_list_before_ship_availability",
+          "severity": "warn",
+          "message": "Дата пакинг листа должна быть раньше чем дата коносамента и не позже чем дата инвойса: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · invoice_date",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "date_price_list_1_before_proforma_availability",
+          "severity": "warn",
+          "message": "Дата прайс листа 1 должна быть раньше или равна дате проформы: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": null,
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "date_price_list_2_between_proforma_invoice_availability",
+          "severity": "warn",
+          "message": "Дата прайс листа 2 должна быть позже даты профомы и не позжедаты инвойса: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · invoice_date",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "date_quality_certificate_after_bol_availability",
+          "severity": "warn",
+          "message": "Дата сертификатат качества должна быть позже или равна дате коноссамента: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": null,
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "date_veterinary_certificate_before_bol_availability",
+          "severity": "warn",
+          "message": "Дата ветеринарного сертификата должна быть раньше чем дата коноссамента: missing or invalid inputs for date comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": null,
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "incoterms_consistency_availability",
+          "severity": "warn",
+          "message": "Условия доставки из инвойса должны совпадать с другими документами: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": "incoterms",
+            "INVOICE": "INV_019246_04092019.pdf · incoterms",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": "incoterms",
+            "SPECIFICATION": "incoterms",
+            "PRICE_LIST_1": "incoterms",
+            "PRICE_LIST_2": "incoterms",
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "terms_of_payment_consistency_availability",
+          "severity": "warn",
+          "message": "Условия оплаты из инвойса должны совпадать с другими документами: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · terms_of_payment",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": "terms_of_payment",
+            "SPECIFICATION": "terms_of_payment",
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "bank_details_consistency_availability",
+          "severity": "warn",
+          "message": "Банковские данные должны совпадать в инвойсе и проформе: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": "INV_019246_04092019.pdf · bank_details",
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": null,
+            "PROFORMA": "bank_details",
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": null,
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "exporter_consistency_availability",
+          "severity": "warn",
+          "message": "Экспортер в ветеринарном сертификате должен совпадать с другими: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": null,
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": "exporter",
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": "exporter",
+            "VETERINARY_CERTIFICATE": "exporter"
+          }
+        },
+        {
+          "rule_id": "invoice_number_consistency_availability",
+          "severity": "warn",
+          "message": "Номер инвойса должен совпадать с другими документами: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": "invoice_no",
+            "INVOICE": "INV_019246_04092019.pdf · invoice_no",
+            "PACKING_LIST": "invoice_no",
+            "BILL_OF_LANDING": null,
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": "invoice_no",
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "veterinary_seal_consistency_availability",
+          "severity": "warn",
+          "message": "Ветеринарная пломба в ветеринарном сертификате должна совпадать с другими документами: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": null,
+            "PACKING_LIST": "veterinary_seal",
+            "BILL_OF_LANDING": "veterinary_seal",
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": "veterinary_seal",
+            "CERTIFICATE_OF_ORIGIN": "veterinary_seal",
+            "VETERINARY_CERTIFICATE": "veterinary_seal"
+          }
+        },
+        {
+          "rule_id": "linear_seal_consistency_availability",
+          "severity": "warn",
+          "message": "Линейная прлобма в коноссаменте должна совпадать с другими документами: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": null,
+            "PACKING_LIST": "linear_seal",
+            "BILL_OF_LANDING": "linear_seal",
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": "linear_seal",
+            "CERTIFICATE_OF_ORIGIN": "linear_seal",
+            "VETERINARY_CERTIFICATE": null
+          }
+        },
+        {
+          "rule_id": "importer_alignment_availability",
+          "severity": "warn",
+          "message": "Импортер должен быть одинаковым у коноссамента и сертификата происхождения: missing or invalid inputs for comparison",
+          "cells": {
+            "EXPORT_DECLARATION": null,
+            "INVOICE": null,
+            "PACKING_LIST": null,
+            "BILL_OF_LANDING": "importer",
+            "PROFORMA": null,
+            "SPECIFICATION": null,
+            "PRICE_LIST_1": null,
+            "PRICE_LIST_2": null,
+            "QUALITY_CERTIFICATE": null,
+            "CERTIFICATE_OF_ORIGIN": "importer",
+            "VETERINARY_CERTIFICATE": null
+          }
+        }
+      ],
+      "raw_json": "{\n  \"batch_id\": \"4532097f-2870-4d85-bcd8-62f79098b898\",\n  \"status\": \"VALIDATED\",\n  \"generated_at\": \"2025-10-20T02:44:37.215945Z\",\n  \"documents\": [\n    {\n      \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n      \"filename\": \"INV_019246_04092019.pdf\",\n      \"doc_type\": \"INVOICE\",\n      \"status\": \"FILLED_REVIEWED\",\n      \"fields\": {\n        \"invoice_no\": {\n          \"value\": \"019246\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"invoice_date\": {\n          \"value\": \"04 SEPTEMBER 2019\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_1.name_product\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_1.latin_name\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_1.size_product\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_1.unit_box\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_1.packages\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_1.price_per_unit\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_1.total_price\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_2.name_product\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_2.latin_name\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_2.size_product\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_2.unit_box\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_2.packages\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_2.price_per_unit\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"products.product_2.total_price\": {\n          \"value\": \"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"producer\": {\n          \"value\": \"SALMONES ANTARTICA S.A.\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"incoterms\": {\n          \"value\": \"CFR SAINT-PETERSBURG (INCOTERMS 2010)\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"terms_of_payment\": {\n          \"value\": \"100% PREPAYMENT\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"bank_details\": {\n          \"value\": \"MUFG BANK, LTD, NEW YORK BRANCH\\nADDRESS: 1251 AVENUE OF THE AMERICAS,\\nNEW YORK, NY 10020-1104, USA\\n\\nSWIFT CODE: BOTKUS33\\n\\nBENEFICIARY NAME: SALMONES ANTARTICA S.A.\\nBENEFICIARY ACCOUNT NUMBER: 0810-016-710\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"buyer\": {\n          \"value\": \"OOO \\\"MOREODOR\\\"\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"seller\": {\n          \"value\": \"SALMONES ANTARTICA S.A.\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"proforma_no\": {\n          \"value\": \"SAMO082019\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"container_no\": {\n          \"value\": \"PONU4832160\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"commodity_code\": {\n          \"value\": \"0303 14 2000\",\n          \"confidence\": 1.0,\n          \"source\": \"llm\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"vessel\": {\n          \"value\": \"1\",\n          \"confidence\": 1.0,\n          \"source\": \"user\",\n          \"page\": null,\n          \"bbox\": []\n        },\n        \"total_price\": {\n          \"value\": \"154.000,00\",\n          \"confidence\": 1.0,\n          \"source\": \"user\",\n          \"page\": null,\n          \"bbox\": null\n        },\n        \"products\": {\n          \"value\": \".\",\n          \"confidence\": 1.0,\n          \"source\": \"user\",\n          \"page\": null,\n          \"bbox\": null\n        }\n      }\n    }\n  ],\n  \"validations\": [\n    {\n      \"rule_id\": \"date_export_declaration_after_bol_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата экспортной декларации должна быть позже или равна даты коноссамента: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"export_declaration_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"bill_of_landing_date\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"date_specification_not_after_invoice_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата спецификации должна быть не позже, чем дата инвойса: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"specification_date\"\n        },\n        {\n          \"bbox\": [],\n          \"note\": \"invalid_value\",\n          \"value\": \"04 SEPTEMBER 2019\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"invoice_date\",\n          \"token_refs\": []\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"date_certificate_origin_after_invoice_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата сертификата происхождения должна быть позже или равно дате инвойса: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"certificate_of_origin_date\"\n        },\n        {\n          \"bbox\": [],\n          \"note\": \"invalid_value\",\n          \"value\": \"04 SEPTEMBER 2019\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"invoice_date\",\n          \"token_refs\": []\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"contract_no_alignment_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Номер контракта должен быть одинаковым среди проформы, инвойса и спецификации: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PROFORMA\",\n          \"field_key\": \"contract_no\"\n        },\n        {\n          \"note\": \"missing_field\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": false,\n          \"doc_type\": \"INVOICE\",\n          \"field_key\": \"contract_no\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"SPECIFICATION\",\n          \"field_key\": \"contract_no\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"additional_agreements_alignment_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дополнительное соглашение дожно быть одинаковым среди профомы, инвойса и спецификации: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PROFORMA\",\n          \"field_key\": \"additional_agreements\"\n        },\n        {\n          \"note\": \"missing_field\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": false,\n          \"doc_type\": \"INVOICE\",\n          \"field_key\": \"additional_agreements\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"SPECIFICATION\",\n          \"field_key\": \"additional_agreements\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"country_of_origin_consistency_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Страна происхождения в ветеринарном сертификате должна совпадать с другими документами: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"VETERINARY_CERTIFICATE\",\n          \"field_key\": \"country_of_origin\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PROFORMA\",\n          \"field_key\": \"country_of_origin\"\n        },\n        {\n          \"note\": \"missing_field\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": false,\n          \"doc_type\": \"INVOICE\",\n          \"field_key\": \"country_of_origin\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PACKING_LIST\",\n          \"field_key\": \"country_of_origin\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"BILL_OF_LANDING\",\n          \"field_key\": \"country_of_origin\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PRICE_LIST_1\",\n          \"field_key\": \"country_of_origin\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PRICE_LIST_2\",\n          \"field_key\": \"country_of_origin\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"QUALITY_CERTIFICATE\",\n          \"field_key\": \"country_of_origin\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"CERTIFICATE_OF_ORIGIN\",\n          \"field_key\": \"country_of_origin\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"EXPORT_DECLARATION\",\n          \"field_key\": \"country_of_origin\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"SPECIFICATION\",\n          \"field_key\": \"country_of_origin\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"producer_consistency_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Производитель в ветеринарном сертификате должен совпадать с другими документами: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"VETERINARY_CERTIFICATE\",\n          \"field_key\": \"producer\"\n        },\n        {\n          \"bbox\": [],\n          \"value\": \"SALMONES ANTARTICA S.A.\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"producer\",\n          \"normalized\": \"salmones antartica s.a.\",\n          \"token_refs\": []\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PACKING_LIST\",\n          \"field_key\": \"producer\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PRICE_LIST_1\",\n          \"field_key\": \"producer\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PRICE_LIST_2\",\n          \"field_key\": \"producer\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"QUALITY_CERTIFICATE\",\n          \"field_key\": \"producer\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"CERTIFICATE_OF_ORIGIN\",\n          \"field_key\": \"producer\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"date_proforma_earliest_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата проформы должна быть самой ранней среди связанных документов: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"proforma_date\"\n        },\n        {\n          \"bbox\": [],\n          \"note\": \"invalid_value\",\n          \"value\": \"04 SEPTEMBER 2019\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"invoice_date\",\n          \"token_refs\": []\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"bill_of_landing_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"packing_list_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"price_list_1_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"price_list_2_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"quality_certificate_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"veterinary_certificate_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"export_declaration_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"specification_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"certificate_of_origin_date\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"date_invoice_not_too_early_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата инвойса не должна быть раньше даты отгрузки и даты сертификатов: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"bbox\": [],\n          \"note\": \"invalid_value\",\n          \"value\": \"04 SEPTEMBER 2019\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"invoice_date\",\n          \"token_refs\": []\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"bill_of_landing_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"packing_list_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"quality_certificate_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"veterinary_certificate_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"export_declaration_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"specification_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"certificate_of_origin_date\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"date_bill_of_landing_after_sources_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата коноссамента должна быть позже дат проформы, инвойса и прайс листов: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"bill_of_landing_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"proforma_date\"\n        },\n        {\n          \"bbox\": [],\n          \"note\": \"invalid_value\",\n          \"value\": \"04 SEPTEMBER 2019\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"invoice_date\",\n          \"token_refs\": []\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"price_list_1_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"price_list_2_date\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"date_packing_list_before_ship_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата пакинг листа должна быть раньше чем дата коносамента и не позже чем дата инвойса: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"packing_list_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"bill_of_landing_date\"\n        },\n        {\n          \"bbox\": [],\n          \"note\": \"invalid_value\",\n          \"value\": \"04 SEPTEMBER 2019\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"invoice_date\",\n          \"token_refs\": []\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"date_price_list_1_before_proforma_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата прайс листа 1 должна быть раньше или равна дате проформы: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"price_list_1_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"proforma_date\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"date_price_list_2_between_proforma_invoice_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата прайс листа 2 должна быть позже даты профомы и не позжедаты инвойса: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"price_list_2_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"proforma_date\"\n        },\n        {\n          \"bbox\": [],\n          \"note\": \"invalid_value\",\n          \"value\": \"04 SEPTEMBER 2019\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"invoice_date\",\n          \"token_refs\": []\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"date_quality_certificate_after_bol_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата сертификатат качества должна быть позже или равна дате коноссамента: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"quality_certificate_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"bill_of_landing_date\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"date_veterinary_certificate_before_bol_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Дата ветеринарного сертификата должна быть раньше чем дата коноссамента: missing or invalid inputs for date comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"veterinary_certificate_date\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"field_key\": \"bill_of_landing_date\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"incoterms_consistency_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Условия доставки из инвойса должны совпадать с другими документами: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"bbox\": [],\n          \"value\": \"CFR SAINT-PETERSBURG (INCOTERMS 2010)\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"incoterms\",\n          \"normalized\": \"CFR SAINT-PETERSBURG (INCOTERMS 2010)\",\n          \"token_refs\": []\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PROFORMA\",\n          \"field_key\": \"incoterms\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PRICE_LIST_1\",\n          \"field_key\": \"incoterms\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PRICE_LIST_2\",\n          \"field_key\": \"incoterms\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"EXPORT_DECLARATION\",\n          \"field_key\": \"incoterms\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"SPECIFICATION\",\n          \"field_key\": \"incoterms\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"terms_of_payment_consistency_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Условия оплаты из инвойса должны совпадать с другими документами: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"bbox\": [],\n          \"value\": \"100% PREPAYMENT\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"terms_of_payment\",\n          \"normalized\": \"100% prepayment\",\n          \"token_refs\": []\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PROFORMA\",\n          \"field_key\": \"terms_of_payment\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"SPECIFICATION\",\n          \"field_key\": \"terms_of_payment\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"bank_details_consistency_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Банковские данные должны совпадать в инвойсе и проформе: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"bbox\": [],\n          \"value\": \"MUFG BANK, LTD, NEW YORK BRANCH\\nADDRESS: 1251 AVENUE OF THE AMERICAS,\\nNEW YORK, NY 10020-1104, USA\\n\\nSWIFT CODE: BOTKUS33\\n\\nBENEFICIARY NAME: SALMONES ANTARTICA S.A.\\nBENEFICIARY ACCOUNT NUMBER: 0810-016-710\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"bank_details\",\n          \"normalized\": \"mufg bank, ltd, new york branch address: 1251 avenue of the americas, new york, ny 10020-1104, usa swift code: botkus33 beneficiary name: salmones antartica s.a. beneficiary account number: 0810-016-710\",\n          \"token_refs\": []\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PROFORMA\",\n          \"field_key\": \"bank_details\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"exporter_consistency_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Экспортер в ветеринарном сертификате должен совпадать с другими: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"VETERINARY_CERTIFICATE\",\n          \"field_key\": \"exporter\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"BILL_OF_LANDING\",\n          \"field_key\": \"exporter\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"CERTIFICATE_OF_ORIGIN\",\n          \"field_key\": \"exporter\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"invoice_number_consistency_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Номер инвойса должен совпадать с другими документами: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"bbox\": [],\n          \"value\": \"019246\",\n          \"doc_id\": \"769465ca-e89f-4427-aa7c-d2a93327b8d8\",\n          \"present\": true,\n          \"field_key\": \"invoice_no\",\n          \"normalized\": \"019246\",\n          \"token_refs\": []\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PACKING_LIST\",\n          \"field_key\": \"invoice_no\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"EXPORT_DECLARATION\",\n          \"field_key\": \"invoice_no\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"CERTIFICATE_OF_ORIGIN\",\n          \"field_key\": \"invoice_no\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"veterinary_seal_consistency_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Ветеринарная пломба в ветеринарном сертификате должна совпадать с другими документами: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"VETERINARY_CERTIFICATE\",\n          \"field_key\": \"veterinary_seal\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"BILL_OF_LANDING\",\n          \"field_key\": \"veterinary_seal\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"QUALITY_CERTIFICATE\",\n          \"field_key\": \"veterinary_seal\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"CERTIFICATE_OF_ORIGIN\",\n          \"field_key\": \"veterinary_seal\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PACKING_LIST\",\n          \"field_key\": \"veterinary_seal\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"linear_seal_consistency_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Линейная прлобма в коноссаменте должна совпадать с другими документами: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"BILL_OF_LANDING\",\n          \"field_key\": \"linear_seal\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"QUALITY_CERTIFICATE\",\n          \"field_key\": \"linear_seal\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"CERTIFICATE_OF_ORIGIN\",\n          \"field_key\": \"linear_seal\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"PACKING_LIST\",\n          \"field_key\": \"linear_seal\"\n        }\n      ]\n    },\n    {\n      \"rule_id\": \"importer_alignment_availability\",\n      \"severity\": \"warn\",\n      \"message\": \"Импортер должен быть одинаковым у коноссамента и сертификата происхождения: missing or invalid inputs for comparison\",\n      \"refs\": [\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"BILL_OF_LANDING\",\n          \"field_key\": \"importer\"\n        },\n        {\n          \"note\": \"missing_doc_type\",\n          \"doc_id\": \"00000000-0000-0000-0000-000000000000\",\n          \"present\": false,\n          \"doc_type\": \"CERTIFICATE_OF_ORIGIN\",\n          \"field_key\": \"importer\"\n        }\n      ]\n    }\n  ],\n  \"meta\": {},\n  \"product_comparisons\": []\n}"
+    },
+    "links": {
+      "report_xlsx": "/web/batches/4532097f-2870-4d85-bcd8-62f79098b898/report.xlsx"
+    }
+  }
+}
