@@ -75,6 +75,15 @@ def _collect_products_for_doc(fields_payload: Dict[str, Dict[str, Any]]) -> Dict
     return grouped
 
 
+def _round_confidence(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return round(float(value), 2)
+    except (TypeError, ValueError):
+        return None
+
+
 async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[str, Any]:
     batch = await load_batch_with_fields(session, batch_id)
     validations = await fetch_validations(session, batch_id)
@@ -85,7 +94,7 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
         fields_payload = {
             field.field_key: {
                 "value": field.value,
-                "confidence": field.confidence,
+                "confidence": _round_confidence(field.confidence),
                 "source": field.source,
                 "page": field.page,
                 "bbox": field.bbox,

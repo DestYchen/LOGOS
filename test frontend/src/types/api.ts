@@ -65,6 +65,35 @@ export type ProductTable = {
   rows: ProductRow[];
 };
 
+export type ReportDocumentEntry = {
+  doc_id: string | null;
+  filename: string | null;
+  doc_type: string | null;
+  status: string | null;
+  field_key: string;
+  value: string | null;
+  confidence: number | null;
+  source?: string | null;
+  page?: number | null;
+};
+
+export type ReportValidationRef = {
+  doc_id?: string | null;
+  doc_type?: string | null;
+  field_key?: string | null;
+  label?: string | null;
+  message?: string | null;
+  present?: boolean;
+  note?: string | null;
+};
+
+export type ReportValidationEntry = {
+  rule_id: string;
+  severity: string;
+  message: string;
+  refs: ReportValidationRef[];
+};
+
 export type DocumentPayload = {
   id: string;
   filename: string;
@@ -80,8 +109,8 @@ export type DocumentPayload = {
 
 export type ReportSection = {
   available: boolean;
-  documents: Record<string, unknown>[];
-  validations: Record<string, unknown>[];
+  documents: ReportDocumentEntry[];
+  validations: ReportValidationEntry[];
   product_comparisons: Record<string, unknown>[];
   product_matrix_columns: Record<string, string>[];
   product_matrix: Record<string, unknown>[];

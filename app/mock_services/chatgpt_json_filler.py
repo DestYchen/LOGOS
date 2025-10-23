@@ -34,7 +34,7 @@ PROMPT_MAIN = (
     "Return ONLY a JSON object with keys: {'doc_id': string, 'fields': object}.\n"
     "- Fill ONLY the fields present in <template_fields_main> (no 'products').\n"
     "- Copy values EXACTLY from the document (no guessing, no paraphrase).\n"
-    "- Include 'token_refs' when obvious; otherwise leave [].\n"
+    "- Always include 'token_refs' when the field was filled; otherwise leave [].\n"
     "- If uncertain for a field, leave it empty.\n"
     "- Hints (if provided) are optional and may be ignored if they conflict with the document.\n"
     "Output strictly valid JSON. No extra keys, no comments."
@@ -45,7 +45,7 @@ PROMPT_PRODUCTS = (
     "Return ONLY a JSON object with keys: {'doc_id': string, 'products': object}.\n"
     "- Create product_1, product_2, ... for the actual product rows you detect (ignore totals/summary rows).\n"
     "- For each product_N, include EVERY child field from <template_product>. If unknown, set value to '' and arrays []\n"
-    "- Copy values EXACTLY from the document (no paraphrase). Include 'token_refs' when obvious; otherwise [].\n"
+    "- Copy values EXACTLY from the document (no paraphrase). Always include 'token_refs' when the field was filled; otherwise leave [].\n"
     "- Table-like tokens are provided raw; infer rows as needed. Do not invent data.\n"
     "Output strictly valid JSON. No extra keys, no comments."
 )
@@ -56,7 +56,36 @@ PROMPT_PRODUCTS = (
 # =========================
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+# Allow runtime control of verbosity
+_LOG_LEVEL = os.getenv("JSON_FILLER_LOG_LEVEL", "INFO").upper()
+_DETAILED = os.getenv("JSON_FILLER_DETAILED", "0") in ("1", "true", "True", "yes", "on")
+try:
+    logger.setLevel(getattr(logging, _LOG_LEVEL, logging.INFO))
+except Exception:
+    logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s [json_filler] %(message)s"))
+    logger.addHandler(_handler)
+
+
+def _brief(s: str, limit: int = 300) -> str:
+    if not s:
+        return ""
+    s = (s or "").strip().replace("\n", " ")
+    return (s[:limit] + "…") if len(s) > limit else s
+
+
+def _brief_json(obj: Any, limit: int = 1200) -> str:
+    try:
+        dumped = json.dumps(obj, ensure_ascii=False)
+    except Exception:
+        dumped = str(obj)
+    return dumped if len(dumped) <= limit else (dumped[:limit] + "…")
+
+
+# Retry configuration
+MAX_LLM_RETRIES: int = int(os.getenv("JSON_FILLER_RETRIES", "3"))
 
 
 # =========================
@@ -507,6 +536,39 @@ def _llm_chat(messages: list, model: str, timeout: int = 300) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
+def _llm_json_with_retries(messages: list, model: str, branch: str, timeout: int = 300) -> Tuple[Optional[Dict[str, Any]], bool, Optional[str]]:
+    """
+    Calls LLM and parses JSON with retries. Returns (payload, repaired_flag, raw_text).
+    On retries, appends a corrective user message to enforce strict JSON.
+    """
+    last_raw: Optional[str] = None
+    for attempt in range(1, max(1, MAX_LLM_RETRIES) + 1):
+        try:
+            msgs = deepcopy(messages)
+            if attempt > 1:
+                correction = {
+                    "role": "user",
+                    "content": [{
+                        "type": "text",
+                        "text": (
+                            "Previous output was not valid JSON. Return strictly valid JSON only, "
+                            "no markdown, no comments. Ensure all internal quotes are escaped."
+                        )
+                    }],
+                }
+                msgs.append(correction)
+            raw = _llm_chat(msgs, model=model, timeout=timeout)
+            last_raw = raw
+            if _DETAILED:
+                logger.debug("%s attempt %d raw (%d chars): %s", branch, attempt, len(raw or ""), _brief(raw or ""))
+            data, repaired = _parse_json_str(raw)
+            return data, repaired, raw
+        except Exception as exc:
+            logger.warning("%s attempt %d failed to parse: %s", branch, attempt, exc)
+            continue
+    return None, False, last_raw
+
+
 # =========================
 # Merge & validation
 # =========================
@@ -524,6 +586,108 @@ def _ensure_leaf_arrays(node: Dict[str, Any]) -> None:
         elif isinstance(val, dict):
             _ensure_leaf_arrays(val)
 
+
+def _build_token_lookup(tokens: Any) -> Dict[str, Dict[str, Any]]:
+    lookup: Dict[str, Dict[str, Any]] = {}
+    if not isinstance(tokens, list):
+        return lookup
+    for item in tokens:
+        if not isinstance(item, dict):
+            continue
+        token_id = item.get("id")
+        if token_id is None:
+            continue
+        lookup[str(token_id)] = item
+    return lookup
+
+
+def _normalize_token_refs(raw_refs: Any) -> List[str]:
+    if not raw_refs:
+        return []
+    if isinstance(raw_refs, str):
+        return [raw_refs]
+    if isinstance(raw_refs, list):
+        refs: List[str] = []
+        for ref in raw_refs:
+            if ref is None:
+                continue
+            refs.append(str(ref))
+        return refs
+    return [str(raw_refs)]
+
+
+def _token_confidence(token: Dict[str, Any]) -> Optional[float]:
+    if not isinstance(token, dict):
+        return None
+    value = token.get("conf")
+    if value is None:
+        return None
+    try:
+        conf = float(value)
+    except (TypeError, ValueError):
+        return None
+    if conf < 0.0:
+        conf = 0.0
+    elif conf > 1.0:
+        conf = 1.0
+    return conf
+
+
+def _token_bbox(token: Dict[str, Any]) -> Optional[List[float]]:
+    bbox = token.get("bbox")
+    if isinstance(bbox, (list, tuple)) and len(bbox) == 4:
+        try:
+            return [float(coord) for coord in bbox]
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _token_page(token: Dict[str, Any]) -> Optional[int]:
+    page = token.get("page")
+    if page is None:
+        return None
+    try:
+        return int(page)
+    except (TypeError, ValueError):
+        try:
+            return int(float(page))
+        except (TypeError, ValueError):
+            return None
+
+
+def _attach_token_metadata(node: Any, lookup: Dict[str, Dict[str, Any]]) -> None:
+    if isinstance(node, dict):
+        if _is_leaf_field(node):
+            refs = _normalize_token_refs(node.get("token_refs"))
+            if not refs:
+                node["token_refs"] = []
+                return
+            token = None
+            for ref in refs:
+                token = lookup.get(ref)
+                if token:
+                    refs = [str(ref)]
+                    break
+            if not token:
+                node["token_refs"] = refs
+                return
+            node["token_refs"] = [str(token.get("id", refs[0]))]
+            bbox = _token_bbox(token)
+            if bbox is not None:
+                node["bbox"] = bbox
+            confidence = _token_confidence(token)
+            if confidence is not None:
+                node["confidence"] = confidence
+            page = _token_page(token)
+            if page is not None:
+                node["page"] = page
+        else:
+            for value in node.values():
+                _attach_token_metadata(value, lookup)
+    elif isinstance(node, list):
+        for item in node:
+            _attach_token_metadata(item, lookup)
 
 def _merge_main_and_products(template_fields: Dict[str, Any],
                              main_payload: Optional[Dict[str, Any]],
@@ -644,12 +808,30 @@ def _validate_fields_against_template(fields: Dict[str, Any],
 
 @app.post("/v1/fill", response_model=FillerResponse)
 async def fill(request: FillerRequest) -> FillerResponse:
+    # Request summary
+    try:
+        tokens_len = len(request.tokens) if isinstance(request.tokens, list) else (len(request.tokens or []) if hasattr(request.tokens, "__len__") else None)
+    except Exception:
+        tokens_len = None
+    logger.info(
+        "Fill request: doc_id=%s, type=%s, file=%s, text_len=%s, tokens_len=%s",
+        request.doc_id,
+        getattr(request.doc_type, "value", str(request.doc_type)),
+        request.file_name or "",
+        len(request.doc_text or ""),
+        tokens_len,
+    )
     template_def = get_template_definition(request.doc_type)
     full_template_fields: Dict[str, Any] = deepcopy(template_def.get("fields", {}))
     product_template: Optional[Dict[str, Any]] = template_def.get("product_template")
 
     # Split template fields
     fields_main_only, has_products = _split_template_fields(full_template_fields)
+    logger.info(
+        "Template: has_products=%s, product_template_keys=%s",
+        has_products,
+        (len(product_template) if isinstance(product_template, dict) else 0),
+    )
 
     # Optional, non-forcing hints (multi-match lists)
     hints = _collect_hints(request.doc_text or "")
@@ -662,21 +844,37 @@ async def fill(request: FillerRequest) -> FillerResponse:
         fields_main_only=fields_main_only,
         hints=hints,
     )
+    if _DETAILED:
+        logger.debug(
+            "MAIN messages built: blocks=%s, sys_prompt_len=%s, user_preview=%s",
+            len(msgs_main[1]["content"]) if isinstance(msgs_main, list) and len(msgs_main) > 1 else "?",
+            len(PROMPT_MAIN),
+            _brief_json(msgs_main[1]["content"] if isinstance(msgs_main, list) and len(msgs_main) > 1 else msgs_main),
+        )
 
     main_raw: Optional[str] = None
     main_payload: Optional[Dict[str, Any]] = None
     main_repaired = False
-    try:
-        main_raw = _llm_chat(msgs_main, model=LLM_MODEL_MAIN)
-        data, repaired = _parse_json_str(main_raw)
-        main_payload = data
-        main_repaired = repaired
-        # post-parse colon label stripping
-        main_payload, stripped_count = _strip_labels_in_payload(main_payload)
+    main_payload, main_repaired, main_raw = _llm_json_with_retries(
+        messages=msgs_main,
+        model=LLM_MODEL_MAIN,
+        branch="MAIN",
+    )
+    if isinstance(main_payload, dict):
+        try:
+            main_payload, stripped_count = _strip_labels_in_payload(main_payload)
+        except Exception:
+            stripped_count = 0
         logger.info("Main branch OK (doc_id=%s, repaired=%s, labels_stripped=%d)",
                     request.doc_id, main_repaired, stripped_count)
-    except Exception as exc:
-        logger.warning("Main branch failed (doc_id=%s): %s", request.doc_id, exc)
+        if _DETAILED:
+            try:
+                logger.debug("MAIN parsed keys: %s", list(main_payload.keys()))
+                logger.debug("MAIN parsed preview: %s", _brief_json(main_payload))
+            except Exception:
+                pass
+    else:
+        logger.warning("Main branch failed after %d attempt(s) (doc_id=%s)", max(1, MAX_LLM_RETRIES), request.doc_id)
         main_payload = None  # will merge as template-empty
 
     # Build and run PRODUCTS call (sequential; only if template includes products)
@@ -692,17 +890,35 @@ async def fill(request: FillerRequest) -> FillerResponse:
             product_template=product_template,
             table_like_tokens=table_like,
         )
-        try:
-            products_raw = _llm_chat(msgs_products, model=LLM_MODEL_PRODUCTS)
-            pdata, prepaired = _parse_json_str(products_raw)
-            products_payload = pdata
-            products_repaired = prepaired
-            # post-parse colon label stripping
-            products_payload, p_stripped = _strip_labels_in_payload(products_payload)
+        if _DETAILED:
+            logger.debug(
+                "PRODUCTS messages built: blocks=%s, sys_prompt_len=%s, table_like=%d, user_preview=%s",
+                len(msgs_products[1]["content"]) if isinstance(msgs_products, list) and len(msgs_products) > 1 else "?",
+                len(PROMPT_PRODUCTS),
+                len(table_like or []),
+                _brief_json(msgs_products[1]["content"] if isinstance(msgs_products, list) and len(msgs_products) > 1 else msgs_products),
+            )
+        products_payload, products_repaired, products_raw = _llm_json_with_retries(
+            messages=msgs_products,
+            model=LLM_MODEL_PRODUCTS,
+            branch="PRODUCTS",
+        )
+        if isinstance(products_payload, dict):
+            try:
+                products_payload, p_stripped = _strip_labels_in_payload(products_payload)
+            except Exception:
+                p_stripped = 0
             logger.info("Products branch OK (doc_id=%s, repaired=%s, labels_stripped=%d, table_tokens=%d)",
                         request.doc_id, products_repaired, p_stripped, len(table_like))
-        except Exception as exc:
-            logger.warning("Products branch failed (doc_id=%s): %s", request.doc_id, exc)
+            if _DETAILED:
+                try:
+                    p_root = products_payload.get("products", {}) if isinstance(products_payload, dict) else {}
+                    logger.debug("PRODUCTS keys: %s", list(p_root.keys()) if isinstance(p_root, dict) else type(p_root))
+                    logger.debug("PRODUCTS parsed preview: %s", _brief_json(products_payload))
+                except Exception:
+                    pass
+        else:
+            logger.warning("Products branch failed after %d attempt(s) (doc_id=%s)", max(1, MAX_LLM_RETRIES), request.doc_id)
             products_payload = None
 
     # Merge branches into the exact final shape expected by downstream
@@ -712,6 +928,26 @@ async def fill(request: FillerRequest) -> FillerResponse:
         products_payload=products_payload,
         product_template=product_template,
     )
+    token_lookup = _build_token_lookup(request.tokens)
+    if token_lookup:
+        _attach_token_metadata(merged_fields, token_lookup)
+        _ensure_leaf_arrays(merged_fields)
+
+    # Post-merge visibility
+    try:
+        merged_products = merged_fields.get("products", {}) if isinstance(merged_fields, dict) else {}
+        logger.info(
+            "Merged result: products_count=%d, main_present=%s, products_present=%s",
+            len(merged_products) if isinstance(merged_products, dict) else 0,
+            isinstance(main_payload, dict),
+            isinstance(products_payload, dict),
+        )
+        if isinstance(products_payload, dict) and (not isinstance(merged_products, dict) or len(merged_products) == 0):
+            logger.warning("Products payload parsed but merged products are empty; check template.product_template and payload keys")
+        if _DETAILED:
+            logger.debug("Merged fields preview: %s", _brief_json(merged_fields))
+    except Exception:
+        pass
 
     # Validation meta (non-blocking)
     validation_meta = _validate_fields_against_template(merged_fields, product_template)
