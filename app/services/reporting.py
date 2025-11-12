@@ -44,7 +44,16 @@ def _normalize_name(value: Optional[str]) -> Optional[str]:
     return _collapse_spaces(trimmed).casefold()
 
 
-def _product_key(name: Optional[str], latin: Optional[str], size: Optional[str]):
+def _field_value(entry: Optional[Any]) -> Optional[str]:
+    if isinstance(entry, dict):
+        return entry.get("value")
+    return entry
+
+
+def _product_key(name: Optional[Any], latin: Optional[Any], size: Optional[Any]):
+    name = _field_value(name)
+    latin = _field_value(latin)
+    size = _field_value(size)
     name_k = _normalize_name(name)
     latin_k = _normalize_name(latin)
     size_k = (size.strip() if isinstance(size, str) else None) or None
@@ -59,8 +68,8 @@ def _product_key(name: Optional[str], latin: Optional[str], size: Optional[str])
     return (name_k, latin_k, size_k)
 
 
-def _collect_products_for_doc(fields_payload: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Optional[str]]]:
-    grouped: Dict[str, Dict[str, Optional[str]]] = {}
+def _collect_products_for_doc(fields_payload: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Dict[str, Any]]]:
+    grouped: Dict[str, Dict[str, Dict[str, Any]]] = {}
     for key, payload in fields_payload.items():
         if not key.startswith("products."):
             continue
@@ -70,8 +79,15 @@ def _collect_products_for_doc(fields_payload: Dict[str, Dict[str, Any]]) -> Dict
         prod_id = parts[1]
         sub_key = ".".join(parts[2:])
         value = payload.get("value") if isinstance(payload, dict) else None
-        if isinstance(value, str) or value is None:
-            grouped.setdefault(prod_id, {})[sub_key] = value
+        entry: Dict[str, Any]
+        if isinstance(payload, dict):
+            entry = {
+                "value": payload.get("value"),
+                "confidence": payload.get("confidence"),
+            }
+        else:
+            entry = {"value": payload}
+        grouped.setdefault(prod_id, {})[sub_key] = entry
     return grouped
 
 

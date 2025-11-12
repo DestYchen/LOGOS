@@ -1,0 +1,14 @@
+{
+  "file": "",
+  "doc_type": "CONTRACT",
+  "fields": {
+    "contract_date": { "value": "", "bbox": [] },
+    "contract_no":   { "value": "", "bbox": [] },
+    "additional_agreements": { "value": "", "bbox": [] },
+    "buyer":         { "value": "", "bbox": [] },
+    "seller":        { "value": "", "bbox": [] },
+    "incoterms":     { "value": "", "bbox": [] },
+    "terms_of_payment": { "value": "", "bbox": [] },
+    "bank_details":  { "value": "", "bbox": [] }
+  }
+}

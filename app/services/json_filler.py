@@ -40,6 +40,7 @@ async def fill_json(
         try:
             response = await client.post(str(settings.json_filler_endpoint), json=payload)
             response.raise_for_status()
+            print("FINAL JSON", response.json())
             return response.json()
         except httpx.HTTPError:
             if settings.use_stub_services:

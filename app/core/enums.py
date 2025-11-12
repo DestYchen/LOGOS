@@ -38,6 +38,11 @@ class DocumentType(str, Enum):
     QUALITY_CERTIFICATE = "QUALITY_CERTIFICATE"
     CERTIFICATE_OF_ORIGIN = "CERTIFICATE_OF_ORIGIN"
     VETERINARY_CERTIFICATE = "VETERINARY_CERTIFICATE"
+    CMR = "CMR"
+    CONTRACT = "CONTRACT"
+    FORM_A = "FORM_A"
+    EAV = "EAV"
+    CT_3 = "CT-3"
 
 
 class ValidationSeverity(str, Enum):

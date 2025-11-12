@@ -12,6 +12,8 @@ from openai import OpenAI
 from pydantic import BaseModel
 from app.core.enums import DocumentType
 from app.mock_services.templates import get_template_definition
+from app.mock_services.hints import get_hints_text
+from pathlib import Path
 
 
 # =========================
@@ -28,26 +30,51 @@ LLM_API_KEY: str = ""  # intentionally left empty by default
 LLM_MODEL_MAIN: str = "openai/gpt-oss-20b"
 LLM_MODEL_PRODUCTS: str = LLM_MODEL_MAIN
 
-# System prompts (kept minimal; no forced normalization, no row counts).
+# System prompts tuned to the new token-only format.
 PROMPT_MAIN = (
-    "You convert OCR text and tokens into structured JSON.\n"
-    "Return ONLY a JSON object with keys: {'doc_id': string, 'fields': object}.\n"
-    "- Fill ONLY the fields present in <template_fields_main> (no 'products').\n"
-    "- Copy values EXACTLY from the document (no guessing, no paraphrase).\n"
-    "- Always include 'token_refs' when the field was filled; otherwise leave [].\n"
-    "- If uncertain for a field, leave it empty.\n"
-    "- Hints (if provided) are optional and may be ignored if they conflict with the document.\n"
-    "Output strictly valid JSON. No extra keys, no comments."
+    "You convert OCR tokens into a structured JSON object of fields.\n\n"
+    "Input:\n\n"
+    "A JSON template (\"FIELDS TEMPLATE\") that defines all output fields.\n"
+    "Each field is an object with:\n"
+    "\"value\": string (initially \"\").\n"
+    "\"token_refs\": array of token ids (initially []).\n\n"
+    "Optional \"FIELD HINTS\" that describe how to extract each field.\n\n"
+    "A list of OCR tokens (\"RAW TOKENS\"), each given as:\n"
+    "token_id:\n"
+    "token_text\n\n"
+    "Your task:\n\n"
+    "Use ONLY the RAW TOKENS to fill \"value\" and \"token_refs\" in the FIELDS TEMPLATE.\n"
+    "When you set a non-empty \"value\", add in \"token_refs\" the first token ids whose text you used (even if there are multiple mentions).\n"
+    "If you cannot confidently find a value, leave \"value\" as \"\" and \"token_refs\" as [].\n"
+    "Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).\n"
+    "Do NOT invent or guess values.\n"
+    "The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.\n"
+    "Do NOT change the JSON structure: do not add, remove, or rename fields.\n"
+    "Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.\n"
+    "Return ONLY the completed JSON, with no explanations or extra text."
 )
 
 PROMPT_PRODUCTS = (
-    "You extract ONLY product rows from OCR text/tokens.\n"
-    "Return ONLY a JSON object with keys: {'doc_id': string, 'products': object}.\n"
-    "- Create product_1, product_2, ... for the actual product rows you detect (ignore totals/summary rows).\n"
-    "- For each product_N, include EVERY child field from <template_product>. If unknown, set value to '' and arrays []\n"
-    "- Copy values EXACTLY from the document (no paraphrase). Always include 'token_refs' when the field was filled; otherwise leave [].\n"
-    "- Table-like tokens are provided raw; infer rows as needed. Do not invent data.\n"
-    "Output strictly valid JSON. No extra keys, no comments."
+    "You convert OCR tokens into structured JSON describing product rows.\n\n"
+    "Input:\n\n"
+    "A JSON template (\"PRODUCT TEMPLATE\") that lists every per-product field.\n"
+    "Each field is an object with:\n"
+    "\"value\": string (initially \"\").\n"
+    "\"token_refs\": array of token ids (initially []).\n\n"
+    "Optional \"FIELD HINTS\" that describe how to extract product-related data.\n\n"
+    "A list of OCR tokens (\"RAW TOKENS\"), each given as:\n"
+    "token_id:\n"
+    "token_text\n\n"
+    "Optional \"TABLE CANDIDATES\" block that contains raw HTML/delimited table tokens.\n\n"
+    "Your task:\n\n"
+    "Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.\n"
+    "For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only \"value\" and \"token_refs\".\n"
+    "When you set a non-empty \"value\", add the token ids you used to \"token_refs\"; otherwise leave [].\n"
+    "If a field is unknown, leave \"value\" as \"\".\n"
+    "Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.\n"
+    "The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.\n"
+    "Output MUST be a single valid JSON object with one top-level key \"products\" containing product_1, product_2, ...\n"
+    "Return ONLY the completed JSON, with no explanations or extra text."
 )
 
 
@@ -86,6 +113,14 @@ def _brief_json(obj: Any, limit: int = 1200) -> str:
 
 # Retry configuration
 MAX_LLM_RETRIES: int = int(os.getenv("JSON_FILLER_RETRIES", "3"))
+
+# Hard caps to avoid overflowing small-context models (e.g., 4k tokens).
+# Use conservative character limits to leave space for system prompts
+# and model overhead.
+MAX_TOKENS_JSON_CHARS = 200000
+MAX_TEMPLATE_JSON_CHARS = 100000
+MAX_TABLE_TOKENS_CHARS = 200000
+MAX_HINTS_TEXT_CHARS = 40000
 
 
 # =========================
@@ -132,15 +167,25 @@ def _create_client() -> OpenAI:
 
 
 client: Optional[OpenAI] = None
+_PROMPT_DUMP_DIR: Optional[Path] = None
 
 
 @app.on_event("startup")
 def init_client() -> None:
     global client
+    global _PROMPT_DUMP_DIR
     if client is None:
         client = _create_client()
         logger.info("LLM client initialized (base_url=%s, model_main=%s, model_products=%s)",
                     LLM_BASE_URL, LLM_MODEL_MAIN, LLM_MODEL_PRODUCTS)
+    # Ensure prompt dump directory exists at app/mock_services/prompts
+    try:
+        dump_dir = Path(__file__).resolve().parent / "prompts"
+        dump_dir.mkdir(parents=True, exist_ok=True)
+        _PROMPT_DUMP_DIR = dump_dir
+        logger.info("Prompt dump dir: %s", dump_dir)
+    except Exception:
+        logger.warning("Failed to prepare prompt dump directory", exc_info=True)
 
 
 # =========================
@@ -411,6 +456,133 @@ def _is_leaf_field(d: Dict[str, Any]) -> bool:
     return isinstance(d, dict) and "value" in d
 
 
+def _prepare_prompt_template(node: Any) -> Any:
+    """
+    Deep-copy helper that removes bbox/page/confidence metadata for prompt consumption.
+    """
+    if isinstance(node, dict):
+        result: Dict[str, Any] = {}
+        for key, value in node.items():
+            if _is_leaf_field(value):
+                result[key] = {
+                    "value": value.get("value", ""),
+                    "token_refs": value.get("token_refs", []),
+                }
+            else:
+                result[key] = _prepare_prompt_template(value)
+        return result
+    if isinstance(node, list):
+        return [_prepare_prompt_template(item) for item in node]
+    return node
+
+
+def _format_tokens_for_prompt(tokens: Any) -> str:
+    """
+    Render tokens as `token_id:\ntext` blocks for the LLM prompt.
+    """
+    if not isinstance(tokens, list):
+        return str(tokens or "")
+    lines: List[str] = []
+    for idx, token in enumerate(tokens):
+        if not isinstance(token, dict):
+            continue
+        token_id = token.get("id") or f"token_{idx}"
+        text = token.get("text", "")
+        if text is None:
+            text = ""
+        if not isinstance(text, str):
+            text = str(text)
+        lines.append(f"{token_id}:")
+        lines.append(text)
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def _format_table_candidates(tokens: List[Dict[str, Any]]) -> str:
+    if not tokens:
+        return ""
+    lines: List[str] = []
+    for idx, token in enumerate(tokens):
+        if not isinstance(token, dict):
+            continue
+        token_id = token.get("id") or f"table_{idx}"
+        text = token.get("text", "")
+        if text is None:
+            text = ""
+        if not isinstance(text, str):
+            text = str(text)
+        lines.append(f"{token_id}:")
+        lines.append(text)
+        lines.append("")
+    return "\n".join(lines).strip()
+
+
+def _format_dynamic_hint_lines(hints: Dict[str, List[str]]) -> List[str]:
+    lines: List[str] = []
+    if not isinstance(hints, dict):
+        return lines
+    for field, values in hints.items():
+        if not values:
+            continue
+        clean_values = [str(v).strip() for v in values if isinstance(v, str) and v.strip()]
+        if not clean_values:
+            continue
+        joined = "; ".join(dict.fromkeys(clean_values))  # preserve order, drop duplicates
+        lines.append(f"{field} (candidates): {joined}")
+    return lines
+
+
+def _split_curated_hints(hints_text: str) -> Tuple[str, str]:
+    """
+    Split curated hint lines into (main_lines_text, product_lines_text),
+    where product lines start with 'products'.
+    """
+    if not hints_text:
+        return "", ""
+    main_lines: List[str] = []
+    product_lines: List[str] = []
+    doc_type_lines: List[str] = []
+
+    for raw_line in hints_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        prefix = line.split(":", 1)[0].strip().lower()
+        if prefix == "doc_type":
+            doc_type_lines.append(line)
+            continue
+        if prefix.startswith("products"):
+            product_lines.append(line)
+        else:
+            main_lines.append(line)
+
+    main_text_parts: List[str] = []
+    if doc_type_lines:
+        main_text_parts.extend(doc_type_lines)
+    if main_lines:
+        main_text_parts.extend(main_lines)
+
+    product_text_parts: List[str] = []
+    if doc_type_lines:
+        product_text_parts.extend(doc_type_lines)
+    if product_lines:
+        product_text_parts.extend(product_lines)
+
+    return "\n".join(main_text_parts), "\n".join(product_text_parts)
+
+
+def _compose_field_hints_block(curated_text: str, extra_lines: List[str]) -> str:
+    parts: List[str] = []
+    if curated_text:
+        parts.append(curated_text.strip())
+    if extra_lines:
+        parts.append("\n".join(extra_lines))
+    combined = "\n\n".join(part for part in parts if part)
+    if combined and len(combined) > MAX_HINTS_TEXT_CHARS:
+        return combined[:MAX_HINTS_TEXT_CHARS]
+    return combined
+
+
 def _strip_colon_label(value: str) -> str:
     """
     Rough rule: if a colon ':' exists, remove everything up to the first colon, then trim a single space.
@@ -459,28 +631,36 @@ def _strip_labels_in_payload(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], i
 # LLM call builders
 # =========================
 
-def _build_messages_main(doc_id: str,
-                         doc_text: str,
-                         tokens: Any,
+def _build_messages_main(tokens: Any,
                          fields_main_only: Dict[str, Any],
-                         hints: Dict[str, List[str]]) -> list:
-    user_blocks = []
-    user_blocks.append({"type": "text", "text": f"<doc_id>\n{doc_id}\n</doc_id>"})
-    user_blocks.append({"type": "text", "text": f"<raw_plain_text>\n{doc_text}\n</raw_plain_text>"})
+                         hints: Dict[str, List[str]],
+                         curated_hints_text: Optional[str] = None) -> list:
+    user_blocks: List[Dict[str, Any]] = []
 
-    # include tokens fully if reasonable; otherwise, include as a raw JSON string (the model/tool will handle size)
-    try:
-        tokens_json = json.dumps(tokens, ensure_ascii=False)
-    except Exception:
-        tokens_json = str(tokens)
-    user_blocks.append({"type": "text", "text": f"<raw_tokens>\n{tokens_json}\n</raw_tokens>"})
+    fields_template = _prepare_prompt_template(fields_main_only or {})
+    fields_main_json = json.dumps(fields_template, ensure_ascii=False)
+    if len(fields_main_json) > MAX_TEMPLATE_JSON_CHARS:
+        fields_main_json = fields_main_json[:MAX_TEMPLATE_JSON_CHARS]
+    user_blocks.append({
+        "type": "text",
+        "text": f"=== FIELDS TEMPLATE ===\n{fields_main_json}\n=== END FIELDS TEMPLATE ===",
+    })
 
-    fields_main_json = json.dumps({"fields": fields_main_only}, ensure_ascii=False)
-    user_blocks.append({"type": "text", "text": f"<template_fields_main>\n{fields_main_json}\n</template_fields_main>"})
+    dynamic_hint_lines = _format_dynamic_hint_lines(hints or {})
+    hints_block = _compose_field_hints_block(curated_hints_text or "", dynamic_hint_lines)
+    if hints_block:
+        user_blocks.append({
+            "type": "text",
+            "text": f"=== FIELD HINTS ===\n{hints_block}\n=== END FIELD HINTS ===",
+        })
 
-    if hints:
-        hints_json = json.dumps(hints, ensure_ascii=False)
-        user_blocks.append({"type": "text", "text": f"<hints>(Optional; ignore if conflicting)\n{hints_json}\n</hints>"})
+    tokens_text = _format_tokens_for_prompt(tokens)
+    if len(tokens_text) > MAX_TOKENS_JSON_CHARS:
+        tokens_text = tokens_text[:MAX_TOKENS_JSON_CHARS]
+    user_blocks.append({
+        "type": "text",
+        "text": f"=== RAW TOKENS ===\n{tokens_text}\n=== END RAW TOKENS ===",
+    })
 
     messages = [
         {"role": "system", "content": PROMPT_MAIN},
@@ -489,37 +669,89 @@ def _build_messages_main(doc_id: str,
     return messages
 
 
-def _build_messages_products(doc_id: str,
-                             doc_text: str,
-                             tokens: Any,
+def _build_messages_products(tokens: Any,
                              product_template: Dict[str, Any],
-                             table_like_tokens: List[Dict[str, Any]]) -> list:
-    user_blocks = []
-    user_blocks.append({"type": "text", "text": f"<doc_id>\n{doc_id}\n</doc_id>"})
-    user_blocks.append({"type": "text", "text": f"<raw_plain_text>\n{doc_text}\n</raw_plain_text>"})
+                             table_like_tokens: List[Dict[str, Any]],
+                             curated_hints_text: Optional[str] = None) -> list:
+    user_blocks: List[Dict[str, Any]] = []
 
-    try:
-        tokens_json = json.dumps(tokens, ensure_ascii=False)
-    except Exception:
-        tokens_json = str(tokens)
-    user_blocks.append({"type": "text", "text": f"<raw_tokens>\n{tokens_json}\n</raw_tokens>"})
+    product_template_json = json.dumps(_prepare_prompt_template(product_template or {}), ensure_ascii=False)
+    if len(product_template_json) > MAX_TEMPLATE_JSON_CHARS:
+        product_template_json = product_template_json[:MAX_TEMPLATE_JSON_CHARS]
+    user_blocks.append({
+        "type": "text",
+        "text": f"=== PRODUCT TEMPLATE ===\n{product_template_json}\n=== END PRODUCT TEMPLATE ===",
+    })
 
-    product_template_json = json.dumps({"product_template": product_template}, ensure_ascii=False)
-    user_blocks.append({"type": "text", "text": f"<template_product>\n{product_template_json}\n</template_product>"})
+    hints_block = _compose_field_hints_block(curated_hints_text or "", [])
+    if hints_block:
+        user_blocks.append({
+            "type": "text",
+            "text": f"=== FIELD HINTS ===\n{hints_block}\n=== END FIELD HINTS ===",
+        })
 
-    if table_like_tokens:
-        # send raw table-like tokens as-is
-        try:
-            tbl_json = json.dumps(table_like_tokens, ensure_ascii=False)
-        except Exception:
-            tbl_json = str(table_like_tokens)
-        user_blocks.append({"type": "text", "text": f"<table_candidates>\n{tbl_json}\n</table_candidates>"})
+    tokens_text = _format_tokens_for_prompt(tokens)
+    if len(tokens_text) > MAX_TOKENS_JSON_CHARS:
+        tokens_text = tokens_text[:MAX_TOKENS_JSON_CHARS]
+    user_blocks.append({
+        "type": "text",
+        "text": f"=== RAW TOKENS ===\n{tokens_text}\n=== END RAW TOKENS ===",
+    })
+
+    table_text = _format_table_candidates(table_like_tokens)
+    if table_text:
+        if len(table_text) > MAX_TABLE_TOKENS_CHARS:
+            table_text = table_text[:MAX_TABLE_TOKENS_CHARS]
+        user_blocks.append({
+            "type": "text",
+            "text": f"=== TABLE CANDIDATES ===\n{table_text}\n=== END TABLE CANDIDATES ===",
+        })
 
     messages = [
         {"role": "system", "content": PROMPT_PRODUCTS},
         {"role": "user", "content": user_blocks},
     ]
     return messages
+
+
+def _dump_messages(doc_id: str, branch: str, model: str, messages: list) -> None:
+    """Write a plain-text dump of the exact prompt sent to the LLM.
+
+    The file is written under base_dir/prompts as <doc_id>_<branch>.txt
+    """
+    try:
+        if _PROMPT_DUMP_DIR is None:
+            return
+        lines: List[str] = []
+        lines.append(f"MODEL: {model}")
+        lines.append(f"BRANCH: {branch}")
+        lines.append("")
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content")
+            lines.append(f"=== {role.upper()} ===")
+            if isinstance(content, str):
+                lines.append(content)
+            elif isinstance(content, list):
+                for i, part in enumerate(content, start=1):
+                    ptype = part.get("type") if isinstance(part, dict) else type(part).__name__
+                    lines.append(f"-- part {i} ({ptype}) --")
+                    if isinstance(part, dict):
+                        txt = part.get("text")
+                        if isinstance(txt, str):
+                            lines.append(txt)
+                        else:
+                            lines.append(str(part))
+                    else:
+                        lines.append(str(part))
+            else:
+                lines.append(str(content))
+            lines.append("")
+        payload = "\n".join(lines)
+        out_path = _PROMPT_DUMP_DIR / f"{doc_id}_{branch.lower()}_prompt.txt"
+        out_path.write_text(payload, encoding="utf-8")
+    except Exception:
+        logger.warning("Failed to dump prompt (doc_id=%s, branch=%s)", doc_id, branch, exc_info=True)
 
 
 def _llm_chat(messages: list, model: str, timeout: int = 300) -> str:
@@ -533,6 +765,9 @@ def _llm_chat(messages: list, model: str, timeout: int = 300) -> str:
         temperature=0,
         timeout=timeout,
     )
+
+    print("OTVEEET", resp.choices[0].message.content.strip())
+
     return (resp.choices[0].message.content or "").strip()
 
 
@@ -835,15 +1070,18 @@ async def fill(request: FillerRequest) -> FillerResponse:
 
     # Optional, non-forcing hints (multi-match lists)
     hints = _collect_hints(request.doc_text or "")
+    # Load curated doc-type hints (plain text)
+    curated_hints_text = get_hints_text(request.doc_type)
+    main_hints_text, product_hints_text = _split_curated_hints(curated_hints_text)
 
     # Build and run MAIN call
     msgs_main = _build_messages_main(
-        doc_id=request.doc_id,
-        doc_text=request.doc_text or "",
         tokens=request.tokens,
         fields_main_only=fields_main_only,
         hints=hints,
+        curated_hints_text=main_hints_text,
     )
+    _dump_messages(request.doc_id, "MAIN", LLM_MODEL_MAIN, msgs_main)
     if _DETAILED:
         logger.debug(
             "MAIN messages built: blocks=%s, sys_prompt_len=%s, user_preview=%s",
@@ -862,7 +1100,9 @@ async def fill(request: FillerRequest) -> FillerResponse:
     )
     if isinstance(main_payload, dict):
         try:
+            print("BEFORE STRIP", main_payload)
             main_payload, stripped_count = _strip_labels_in_payload(main_payload)
+            print("AFTER STRIP", main_payload, stripped_count)
         except Exception:
             stripped_count = 0
         logger.info("Main branch OK (doc_id=%s, repaired=%s, labels_stripped=%d)",
@@ -884,12 +1124,12 @@ async def fill(request: FillerRequest) -> FillerResponse:
     if has_products and product_template is not None:
         table_like = _find_table_like_tokens(request.tokens)
         msgs_products = _build_messages_products(
-            doc_id=request.doc_id,
-            doc_text=request.doc_text or "",
             tokens=request.tokens,
             product_template=product_template,
             table_like_tokens=table_like,
+            curated_hints_text=product_hints_text,
         )
+        _dump_messages(request.doc_id, "PRODUCTS", LLM_MODEL_PRODUCTS, msgs_products)
         if _DETAILED:
             logger.debug(
                 "PRODUCTS messages built: blocks=%s, sys_prompt_len=%s, table_like=%d, user_preview=%s",
@@ -936,6 +1176,7 @@ async def fill(request: FillerRequest) -> FillerResponse:
     # Post-merge visibility
     try:
         merged_products = merged_fields.get("products", {}) if isinstance(merged_fields, dict) else {}
+
         logger.info(
             "Merged result: products_count=%d, main_present=%s, products_present=%s",
             len(merged_products) if isinstance(merged_products, dict) else 0,
@@ -953,7 +1194,7 @@ async def fill(request: FillerRequest) -> FillerResponse:
     validation_meta = _validate_fields_against_template(merged_fields, product_template)
 
     return FillerResponse(
-        doc_id=(main_payload.get("doc_id") if isinstance(main_payload, dict) else request.doc_id),
+        doc_id=request.doc_id,
         fields=merged_fields,
         meta={
             "source": "llm",

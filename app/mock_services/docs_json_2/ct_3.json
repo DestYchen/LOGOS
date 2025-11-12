@@ -1,0 +1,30 @@
+{
+  "file": "",
+  "doc_type": "CT-3",
+  "fields": {
+    "ct3_no":           { "value": "", "bbox": [] },
+    "ct3_date":         { "value": "", "bbox": [] },
+    "invoice_no":       { "value": "", "bbox": [] },
+    "invoice_date":     { "value": "", "bbox": [] },
+    "country_of_origin":{ "value": "", "bbox": [] },
+    "exporter":         { "value": "", "bbox": [] },
+    "importer":         { "value": "", "bbox": [] },
+    "destination":      { "value": "", "bbox": [] },
+    "container_no":     { "value": "", "bbox": [] },
+    "veterinary_seal":  { "value": "", "bbox": [] },
+    "linear_seal":      { "value": "", "bbox": [] },
+    "products": {
+      "product_1": {
+        "name_product":   { "value": "", "bbox": [], "token_refs": [], "required": true },
+        "latin_name":     { "value": "", "bbox": [], "token_refs": [], "required": true },
+        "size_product":   { "value": "", "bbox": [], "token_refs": [], "required": true },
+        "unit_box":       { "value": "", "bbox": [], "token_refs": [], "required": true },
+        "packages":       { "value": "", "bbox": [], "token_refs": [], "required": true },
+        "net_weight":     { "value": "", "bbox": [], "required": true },
+        "gross_weight":   { "value": "", "bbox": [], "required": true },
+        "HS_code":        { "value": "", "bbox": [], "token_refs": [], "required": true }
+      },
+      "product_2": {}
+    }
+  }
+}

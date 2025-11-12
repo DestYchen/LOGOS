@@ -564,7 +564,12 @@ function ResolvePage() {
     if (!currentDoc) {
       return { required: [] as FieldState[], lowConfidence: [] as FieldState[], other: [] as FieldState[] };
     }
-    const visibleFields = currentDoc.fields.filter((field) => !HIDDEN_FIELD_KEYS.has(field.field_key));
+    // Show only schema-defined fields coming from the API. The backend marks
+    // stale DB fields that aren't in the current schema as reason === "extra".
+    // Filter those out so the UI reflects docs_json_2-only fields.
+    const visibleFields = currentDoc.fields.filter(
+      (field) => !HIDDEN_FIELD_KEYS.has(field.field_key) && field.reason !== "extra"
+    );
     const required = visibleFields.filter((field) => field.reason === "missing");
     const lowConfidence = visibleFields.filter((field) => field.reason === "low_confidence");
     const other = visibleFields.filter((field) => field.reason !== "missing" && field.reason !== "low_confidence");

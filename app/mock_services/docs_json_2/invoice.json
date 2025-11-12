@@ -1,0 +1,101 @@
+﻿{
+    "file": "",
+    "doc_type": "INVOICE",
+    "fields": {
+        "invoice_no": {
+            "value": "",
+            "bbox": []
+        },
+        "invoice_date": {
+            "value": "",
+            "bbox": []
+        },
+        "products": {
+            "product_1": {
+                "name_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "latin_name": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "size_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "unit_box": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "packages": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "price_per_unit": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "total_price": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                }
+            },
+            "product_2": {}
+        },
+        "producer": {
+            "value": "",
+            "bbox": []
+        },
+        "incoterms": {
+            "value": "",
+            "bbox": []
+        },
+        "terms_of_payment": {
+            "value": "",
+            "bbox": []
+        },
+        "bank_details": {
+            "value": "",
+            "bbox": []
+        },
+        "buyer": {
+            "value": "",
+            "bbox": []
+        },
+        "seller": {
+            "value": "",
+            "bbox": []
+        },
+        "proforma_no": {
+            "value": "",
+            "bbox": []
+        },
+        "container_no": {
+            "value": "",
+            "bbox": []
+        },
+        "HS_code": {
+            "value": "",
+            "bbox": []
+        },
+        "total_price":{
+            "value": "",
+            "bbox": []
+        }
+    }
+}

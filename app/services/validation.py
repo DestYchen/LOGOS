@@ -33,6 +33,12 @@ class FieldRef:
 
 
 @dataclass(frozen=True)
+class FieldComparisonRule:
+    anchor_doc: str
+    target_docs: List[str]
+
+
+@dataclass(frozen=True)
 class DateComparison:
     operator: str
     other: FieldRef
@@ -677,7 +683,78 @@ ALL_DOC_TYPES = [
     "CERTIFICATE_OF_ORIGIN",
     "EXPORT_DECLARATION",
     "SPECIFICATION",
+    "CMR",
+    "FORM_A",
+    "EAV",
+    "CT_3",
 ]
+
+FIELD_MATRIX_DOC_TYPES = [
+    "CONTRACT",
+    "ADDENDUM",
+    "PROFORMA",
+    "INVOICE",
+    "BILL_OF_LADING",
+    "CMR",
+    "PACKING_LIST",
+    "PRICE_LIST_1",
+    "PRICE_LIST_2",
+    "QUALITY_CERTIFICATE",
+    "VETERINARY_CERTIFICATE",
+    "EXPORT_DECLARATION",
+    "SPECIFICATION",
+    "CERTIFICATE_OF_ORIGIN",
+    "FORM_A",
+    "EAV",
+    "CT-3",
+]
+
+FIELD_MATRIX_DOC_TYPE_MAP = {
+    "CONTRACT": "CONTRACT",
+    "ADDENDUM": None,  # placeholder for future support
+    "PROFORMA": "PROFORMA",
+    "INVOICE": "INVOICE",
+    "BILL_OF_LADING": "BILL_OF_LANDING",
+    "CMR": "CMR",
+    "PACKING_LIST": "PACKING_LIST",
+    "PRICE_LIST_1": "PRICE_LIST_1",
+    "PRICE_LIST_2": "PRICE_LIST_2",
+    "QUALITY_CERTIFICATE": "QUALITY_CERTIFICATE",
+    "VETERINARY_CERTIFICATE": "VETERINARY_CERTIFICATE",
+    "EXPORT_DECLARATION": "EXPORT_DECLARATION",
+    "SPECIFICATION": "SPECIFICATION",
+    "CERTIFICATE_OF_ORIGIN": "CERTIFICATE_OF_ORIGIN",
+    "FORM_A": "FORM_A",
+    "EAV": "EAV",
+    "CT-3": "CT-3",
+}
+
+FIELD_MATRIX_FIELDS: List[Tuple[str, List[str]]] = [
+    ("proforma_date", ["proforma_date"]),
+    ("proforma_no", ["proforma_no"]),
+    ("invoice_date", ["invoice_date"]),
+    ("invoice_no", ["invoice_no"]),
+    ("country_of_origin", ["country_of_origin"]),
+    ("producer", ["producer"]),
+    ("buyer", ["buyer"]),
+    ("seller", ["seller"]),
+    ("exporter", ["exporter"]),
+    ("importer", ["importer"]),
+    ("incoterms", ["incoterms"]),
+    ("terms_of_payment", ["terms_of_payment"]),
+    ("bank_details", ["bank_details"]),
+    ("total_price", ["total_price"]),
+    ("destination", ["destination"]),
+    ("vessel", ["vessel"]),
+    ("container_no", ["container_no"]),
+    ("veterinary_seal", ["veterinary_seal"]),
+    ("linear_seal", ["linear_seal"]),
+    ("veterinary_certificate_no", ["veterinary_certificate_no"]),
+    ("veterinary_certificate_date", ["veterinary_certificate_date"]),
+    ("HS_code", ["HS_code", "commodity_code"]),
+]
+
+FIELD_COMPARISON_RULES: Dict[str, List[FieldComparisonRule]] = defaultdict(list)
 
 
 # Date field references
@@ -692,6 +769,9 @@ VET_CERT_DATE = _ref("VETERINARY_CERTIFICATE", "veterinary_certificate_date", "V
 EXPORT_DECL_DATE = _ref("EXPORT_DECLARATION", "export_declaration_date", "Export declaration date")
 SPECIFICATION_DATE = _ref("SPECIFICATION", "specification_date", "Specification date")
 CERT_ORIGIN_DATE = _ref("CERTIFICATE_OF_ORIGIN", "certificate_of_origin_date", "Certificate of origin date")
+CMR_DATE = _ref("CMR", "cmr_date", "CMR date")
+FORM_A_DATE = _ref("FORM_A", "form_a_date", "FORM A date")
+EAV_DATE = _ref("EAV", "eav_date", "EAV date")
 
 
 DATE_RULES: List[DateRule] = [
@@ -710,6 +790,9 @@ DATE_RULES: List[DateRule] = [
             DateComparison("<=", EXPORT_DECL_DATE),
             DateComparison("<=", SPECIFICATION_DATE),
             DateComparison("<=", CERT_ORIGIN_DATE),
+            DateComparison("<=", CMR_DATE),
+            DateComparison("<=", FORM_A_DATE),
+            DateComparison("<=", EAV_DATE),
         ],
     ),
     DateRule(
@@ -724,6 +807,9 @@ DATE_RULES: List[DateRule] = [
             DateComparison(">=", EXPORT_DECL_DATE),
             DateComparison(">=", SPECIFICATION_DATE),
             DateComparison(">=", CERT_ORIGIN_DATE),
+            DateComparison(">=", CMR_DATE),
+            DateComparison(">=", FORM_A_DATE),
+            DateComparison(">=", EAV_DATE),
         ],
     ),
     DateRule(
@@ -735,6 +821,16 @@ DATE_RULES: List[DateRule] = [
             DateComparison(">=", INVOICE_DATE),
             DateComparison(">=", PRICE_LIST1_DATE),
             DateComparison(">=", PRICE_LIST2_DATE),
+        ],
+    ),
+    DateRule(
+        rule_id="date_cmr_after_sources",
+        description="Дата CMR должна быть позже даты инвойса, позже проформы и прайс-листа 1",
+        anchor=CMR_DATE,
+        comparisons=[
+            DateComparison(">=", INVOICE_DATE),
+            DateComparison(">", PROFORMA_DATE),
+            DateComparison(">", PRICE_LIST1_DATE),
         ],
     ),
     DateRule(
@@ -765,19 +861,28 @@ DATE_RULES: List[DateRule] = [
         rule_id="date_quality_certificate_after_bol",
         description="Дата сертификатат качества должна быть позже или равна дате коноссамента",
         anchor=QUALITY_CERT_DATE,
-        comparisons=[DateComparison(">=", BOL_DATE)],
+        comparisons=[
+            DateComparison(">=", BOL_DATE),
+            DateComparison(">=", CMR_DATE),
+        ],
     ),
     DateRule(
         rule_id="date_veterinary_certificate_before_bol",
         description="Дата ветеринарного сертификата должна быть раньше чем дата коноссамента",
         anchor=VET_CERT_DATE,
-        comparisons=[DateComparison("<", BOL_DATE)],
+        comparisons=[
+            DateComparison("<", BOL_DATE),
+            DateComparison("==", CMR_DATE),
+        ],
     ),
     DateRule(
         rule_id="date_export_declaration_after_bol",
         description="Дата экспортной декларации должна быть позже или равна даты коноссамента",
         anchor=EXPORT_DECL_DATE,
-        comparisons=[DateComparison(">=", BOL_DATE)],
+        comparisons=[
+            DateComparison(">=", BOL_DATE),
+            DateComparison(">=", CMR_DATE),
+        ],
     ),
     DateRule(
         rule_id="date_specification_not_after_invoice",
@@ -791,24 +896,38 @@ DATE_RULES: List[DateRule] = [
         anchor=CERT_ORIGIN_DATE,
         comparisons=[DateComparison(">=", INVOICE_DATE)],
     ),
+    DateRule(
+        rule_id="date_form_a_after_invoice",
+        description="Дата FORM A должна быть равна или позже даты инвойса",
+        anchor=FORM_A_DATE,
+        comparisons=[DateComparison(">=", INVOICE_DATE)],
+    ),
+    DateRule(
+        rule_id="date_eav_after_invoice",
+        description="Дата EAV должна быть равна или позже даты инвойса",
+        anchor=EAV_DATE,
+        comparisons=[DateComparison(">=", INVOICE_DATE)],
+    ),
 ]
 
 
 ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     AnchoredEqualityRule(
         rule_id="contract_no_alignment",
-        description="Номер контракта должен быть одинаковым среди проформы, инвойса и спецификации",
-        anchor=_ref("PROFORMA", "contract_no", "Contract number"),
+        description="Номер контракта должен совпадать во всех связанных документах",
+        anchor=_ref("CONTRACT", "contract_no", "Contract number"),
         targets=[
+            _ref("PROFORMA", "contract_no"),
             _ref("INVOICE", "contract_no"),
             _ref("SPECIFICATION", "contract_no"),
         ],
     ),
     AnchoredEqualityRule(
         rule_id="additional_agreements_alignment",
-        description="Дополнительное соглашение дожно быть одинаковым среди профомы, инвойса и спецификации",
-        anchor=_ref("PROFORMA", "additional_agreements", "Additional agreements"),
+        description="Дополнительные соглашения должны совпадать во всех связанных документах",
+        anchor=_ref("CONTRACT", "additional_agreements", "Additional agreements"),
         targets=[
+            _ref("PROFORMA", "additional_agreements"),
             _ref("INVOICE", "additional_agreements"),
             _ref("SPECIFICATION", "additional_agreements"),
         ],
@@ -819,6 +938,17 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
         anchor=_ref("VETERINARY_CERTIFICATE", "country_of_origin", "Country of origin"),
         targets=_refs(ALL_DOC_TYPES, "country_of_origin", exclude=["VETERINARY_CERTIFICATE"]),
         value_kind="string-casefold",
+    ),
+    AnchoredEqualityRule(
+        rule_id="total_price_consistency",
+        description="Общая стоимость в инвойсе должна совпадать с другими документами",
+        anchor=_ref("INVOICE", "total_price", "Total price"),
+        targets=[
+            _ref("PROFORMA", "total_price"),
+            _ref("SPECIFICATION", "total_price"),
+            _ref("EXPORT_DECLARATION", "total_price"),
+        ],
+        value_kind="string",
     ),
     AnchoredEqualityRule(
         rule_id="producer_consistency",
@@ -844,6 +974,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
             _ref("PRICE_LIST_2", "incoterms"),
             _ref("EXPORT_DECLARATION", "incoterms"),
             _ref("SPECIFICATION", "incoterms"),
+            _ref("CMR", "incoterms"),
         ],
         value_kind="string-upper",
     ),
@@ -858,9 +989,12 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
     ),
     AnchoredEqualityRule(
         rule_id="bank_details_consistency",
-        description="Банковские данные должны совпадать в инвойсе и проформе",
-        anchor=_ref("INVOICE", "bank_details", "Bank details"),
-        targets=[_ref("PROFORMA", "bank_details")],
+        description="Банковские реквизиты в контракте должны совпадать с инвойсом и проформой",
+        anchor=_ref("CONTRACT", "bank_details", "Bank details"),
+        targets=[
+            _ref("INVOICE", "bank_details"),
+            _ref("PROFORMA", "bank_details"),
+        ],
     ),
     AnchoredEqualityRule(
         rule_id="exporter_consistency",
@@ -869,37 +1003,36 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
         targets=[
             _ref("BILL_OF_LANDING", "exporter"),
             _ref("CERTIFICATE_OF_ORIGIN", "exporter"),
+            _ref("CMR", "exporter"),
+            _ref("FORM_A", "exporter"),
+            _ref("EAV", "exporter"),
+            _ref("CT_3", "exporter"),
         ],
         value_kind="string-casefold",
     ),
-    # AnchoredEqualityRule(
-    #     rule_id="total_price_consistency",
-    #     description="Итоговая цена в инвойсе должна совпадать с другими документами",
-    #     anchor=_ref("INVOICE", "total_price", "Total price"),
-    #     targets=[
-    #         _ref("PROFORMA", "total_price"),
-    #         _ref("SPECIFICATION", "total_price"),
-    #         _ref("EXPORT_DECLARATION", "total_price"),
-    #         _ref("PRICE_LIST_1", "total_price"),
-    #         _ref("PRICE_LIST_2", "total_price"),
-    #     ],
-    #     value_kind="string",
-    # ),
-    # AnchoredEqualityRule(
-    #     rule_id="packages_consistency",
-    #     description="Количество упаковок в пакинг листе должно совпадать с другими документами",
-    #     anchor=_ref("PACKING_LIST", "packages", "Packages"),
-    #     targets=[
-    #         _ref("INVOICE", "packages"),
-    #         _ref("BILL_OF_LANDING", "packages"),
-    #         _ref("CERTIFICATE_OF_ORIGIN", "packages"),
-    #         _ref("VETERINARY_CERTIFICATE", "packages"),
-    #         _ref("EXPORT_DECLARATION", "packages"),
-    #         _ref("SPECIFICATION", "packages"),
-    #         _ref("QUALITY_CERTIFICATE", "packages"),
-    #     ],
-    #     value_kind="number",
-    # ),
+    AnchoredEqualityRule(
+        rule_id="recipient_matches_contract_buyer",
+        description="Получатель из контракта должен совпадать с импортёрами в транспортных документах",
+        anchor=_ref("CONTRACT", "buyer", "Contract buyer"),
+        targets=[
+            _ref("BILL_OF_LANDING", "importer"),
+            _ref("CMR", "importer"),
+            _ref("CERTIFICATE_OF_ORIGIN", "importer"),
+            _ref("FORM_A", "importer"),
+            _ref("EAV", "importer"),
+            _ref("CT_3", "importer"),
+        ],
+        value_kind="string-casefold",
+    ),
+    AnchoredEqualityRule(
+        rule_id="proforma_number_consistency",
+        description="Номер проформы должен совпадать в инвойсе и экспортной декларации",
+        anchor=_ref("PROFORMA", "proforma_no", "Proforma number"),
+        targets=[
+            _ref("INVOICE", "proforma_no"),
+            _ref("EXPORT_DECLARATION", "proforma_no"),
+        ],
+    ),
     AnchoredEqualityRule(
         rule_id="invoice_number_consistency",
         description="Номер инвойса должен совпадать с другими документами",
@@ -908,6 +1041,10 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
             _ref("PACKING_LIST", "invoice_no"),
             _ref("EXPORT_DECLARATION", "invoice_no"),
             _ref("CERTIFICATE_OF_ORIGIN", "invoice_no"),
+            _ref("CMR", "invoice_no"),
+            _ref("FORM_A", "invoice_no"),
+            _ref("EAV", "invoice_no"),
+            _ref("CT_3", "invoice_no"),
         ],
     ),
     AnchoredEqualityRule(
@@ -919,6 +1056,10 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
             _ref("QUALITY_CERTIFICATE", "veterinary_seal"),
             _ref("CERTIFICATE_OF_ORIGIN", "veterinary_seal"),
             _ref("PACKING_LIST", "veterinary_seal"),
+            _ref("CMR", "veterinary_seal"),
+            _ref("FORM_A", "veterinary_seal"),
+            _ref("EAV", "veterinary_seal"),
+            _ref("CT_3", "veterinary_seal"),
         ],
     ),
     AnchoredEqualityRule(
@@ -929,6 +1070,9 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
             _ref("QUALITY_CERTIFICATE", "linear_seal"),
             _ref("CERTIFICATE_OF_ORIGIN", "linear_seal"),
             _ref("PACKING_LIST", "linear_seal"),
+            _ref("FORM_A", "linear_seal"),
+            _ref("EAV", "linear_seal"),
+            _ref("CT_3", "linear_seal"),
         ],
     ),
     # AnchoredEqualityRule(
@@ -957,12 +1101,14 @@ GROUP_EQUALITY_RULES: List[GroupEqualityRule] = [
         rule_id="buyer_alignment",
         description="Покупатель должен быть одинаковый среди проформы, инвойса, экспортной декларации, спецификации, ветеринарного сертификата и серфтификата происхождения",
         refs=[
+            _ref("CONTRACT", "buyer"),
             _ref("PROFORMA", "buyer"),
             _ref("INVOICE", "buyer"),
             _ref("EXPORT_DECLARATION", "buyer"),
             _ref("SPECIFICATION", "buyer"),
             _ref("VETERINARY_CERTIFICATE", "buyer"),
             _ref("CERTIFICATE_OF_ORIGIN", "buyer"),
+            _ref("PACKING_LIST", "buyer"),
         ],
     ),
     GroupEqualityRule(
@@ -970,6 +1116,7 @@ GROUP_EQUALITY_RULES: List[GroupEqualityRule] = [
         description="Seller must be identical across Proforma, Invoice, Export declaration, Specification and price lists" \
         "Продавец должен быть одинаковый среди проформы, инвойса, экспортной декларации, спецификации и прайс листов",
         refs=[
+            _ref("CONTRACT", "seller"),
             _ref("PROFORMA", "seller"),
             _ref("INVOICE", "seller"),
             _ref("EXPORT_DECLARATION", "seller"),
@@ -987,6 +1134,10 @@ GROUP_EQUALITY_RULES: List[GroupEqualityRule] = [
             _ref("QUALITY_CERTIFICATE", "container_no"),
             _ref("CERTIFICATE_OF_ORIGIN", "container_no"),
             _ref("BILL_OF_LANDING", "container_no"),
+            _ref("CMR", "container_no"),
+            _ref("FORM_A", "container_no"),
+            _ref("EAV", "container_no"),
+            _ref("CT_3", "container_no"),
         ],
     ),
     GroupEqualityRule(
@@ -1006,9 +1157,32 @@ GROUP_EQUALITY_RULES: List[GroupEqualityRule] = [
         refs=[
             _ref("BILL_OF_LANDING", "importer"),
             _ref("CERTIFICATE_OF_ORIGIN", "importer"),
+            _ref("CMR", "importer"),
+            _ref("FORM_A", "importer"),
+            _ref("EAV", "importer"),
+            _ref("CT_3", "importer"),
         ],
     ),
 ]
+
+
+def _register_field_comparison_rules() -> None:
+    for rule in ANCHORED_EQUALITY_RULES:
+        anchor_field = rule.anchor.field_key
+        anchor_doc = rule.anchor.doc_type
+        targets = [ref.doc_type for ref in rule.targets if ref.doc_type]
+        if anchor_field and anchor_doc and targets:
+            FIELD_COMPARISON_RULES[anchor_field].append(FieldComparisonRule(anchor_doc, targets))
+    for rule in GROUP_EQUALITY_RULES:
+        if not rule.refs:
+            continue
+        anchor = rule.refs[0]
+        targets = [ref.doc_type for ref in rule.refs[1:] if ref.doc_type]
+        if anchor.field_key and anchor.doc_type and targets:
+            FIELD_COMPARISON_RULES[anchor.field_key].append(FieldComparisonRule(anchor.doc_type, targets))
+
+
+_register_field_comparison_rules()
 # Product-level group equality checks disabled (handled by per-product matcher)
 
 
@@ -1454,6 +1628,80 @@ def _collect_value(field: Optional[FilledField]) -> Optional[str]:
     return field.value
 
 
+def _build_field_matrix_snapshot(
+    documents: List[Document], fields_by_doc: Dict[uuid.UUID, Dict[str, FilledField]]
+) -> Dict[str, Any]:
+    doc_type_lookup: Dict[str, List[Dict[str, FilledField]]] = {}
+    for document in documents:
+        doc_type_value = getattr(document.doc_type, "value", str(document.doc_type))
+        doc_fields = fields_by_doc.get(document.id, {})
+        doc_type_lookup.setdefault(doc_type_value, []).append(doc_fields)
+
+    def _get_field_value(doc_type: str, aliases: List[str]) -> Tuple[str, bool]:
+        found = False
+        value = ""
+        for field_set in doc_type_lookup.get(doc_type, []):
+            for alias in aliases:
+                field = field_set.get(alias)
+                if field and isinstance(field, FilledField):
+                    value = field.value or ""
+                    found = True
+                    if value:
+                        return value, True
+            if found:
+                return value, True
+        return "", False
+
+    def _merge_status(current: Optional[str], new: Optional[str]) -> Optional[str]:
+        if new is None:
+            return current
+        priority = {"anchor": 4, "mismatch": 3, "missing": 2, "match": 1, None: 0}
+        if priority.get(new, 0) >= priority.get(current, 0):
+            return new
+        return current
+
+    rows: List[Dict[str, Any]] = []
+    for field_key, aliases in FIELD_MATRIX_FIELDS:
+        row: Dict[str, Any] = {"FieldKey": field_key}
+        statuses: Dict[str, Optional[str]] = {doc: None for doc in FIELD_MATRIX_DOC_TYPES}
+        value_cache: Dict[str, Tuple[str, bool]] = {}
+        actual_to_display: Dict[str, str] = {}
+
+        for display_doc in FIELD_MATRIX_DOC_TYPES:
+            actual_doc_type = FIELD_MATRIX_DOC_TYPE_MAP.get(display_doc, display_doc)
+            value = ""
+            present = False
+            if actual_doc_type:
+                value, present = _get_field_value(actual_doc_type, aliases)
+                value_cache[actual_doc_type] = (value, present)
+                actual_to_display[actual_doc_type] = display_doc
+            row[display_doc] = value or ""
+
+        for rule in FIELD_COMPARISON_RULES.get(field_key, []):
+            anchor_value, anchor_present = value_cache.get(rule.anchor_doc, ("", False))
+            anchor_display = actual_to_display.get(rule.anchor_doc)
+            if anchor_display:
+                statuses[anchor_display] = _merge_status(statuses[anchor_display], "anchor")
+            for target_doc in rule.target_docs:
+                target_value, target_present = value_cache.get(target_doc, ("", False))
+                target_display = actual_to_display.get(target_doc)
+                if not target_display:
+                    continue
+                if not target_present or target_value == "":
+                    status = "missing"
+                elif anchor_present and target_value == anchor_value:
+                    status = "match"
+                elif not anchor_present:
+                    status = "missing"
+                else:
+                    status = "mismatch"
+                statuses[target_display] = _merge_status(statuses[target_display], status)
+
+        row["statuses"] = statuses
+        rows.append(row)
+    return {"documents": FIELD_MATRIX_DOC_TYPES, "rows": rows}
+
+
 async def fetch_latest_fields(session: AsyncSession, batch_id: uuid.UUID) -> Dict[uuid.UUID, Dict[str, FilledField]]:
     stmt = (
         select(FilledField)
@@ -1586,6 +1834,16 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
             )
         )
 
+    field_matrix = _build_field_matrix_snapshot(documents, fields_by_doc)
+    validations.append(
+        ValidationMessage(
+            rule_id="document_matrix",
+            severity=ValidationSeverity.OK,
+            message="Document field matrix snapshot",
+            refs=[field_matrix],
+        )
+    )
+
     return validations
 
 
@@ -1603,7 +1861,6 @@ async def store_validations(session: AsyncSession, batch_id: uuid.UUID, messages
             )
         )
     await session.flush()
-
 
 
 

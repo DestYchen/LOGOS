@@ -1,0 +1,156 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "terms_of_payment": {"value": "", "token_refs": []}, "bank_details": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "proforma_no": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+invoice_no: Найди метку «Invoice No», «No.», «N°» или «№» рядом с заголовком «Commercial Invoice». Значение может содержать буквы, цифры и дефисы (например, N° 24636). Сохраняй точную строку как в документе и добавь её в поле invoice_no.
+invoice_date: Ищи «Date»/«Invoice date». Дата может быть одной строкой или разбита на D / M / Y. Собери полную дату и, если возможно, нормализуй в формат ГГГГ-ММ-ДД. Добавь найденную дату в поле invoice_date.
+buyer: Определи покупателя по меткам «Buyer», «Customer», «Consignee», «Bill to». Сохрани полное наименование и, если указано, адрес в единой строке, без сокращений. Добавь текст в поле buyer.
+seller: Определи продавца по меткам «Seller», «Supplier», «Shipper», «Exporter». Сохрани полное юридическое наименование и, если указано, адрес в единой строке. Добавь текст в поле seller.
+producer: Если в инвойсе указан «Producer»/«Manufacturer»/«Factory», извлеки юридическое наименование. Если перечислено несколько производителей — соедини значения через «; ». Добавь текст в поле producer.
+incoterms: Извлеки условия поставки (ИНКОТЕРМС) — трёхбуквенный код (например, EXW/FOB/CFR/CIF/DAP) и, если указано, пункт (например, «CFR ST. PETERSBURG - RUSSIA»). Сохраняй ровно так, как в документе, и добавь строку в поле incoterms.
+terms_of_payment: Найди условия оплаты («Terms of payment», «Payment»). Сохрани полную формулировку (напр., «ADV. 20%, BALANCE C/COPY DOC.») и добавь её в поле terms_of_payment.
+bank_details: Извлеки блок банковских реквизитов (банк, счёт/IBAN, SWIFT/BIC, бенефициар и адрес). Сохрани как один многострочный текст без нормализации и добавь его в поле bank_details.
+proforma_no: Если инвойс ссылается на проформу, найди «Proforma Invoice No.»/«Proforma No.»/«PI/P.I.». Извлекай только номер проформы, не путай с номером заказа («Order», «P.Code»). Добавь значение в поле proforma_no.
+container_no: Извлеки номер(а) контейнера/машины. Чаще всего формата 4 буквы + 7 цифр и, при наличии, суффикс (напр., «BMOU928899-1»). Если значений несколько — соедини через «; ». Добавь строку в поле container_no.
+HS_code: Найди «HS CODE»/«HS»/«Tariff code» и извлеки числовой код (напр., «0304.81»). Сохраняй формат кода как в документе и добавь его в поле HS_code.
+total_price: Найди итог по документу («Total», иногда вместе с ИНКОТЕРМС и валютой — напр., «Total CFR USD»). Предпочитай напечатанный итог; если он отсутствует, суммируй построчные суммы. Сохраняй валюту и разделители как в документе. Добавь строку в поле total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t1:
+QINGDAO CALYPSO FOOD CO.,LTD
+
+p0_t2:
+ADD No. 50 Hongkong Middle Road, Shinan District, Qingdao, Shandong, China.
+
+p0_t3:
+Commercial Invoice
+
+p0_t4:
+Contract No.: CLPMO22 DD:April 22, 2022
+
+p0_t5:
+SOLD TO: OOO "MOREODOR"
+117292 MOSCOW, PROFSOYUZNAYA STREET, 3, RUSSIA, OFFICE 412
+
+p0_t6:
+INVOICE NO.: 2311MU-9
+
+p0_t7:
+DATE: DEC 23.2024
+
+p0_t8:
+PI NO.: 2311MU-9-10
+
+p0_t9:
+DATE: NOV 05. 2024
+
+p0_t10:
+Port of Delivery : RIZHAO, China
+
+p0_t11:
+Port of Destination : VLADIVOSTOK,RUSSIA
+
+p0_t12:
+ORIGIN:CHINA
+
+p0_t13:
+<table>
+  <thead>
+    <tr>
+      <th>Product</th>
+      <th>SIZE</th>
+      <th>Total CTNS</th>
+      <th>Unit Price FOB RIZHAO</th>
+      <th>Total Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>FROZEN GREEN MUSSELS IN THE HALF SHELL, IQF (PERNA CANALICULUS)<br/>Packed 12*1kg=12kg/ctn<br/>HS Code:0307320000</td>
+      <td>30-45PCS/KG</td>
+      <td>1738</td>
+      <td>RMB ¥ 749.16/ctn</td>
+      <td>RMB ¥ 1302040.08</td>
+    </tr>
+    <tr>
+      <td>Total</td>
+      <td></td>
+      <td>1738</td>
+      <td></td>
+      <td>RMB ¥ 1302040.08</td>
+    </tr>
+  </tbody>
+</table>
+
+p0_t14:
+Container/Seal No.: MEDU9763238
+
+p0_t15:
+THERMOGRAPH NO.:240100609974/240100609972/240100609975
+
+p0_t16:
+1.TERMS & CONDITIONS: Payment Terms: T/T with 100% balance payment within 45 days after loading, against full set of confirmed originals documents.
+
+p0_t17:
+Information of Bank: BANK OF CHINA QINGDAO WUSI PLAZA SUB-BRANCH
+
+p0_t18:
+Address: NO.10 XIANGGANGZHONG ROAD, TOP YIHE INTERNATIONAL, QINGDAO, CHINA
+
+p0_t19:
+Beneficiary: QINGDAO CALYPSO FOOD CO.,LTD
+
+p0_t20:
+Address: No. 50 Hongkong Middle Road, Shinan District, Qingdao, Shandong, China
+
+p0_t21:
+Account Number (RMB) : 206546189674
+
+p0_t22:
+SWIFT Code: BKCHCNBJ50A
+
+p0_t23:
+Correspondent Bank Name: BANK OF CHINA QINGDAO WUSI PLAZA SUB-BRANCH
+
+p0_t24:
+Correspondent Bank Address: NO.10 XIANGGANGZHONG ROAD, TOP YIHE INTERNATIONAL, QINGDAO, CHINA
+
+p0_t25:
+SWIFT NO.: BKCHCNBJ50A
+=== END RAW TOKENS ===

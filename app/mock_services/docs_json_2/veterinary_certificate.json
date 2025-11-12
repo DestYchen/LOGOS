@@ -1,0 +1,90 @@
+﻿{
+    "file": "",
+    "doc_type": "VETERINARY_CERTIFICATE",
+    "fields": {
+        "veterinary_certificate_no":{
+            "value": "",
+            "bbox": []
+        },
+        "veterinary_certificate_date":{
+            "value": "",
+            "bbox": []
+        },
+        "producer":{
+            "value": "",
+            "bbox": []
+        },
+        "buyer":{
+            "value": "",
+            "bbox": []
+        },
+        "exporter":{
+            "value": "",
+            "bbox": []
+        },
+        "vessel":{
+            "value": "",
+            "bbox": []
+        },
+        "container_no":{
+            "value": "",
+            "bbox": []
+        },
+        "products": {
+            "product_1": {
+                "name_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "latin_name": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "packages": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "net_weight":{
+                    "value": "",
+                    "bbox": [],
+                    "required": true
+                },
+                "factory_number":{
+                    "value": "",
+                    "bbox": [],
+                    "required": true
+                },
+                "date_of_production":{
+                    "value": "",
+                    "bbox": [],
+                    "required": true
+                },
+                "seal_number":{
+                    "value": "",
+                    "bbox": [],
+                    "required": true
+                },
+                "unit_box":{
+                    "value": "",
+                    "bbox": [],
+                    "required": true
+                }
+            },
+            "product_2": {}
+        },
+        "veterinary_seal":{
+            "value": "",
+            "bbox": []
+        },
+        "country_of_origin":{
+            "value": "",
+            "bbox": []
+        }
+    }
+}

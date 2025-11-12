@@ -81,6 +81,16 @@ def build_products_field(
     )
 
 
+def build_products_template(*, children: Dict[str, FieldSchema], label: str = "Products") -> FieldSchema:
+    """Build a products field whose product row contains exactly the provided children."""
+    product_template = make_field(
+        "product",
+        "Product Item",
+        children=children,
+    )
+    return make_field("products", label, children={"product_template": product_template})
+
+
 EXPORT_DECLARATION_SCHEMA = DocumentSchema(
     doc_type=DocumentType.EXPORT_DECLARATION,
     fields={
@@ -107,17 +117,28 @@ EXPORT_DECLARATION_SCHEMA = DocumentSchema(
             fmt=r"^[A-Z]{2,3}$",
             anchors=("COUNTRY", "ORIGIN"),
         ),
-        "destination": make_field("destination", "Destination"),
         "producer": make_field("producer", "Producer"),
         "buyer": make_field("buyer", "Buyer"),
         "seller": make_field("seller", "Seller"),
         "exporter": make_field("exporter", "Exporter"),
-        "container_no": make_field("container_no", "Container Number"),
-        "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
-        "vessel": make_field("vessel", "Vessel"),
         "incoterms": make_field("incoterms", "Incoterms", fmt=r"^[A-Z]{3}$"),
+        # Added to align with docs_json_2
+        "proforma_no": make_field("proforma_no", "Proforma Number"),
+        "HS_code": make_field("HS_code", "HS Code"),
         "total_price": make_field("total_price", "Total Price"),
-        "products": build_products_field(),
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "price_per_unit": make_field("price_per_unit", "Price per Unit"),
+                "total_price": make_field("total_price", "Total Price"),
+                "net_weight": make_field("net_weight", "Net Weight"),
+                "gross_weight": make_field("gross_weight", "Gross Weight"),
+            }
+        ),
     },
 )
 
@@ -140,10 +161,20 @@ INVOICE_SCHEMA = DocumentSchema(
         "bank_details": make_field("bank_details", "Bank Details"),
         "proforma_no": make_field("proforma_no", "Proforma Number"),
         "container_no": make_field("container_no", "Container Number"),
-        "commodity_code": make_field("commodity_code", "Commodity Code"),
-        "vessel": make_field("vessel", "Vessel"),
+        # Added to align with docs_json_2
+        "HS_code": make_field("HS_code", "HS Code"),
         "total_price": make_field("total_price", "Total Price", required=True),
-        "products": build_products_field(),
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "price_per_unit": make_field("price_per_unit", "Price per Unit"),
+                "total_price": make_field("total_price", "Total Price"),
+            }
+        ),
     },
 )
 
@@ -156,28 +187,31 @@ PACKING_LIST_SCHEMA = DocumentSchema(
             "Packing List Date",
             fmt=r"^\\d{4}-\\d{2}-\\d{2}$",
         ),
-        "contract_no": make_field("contract_no", "Contract Number"),
         "invoice_no": make_field("invoice_no", "Invoice Number"),
-        "buyer": make_field("buyer", "Buyer"),
-        "seller": make_field("seller", "Seller"),
-        "producer": make_field("producer", "Producer"),
-        "container_no": make_field("container_no", "Container Number"),
-        "vessel": make_field("vessel", "Vessel"),
-        "packages": make_field("packages", "Packages", required=True),
-        "net_weight": make_field("net_weight", "Net Weight", required=True),
-        "gross_weight": make_field("gross_weight", "Gross Weight", required=True),
-        "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
-        "linear_seal": make_field("linear_seal", "Linear Seal"),
-        "products": build_products_field(
-            extra_fields={
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "net_weight": make_field("net_weight", "Net Weight"),
                 "net_weight_with_glaze": make_field("net_weight_with_glaze", "Net Weight with Glaze"),
                 "net_weight_with_ice": make_field("net_weight_with_ice", "Net Weight with Ice"),
-                "net_weight_with_glaze_and_pack": make_field(
-                    "net_weight_with_glaze_and_pack",
-                    "Net Weight with Glaze and Pack",
-                ),
+                "net_weight_with_glaze_and_pack": make_field("net_weight_with_glaze_and_pack", "Net Weight with Glaze and Pack"),
+                "gross_weight": make_field("gross_weight", "Gross Weight"),
+                "price_per_unit": make_field("price_per_unit", "Price per Unit"),
+                "total_price": make_field("total_price", "Total Price"),
+                "factory_number": make_field("factory_number", "Factory Number"),
+                "date_of_production": make_field("date_of_production", "Date of Production"),
             }
         ),
+        "producer": make_field("producer", "Producer"),
+        "buyer": make_field("buyer", "Buyer"),
+        "seller": make_field("seller", "Seller"),
+        "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
+        "linear_seal": make_field("linear_seal", "Linear Seal"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
     },
 )
 
@@ -191,17 +225,15 @@ BILL_OF_LANDING_SCHEMA = DocumentSchema(
             fmt=r"^\\d{4}-\\d{2}-\\d{2}$",
         ),
         "bill_of_landing_number": make_field("bill_of_landing_number", "Bill of Landing Number"),
-        "seller": make_field("seller", "Seller"),
-        "buyer": make_field("buyer", "Buyer"),
         "exporter": make_field("exporter", "Exporter"),
         "destination": make_field("destination", "Destination"),
         "packages": make_field("packages", "Packages"),
-        "units": make_field("units", "Units"),
         "net_weight": make_field("net_weight", "Net Weight"),
         "gross_weight": make_field("gross_weight", "Gross Weight"),
         "vessel": make_field("vessel", "Vessel"),
         "container_no": make_field("container_no", "Container Number"),
         "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
         "linear_seal": make_field("linear_seal", "Linear Seal"),
         "importer": make_field("importer", "Importer"),
         "name_product": make_field("name_product", "Product Name"),
@@ -224,7 +256,20 @@ PRICE_LIST_1_SCHEMA = DocumentSchema(
         "incoterms": make_field("incoterms", "Incoterms", fmt=r"^[A-Z]{3}$"),
         "seller": make_field("seller", "Seller"),
         "valid_till": make_field("valid_till", "Valid Till"),
-        "products": build_products_field(),
+        # Added to align with docs_json_2
+        "HS_code": make_field("HS_code", "HS Code"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "price_per_unit": make_field("price_per_unit", "Price per Unit"),
+                "total_price": make_field("total_price", "Total Price"),
+            }
+        ),
     },
 )
 
@@ -241,7 +286,20 @@ PRICE_LIST_2_SCHEMA = DocumentSchema(
         "incoterms": make_field("incoterms", "Incoterms", fmt=r"^[A-Z]{3}$"),
         "seller": make_field("seller", "Seller"),
         "valid_till": make_field("valid_till", "Valid Till"),
-        "products": build_products_field(),
+        # Added to align with docs_json_2
+        "HS_code": make_field("HS_code", "HS Code"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "price_per_KG": make_field("price_per_KG", "Price per KG"),
+                "total_price": make_field("total_price", "Total Price"),
+            }
+        ),
     },
 )
 
@@ -254,27 +312,17 @@ QUALITY_CERTIFICATE_SCHEMA = DocumentSchema(
             "Quality Certificate Date",
             fmt=r"^\\d{4}-\\d{2}-\\d{2}$",
         ),
-        "buyer": make_field("buyer", "Buyer"),
-        "seller": make_field("seller", "Seller"),
-        # Align with docs_json/quality_certificate.json: products stored as rows
-        "products": make_field(
-            "products",
-            "Products",
+        "products": build_products_template(
             children={
-                "product_template": make_field(
-                    "product",
-                    "Product Item",
-                    children={
-                        "name_product": make_field("name_product", "Product Name"),
-                        "latin_name": make_field("latin_name", "Latin Name"),
-                        "size_product": make_field("size_product", "Product Size"),
-                        "unit_box": make_field("unit_box", "Units per Box"),
-                        "packages": make_field("packages", "Packages"),
-                        "price_per_unit": make_field("price_per_unit", "Price per Unit"),
-                        "total_price": make_field("total_price", "Total Price"),
-                    },
-                )
-            },
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "gross_weight": make_field("gross_weight", "Gross Weight"),
+                "net_weight": make_field("net_weight", "Net Weight"),
+                "date_of_production": make_field("date_of_production", "Date of Production"),
+            }
         ),
         "container_no": make_field("container_no", "Container Number"),
         "vessel": make_field("vessel", "Vessel"),
@@ -296,6 +344,8 @@ CERTIFICATE_OF_ORIGIN_SCHEMA = DocumentSchema(
         "invoice_no": make_field("invoice_no", "Invoice Number"),
         "invoice_date": make_field("invoice_date", "Invoice Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
         "country_of_origin": make_field("country_of_origin", "Country of Origin"),
+        # Added to align with docs_json_2
+        "HS_code": make_field("HS_code", "HS Code"),
         "producer": make_field("producer", "Producer"),
         "buyer": make_field("buyer", "Buyer"),
         "seller": make_field("seller", "Seller"),
@@ -306,8 +356,19 @@ CERTIFICATE_OF_ORIGIN_SCHEMA = DocumentSchema(
         "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
         "linear_seal": make_field("linear_seal", "Linear Seal"),
         "importer": make_field("importer", "Importer"),
-        # Align with docs_json: move product attributes under products rows
-        "products": build_products_field(),
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "price_per_unit": make_field("price_per_unit", "Price per Unit"),
+                "total_price": make_field("total_price", "Total Price"),
+                "net_weight": make_field("net_weight", "Net Weight"),
+                "gross_weight": make_field("gross_weight", "Gross Weight"),
+            }
+        ),
     },
 )
 
@@ -321,17 +382,21 @@ VETERINARY_CERTIFICATE_SCHEMA = DocumentSchema(
             "Veterinary Certificate Date",
             fmt=r"^\\d{4}-\\d{2}-\\d{2}$",
         ),
-        "seller": make_field("seller", "Seller"),
         "producer": make_field("producer", "Producer"),
         "buyer": make_field("buyer", "Buyer"),
         "exporter": make_field("exporter", "Exporter"),
         "vessel": make_field("vessel", "Vessel"),
         "container_no": make_field("container_no", "Container Number"),
-        # Mock templates contain per-product rows for veterinary certificates
-        "products": build_products_field(
-            extra_fields={
-                # Ensure per-row net weight is available, as in mock JSON
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "packages": make_field("packages", "Packages"),
                 "net_weight": make_field("net_weight", "Net Weight"),
+                "factory_number": make_field("factory_number", "Factory Number"),
+                "date_of_production": make_field("date_of_production", "Date of Production"),
+                "seal_number": make_field("seal_number", "Seal Number"),
+                "unit_box": make_field("unit_box", "Units per Box"),
             }
         ),
         "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
@@ -344,6 +409,9 @@ PROFORMA_SCHEMA = DocumentSchema(
     doc_type=DocumentType.PROFORMA,
     fields={
         "proforma_date": make_field("proforma_date", "Proforma Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "proforma_no": make_field("proforma_no", "Proforma Number"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
+        "HS_code": make_field("HS_code", "HS Code"),
         "contract_no": make_field("contract_no", "Contract Number"),
         "additional_agreements": make_field("additional_agreements", "Additional Agreements"),
         "buyer": make_field("buyer", "Buyer"),
@@ -353,17 +421,40 @@ PROFORMA_SCHEMA = DocumentSchema(
         "terms_of_payment": make_field("terms_of_payment", "Terms of Payment"),
         "bank_details": make_field("bank_details", "Bank Details"),
         "total_price": make_field("total_price", "Total Price"),
-        "net_weight": make_field("net_weight", "Net Weight"),
-        "name_product": make_field("name_product", "Product Name"),
-        "latin_name": make_field("latin_name", "Latin Name"),
-        "size_product": make_field("size_product", "Product Size"),
-        "unit_box": make_field("unit_box", "Units per Box"),
-        "packages": make_field("packages", "Packages"),
-        "commodity_code": make_field("commodity_code", "Commodity Code"),
-        # Align products with mock templates: include commodity_code per product
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "net_weight": make_field("net_weight", "Net Weight"),
+                "gross_weight": make_field("gross_weight", "Gross Weight"),
+                "price_per_unit": make_field("price_per_unit", "Price per Unit"),
+                "total_price": make_field("total_price", "Total Price"),
+            }
+        ),
+    },
+)
+
+
+CMR_SCHEMA = DocumentSchema(
+    doc_type=DocumentType.CMR,
+    fields={
+        "cmr_date": make_field("cmr_date", "CMR Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "exporter": make_field("exporter", "Exporter"),
+        "importer": make_field("importer", "Importer"),
+        "incoterms": make_field("incoterms", "Incoterms", fmt=r"^[A-Z]{3}$"),
+        "invoice_no": make_field("invoice_no", "Invoice Number"),
+        "veterinary_certificate_no": make_field("veterinary_certificate_no", "Veterinary Certificate Number"),
+        "destination": make_field("destination", "Destination"),
+        "container_no": make_field("container_no", "Container Number"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
         "products": build_products_field(
             extra_fields={
-                "commodity_code": make_field("commodity_code", "Commodity Code"),
+                "gross_weight_with_pallets": make_field(
+                    "gross_weight_with_pallets", "Gross Weight with Pallets"
+                ),
             }
         ),
     },
@@ -385,13 +476,132 @@ SPECIFICATION_SCHEMA = DocumentSchema(
         "incoterms": make_field("incoterms", "Incoterms"),
         "terms_of_payment": make_field("terms_of_payment", "Terms of Payment"),
         "total_price": make_field("total_price", "Total Price"),
+        # Added to align with docs_json_2
+        "HS_code": make_field("HS_code", "HS Code"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
         "packages": make_field("packages", "Packages"),
         "name_product": make_field("name_product", "Product Name"),
         "latin_name": make_field("latin_name", "Latin Name"),
         "size_product": make_field("size_product", "Product Size"),
         "unit_box": make_field("unit_box", "Units per Box"),
-        "commodity_code": make_field("commodity_code", "Commodity Code"),
-        "products": build_products_field(),
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "net_weight": make_field("net_weight", "Net Weight"),
+                "gross_weight": make_field("gross_weight", "Gross Weight"),
+                "price_per_unit": make_field("price_per_unit", "Price per Unit"),
+                "total_price": make_field("total_price", "Total Price"),
+            }
+        ),
+    },
+)
+
+
+FORM_A_SCHEMA = DocumentSchema(
+    doc_type=DocumentType.FORM_A,
+    fields={
+        "form_a_no": make_field("form_a_no", "FORM A Number"),
+        "form_a_date": make_field("form_a_date", "FORM A Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "invoice_no": make_field("invoice_no", "Invoice Number"),
+        "invoice_date": make_field("invoice_date", "Invoice Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
+        "exporter": make_field("exporter", "Exporter"),
+        "importer": make_field("importer", "Importer"),
+        "destination": make_field("destination", "Destination"),
+        "container_no": make_field("container_no", "Container Number"),
+        "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
+        "linear_seal": make_field("linear_seal", "Linear Seal"),
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "net_weight": make_field("net_weight", "Net Weight"),
+                "gross_weight": make_field("gross_weight", "Gross Weight"),
+                "HS_code": make_field("HS_code", "HS Code"),
+            }
+        ),
+    },
+)
+
+
+EAV_SCHEMA = DocumentSchema(
+    doc_type=DocumentType.EAV,
+    fields={
+        "eav_no": make_field("eav_no", "EAV Number"),
+        "eav_date": make_field("eav_date", "EAV Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "invoice_no": make_field("invoice_no", "Invoice Number"),
+        "invoice_date": make_field("invoice_date", "Invoice Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
+        "exporter": make_field("exporter", "Exporter"),
+        "importer": make_field("importer", "Importer"),
+        "destination": make_field("destination", "Destination"),
+        "container_no": make_field("container_no", "Container Number"),
+        "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
+        "linear_seal": make_field("linear_seal", "Linear Seal"),
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "net_weight": make_field("net_weight", "Net Weight"),
+                "gross_weight": make_field("gross_weight", "Gross Weight"),
+                "HS_code": make_field("HS_code", "HS Code"),
+            }
+        ),
+    },
+)
+
+
+CT3_SCHEMA = DocumentSchema(
+    doc_type=DocumentType.CT_3,
+    fields={
+        "ct3_no": make_field("ct3_no", "CT-3 Number"),
+        "ct3_date": make_field("ct3_date", "CT-3 Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "invoice_no": make_field("invoice_no", "Invoice Number"),
+        "invoice_date": make_field("invoice_date", "Invoice Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
+        "exporter": make_field("exporter", "Exporter"),
+        "importer": make_field("importer", "Importer"),
+        "destination": make_field("destination", "Destination"),
+        "container_no": make_field("container_no", "Container Number"),
+        "veterinary_seal": make_field("veterinary_seal", "Veterinary Seal"),
+        "linear_seal": make_field("linear_seal", "Linear Seal"),
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "net_weight": make_field("net_weight", "Net Weight"),
+                "gross_weight": make_field("gross_weight", "Gross Weight"),
+                "HS_code": make_field("HS_code", "HS Code"),
+            }
+        ),
+    },
+)
+
+
+CONTRACT_SCHEMA = DocumentSchema(
+    doc_type=DocumentType.CONTRACT,
+    fields={
+        "contract_no": make_field("contract_no", "Contract Number"),
+        "contract_date": make_field("contract_date", "Contract Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "additional_agreements": make_field("additional_agreements", "Additional Agreements"),
+        "buyer": make_field("buyer", "Buyer"),
+        "seller": make_field("seller", "Seller"),
+        "incoterms": make_field("incoterms", "Incoterms"),
+        "terms_of_payment": make_field("terms_of_payment", "Terms of Payment"),
+        "bank_details": make_field("bank_details", "Bank Details"),
     },
 )
 
@@ -410,6 +620,11 @@ DOCUMENT_SCHEMAS: Dict[DocumentType, DocumentSchema] = {
         VETERINARY_CERTIFICATE_SCHEMA,
         PROFORMA_SCHEMA,
         SPECIFICATION_SCHEMA,
+        CMR_SCHEMA,
+        FORM_A_SCHEMA,
+        EAV_SCHEMA,
+        CT3_SCHEMA,
+        CONTRACT_SCHEMA,
     )
 }
 

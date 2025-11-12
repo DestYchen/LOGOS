@@ -1,0 +1,83 @@
+﻿{
+    "file": "",
+    "doc_type": "QUALITY_CERTIFICATE",
+    "fields": {
+        "quality_certificate_date":{
+            "value": "",
+            "bbox": []
+        },
+        "producer":{
+            "value": "",
+            "bbox": []
+        },
+        "products": {
+            "product_1": {
+                "name_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "latin_name": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "size_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "unit_box": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "packages": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "gross_weight": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "net_weight": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },                
+                "date_of_production": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                }
+            },
+            "product_2": {}
+        },
+        "container_no":{
+            "value": "",
+            "bbox": []
+        },
+        "vessel":{
+            "value": "",
+            "bbox": []
+        },
+        "veterinary_seal":{
+            "value": "",
+            "bbox": []
+        },
+        "linear_seal":{
+            "value": "",
+            "bbox": []
+        }
+    }
+}

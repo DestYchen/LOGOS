@@ -1,0 +1,85 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR text and tokens into structured JSON.
+Return ONLY a JSON object with keys: {'doc_id': string, 'fields': object}.
+- Fill ONLY the fields present in <template_fields_main> (no 'products').
+- Copy values EXACTLY from the document (no guessing, no paraphrase).
+- Always include 'token_refs' when the field was filled; otherwise leave [].
+- If uncertain for a field, leave it empty.
+- Hints (if provided) are optional and may be ignored if they conflict with the document.
+Output strictly valid JSON. No extra keys, no comments.
+
+=== USER ===
+-- part 1 (text) --
+<doc_id>
+bb9fa8b0-7bfb-49d2-b29e-8156393486f1
+</doc_id>
+-- part 2 (text) --
+<raw_plain_text>
+QINGDAO CALYPSO FOOD CO.,LTD ADD No. 50 Hongkong Middle Road, Shinan District, Qingdao, Shandong, China. Commercial Invoice Contract No.: CLPMO22 DD:April 22, 2022 SOLD TO: OOO "MOREODOR"
+117292 MOSCOW, PROFSOYUZNAYA STREET, 3, RUSSIA, OFFICE 412 INVOICE NO.: 2311MU-9 DATE: DEC 23.2024 PI NO.: 2311MU-9-10 DATE: NOV 05. 2024 Port of Delivery : RIZHAO, China Port of Destination : VLADIVOSTOK,RUSSIA ORIGIN:CHINA <table>
+  <thead>
+    <tr>
+      <th>Product</th>
+      <th>SIZE</th>
+      <th>Total CTNS</th>
+      <th>Unit Price FOB RIZHAO</th>
+      <th>Total Amount</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>FROZEN GREEN MUSSELS IN THE HALF SHELL, IQF (PERNA CANALICULUS)<br/>Packed 12*1kg=12kg/ctn<br/>HS Code:0307320000</td>
+      <td>30-45PCS/KG</td>
+      <td>1738</td>
+      <td>RMB ¥ 749.16/ctn</td>
+      <td>RMB ¥ 1302040.08</td>
+    </tr>
+    <tr>
+      <td>Total</td>
+      <td></td>
+      <td>1738</td>
+      <td></td>
+      <td>RMB ¥ 1302040.08</td>
+    </tr>
+  </tbody>
+</table> Container/Seal No.: MEDU9763238 THERMOGRAPH NO.:240100609974/240100609972/240100609975 1.TERMS & CONDITIONS: Payment Terms: T/T with 100% balance payment within 45 days after loading, against full set of confirmed originals documents. Information of Bank: BANK OF CHINA QINGDAO WUSI PLAZA SUB-BRANCH Address: NO.10 XIANGGANGZHONG ROAD, TOP YIHE INTERNATIONAL, QINGDAO, CHINA Beneficiary: QINGDAO CALYPSO FOOD CO.,LTD Address: No. 50 Hongkong Middle Road, Shinan District, Qingdao, Shandong, China Account Number (RMB) : 206546189674 SWIFT Code: BKCHCNBJ50A Correspondent Bank Name: BANK OF CHINA QINGDAO WUSI PLAZA SUB-BRANCH Correspondent Bank Address: NO.10 XIANGGANGZHONG ROAD, TOP YIHE INTERNATIONAL, QINGDAO, CHINA SWIFT NO.: BKCHCNBJ50A
+</raw_plain_text>
+-- part 3 (text) --
+<raw_tokens>
+[{"id": "p0_t1", "text": "QINGDAO CALYPSO FOOD CO.,LTD", "conf": 0.75, "bbox": [429, 81, 1301, 139], "page": 1}, {"id": "p0_t2", "text": "ADD No. 50 Hongkong Middle Road, Shinan District, Qingdao, Shandong, China.", "conf": 0.16, "bbox": [431, 190, 1297, 224], "page": 1}, {"id": "p0_t3", "text": "Commercial Invoice", "conf": 0.75, "bbox": [589, 284, 1038, 332], "page": 1}, {"id": "p0_t4", "text": "Contract No.: CLPMO22 DD:April 22, 2022", "conf": 0.48, "bbox": [110, 361, 741, 401], "page": 1}, {"id": "p0_t5", "text": "SOLD TO: OOO \"MOREODOR\"\n117292 MOSCOW, PROFSOYUZNAYA STREET, 3, RUSSIA, OFFICE 412", "conf": 0.51, "bbox": [59, 441, 1027, 513], "page": 1}, {"id": "p0_t6", "text": "INVOICE NO.: 2311MU-9", "conf": 0.08, "bbox": [1096, 413, 1439, 447], "page": 1}, {"id": "p0_t7", "text": "DATE: DEC 23.2024", "conf": 0.52, "bbox": [1096, 449, 1364, 481], "page": 1}, {"id": "p0_t8", "text": "PI NO.: 2311MU-9-10", "conf": 0.36, "bbox": [1096, 485, 1380, 517], "page": 1}, {"id": "p0_t9", "text": "DATE: NOV 05. 2024", "conf": 0.26, "bbox": [1096, 519, 1376, 548], "page": 1}, {"id": "p0_t10", "text": "Port of Delivery : RIZHAO, China", "conf": 0.48, "bbox": [61, 548, 538, 588], "page": 1}, {"id": "p0_t11", "text": "Port of Destination : VLADIVOSTOK,RUSSIA", "conf": 0.72, "bbox": [774, 582, 1425, 622], "page": 1}, {"id": "p0_t12", "text": "ORIGIN:CHINA", "conf": 0.84, "bbox": [67, 614, 305, 648], "page": 1}, {"id": "p0_t13", "text": "<table>\n  <thead>\n    <tr>\n      <th>Product</th>\n      <th>SIZE</th>\n      <th>Total CTNS</th>\n      <th>Unit Price FOB RIZHAO</th>\n      <th>Total Amount</th>\n    </tr>\n  </thead>\n  <tbody>\n    <tr>\n      <td>FROZEN GREEN MUSSELS IN THE HALF SHELL, IQF (PERNA CANALICULUS)<br/>Packed 12*1kg=12kg/ctn<br/>HS Code:0307320000</td>\n      <td>30-45PCS/KG</td>\n      <td>1738</td>\n      <td>RMB ¥ 749.16/ctn</td>\n      <td>RMB ¥ 1302040.08</td>\n    </tr>\n    <tr>\n      <td>Total</td>\n      <td></td>\n      <td>1738</td>\n      <td></td>\n      <td>RMB ¥ 1302040.08</td>\n    </tr>\n  </tbody>\n</table>", "conf": 1.0, "bbox": [53, 676, 1569, 1018], "page": 1}, {"id": "p0_t14", "text": "Container/Seal No.: MEDU9763238", "conf": 0.81, "bbox": [78, 1026, 536, 1060], "page": 1}, {"id": "p0_t15", "text": "THERMOGRAPH NO.:240100609974/240100609972/240100609975", "conf": 0.84, "bbox": [78, 1099, 1029, 1133], "page": 1}, {"id": "p0_t16", "text": "1.TERMS & CONDITIONS: Payment Terms: T/T with 100% balance payment within 45 days after loading, against full set of confirmed originals documents.", "conf": 0.47, "bbox": [78, 1149, 1557, 1235], "page": 1}, {"id": "p0_t17", "text": "Information of Bank: BANK OF CHINA QINGDAO WUSI PLAZA SUB-BRANCH", "conf": 0.51, "bbox": [82, 1249, 1208, 1284], "page": 1}, {"id": "p0_t18", "text": "Address: NO.10 XIANGGANGZHONG ROAD, TOP YIHE INTERNATIONAL, QINGDAO, CHINA", "conf": 0.74, "bbox": [78, 1296, 1470, 1334], "page": 1}, {"id": "p0_t19", "text": "Beneficiary: QINGDAO CALYPSO FOOD CO.,LTD", "conf": 0.75, "bbox": [78, 1346, 808, 1386], "page": 1}, {"id": "p0_t20", "text": "Address: No. 50 Hongkong Middle Road, Shinan District, Qingdao, Shandong, China", "conf": 0.82, "bbox": [78, 1398, 1212, 1438], "page": 1}, {"id": "p0_t21", "text": "Account Number (RMB) : 206546189674", "conf": 0.76, "bbox": [78, 1447, 672, 1481], "page": 1}, {"id": "p0_t22", "text": "SWIFT Code: BKCHCNBJ50A", "conf": 0.75, "bbox": [78, 1495, 510, 1529], "page": 1}, {"id": "p0_t23", "text": "Correspondent Bank Name: BANK OF CHINA QINGDAO WUSI PLAZA SUB-BRANCH", "conf": 0.57, "bbox": [78, 1545, 1316, 1583], "page": 1}, {"id": "p0_t24", "text": "Correspondent Bank Address: NO.10 XIANGGANGZHONG ROAD, TOP YIHE INTERNATIONAL, QINGDAO, CHINA", "conf": 0.39, "bbox": [78, 1595, 1466, 1680], "page": 1}, {"id": "p0_t25", "text": "SWIFT NO.: BKCHCNBJ50A", "conf": 0.75, "bbox": [78, 1694, 496, 1728], "page": 1}]
+</raw_tokens>
+-- part 4 (text) --
+<template_fields_main>
+{"fields": {"invoice_no": {"value": "", "bbox": [], "token_refs": []}, "invoice_date": {"value": "", "bbox": [], "token_refs": []}, "producer": {"value": "", "bbox": [], "token_refs": []}, "incoterms": {"value": "", "bbox": [], "token_refs": []}, "terms_of_payment": {"value": "", "bbox": [], "token_refs": []}, "bank_details": {"value": "", "bbox": [], "token_refs": []}, "buyer": {"value": "", "bbox": [], "token_refs": []}, "seller": {"value": "", "bbox": [], "token_refs": []}, "proforma_no": {"value": "", "bbox": [], "token_refs": []}, "container_no": {"value": "", "bbox": [], "token_refs": []}, "HS_code": {"value": "", "bbox": [], "token_refs": []}, "total_price": {"value": "", "bbox": [], "token_refs": []}}}
+</template_fields_main>
+-- part 5 (text) --
+<hints>(Optional; ignore if conflicting)
+{"invoice_no": []}
+</hints>
+-- part 6 (text) --
+
+
+doc_type: INVOICE
+invoice_no: Найди метку «Invoice No», «No.», «N°» или «№» рядом с заголовком «Commercial Invoice». Значение может содержать буквы, цифры и дефисы (например, N° 24636). Сохраняй точную строку как в документе и добавь её вместе с её ббоксом в поле invoice_no.
+invoice_date: Ищи «Date»/«Invoice date». Дата может быть одной строкой или разбита на D / M / Y. Собери полную дату и, если возможно, нормализуй в формат ГГГГ-ММ-ДД. Добавь найденную дату вместе с её ббоксом в поле invoice_date.
+buyer: Определи покупателя по меткам «Buyer», «Customer», «Consignee», «Bill to». Сохрани полное наименование и, если указано, адрес в единой строке, без сокращений. Добавь текст и его ббокс в поле buyer.
+seller: Определи продавца по меткам «Seller», «Supplier», «Shipper», «Exporter». Сохрани полное юридическое наименование и, если указано, адрес в единой строке. Добавь текст и его ббокс в поле seller.
+producer: Если в инвойсе указан «Producer»/«Manufacturer»/«Factory», извлеки юридическое наименование. Если перечислено несколько производителей — соедини значения через «; ». Добавь текст и его ббокс в поле producer.
+incoterms: Извлеки условия поставки (ИНКОТЕРМС) — трёхбуквенный код (например, EXW/FOB/CFR/CIF/DAP) и, если указано, пункт (например, «CFR ST. PETERSBURG - RUSSIA»). Сохраняй ровно так, как в документе, и добавь строку с её ббоксом в поле incoterms.
+terms_of_payment: Найди условия оплаты («Terms of payment», «Payment»). Сохрани полную формулировку (напр., «ADV. 20%, BALANCE C/COPY DOC.») и добавь её вместе с ббоксом в поле terms_of_payment.
+bank_details: Извлеки блок банковских реквизитов (банк, счёт/IBAN, SWIFT/BIC, бенефициар и адрес). Сохрани как один многострочный текст без нормализации и добавь его вместе с ббоксом в поле bank_details.
+proforma_no: Если инвойс ссылается на проформу, найди «Proforma Invoice No.»/«Proforma No.»/«PI/P.I.». Извлекай только номер проформы, не путай с номером заказа («Order», «P.Code»). Добавь значение и его ббокс в поле proforma_no.
+container_no: Извлеки номер(а) контейнера/машины. Чаще всего формата 4 буквы + 7 цифр и, при наличии, суффикс (напр., «BMOU928899-1»). Если значений несколько — соедини через «; ». Добавь строку и её ббокс в поле container_no.
+HS_code: Найди «HS CODE»/«HS»/«Tariff code» и извлеки числовой код (напр., «0304.81»). Сохраняй формат кода как в документе и добавь его вместе с ббоксом в поле HS_code.
+total_price: Найди итог по документу («Total», иногда вместе с ИНКОТЕРМС и валютой — напр., «Total CFR USD»). Предпочитай напечатанный итог; если он отсутствует, суммируй построчные суммы. Сохраняй валюту и разделители как в документе. Добавь строку и её ббокс в поле total_price.
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк/позиций в инвойсе, соблюдая порядок в документе. Для каждого продукта заполняй все вложенные поля. Если часть атрибутов указана общим блоком (например, единая латинская номенклатура для нескольких строк), дублируй её значение в соответствующие product_i. В token_refs указывай ссылки на исходные токены/фрагменты, из которых собрано значение.
+products[*].name_product: Возьми коммерческое наименование товара из колонки «Description of goods»/«Description». Если описание многострочное, объедини строки с пробелами. Не включай латинское название (его помести в latin_name). Добавь текст и его ббокс в products[i].name_product.
+products[*].latin_name: Извлеки латинское (биологическое) название рядом с описанием, часто в скобках (напр., «SALMO SALAR»). Сохрани регистр, как в документе, и добавь текст с ббоксом в products[i].latin_name.
+products[*].size_product: Извлеки размер/градацию товара (например, «3-4 LB (1.3-1.8 KG)», «80/120» и т.п.). Если указаны и имперские, и метрические единицы, сохрани обе. Добавь текст и его ббокс в products[i].size_product.
+products[*].unit_box: Укажи ценовую/учётную единицу (например, «per carton», «per kg», «per case»). Если явно указано «Price per carton/kg/etc», используй эту единицу. Добавь значение и его ббокс в products[i].unit_box.
+products[*].packages: Извлеки количество мест/упаковок («Cases», «Cartons», «Packages», «Boxes»). Сохрани число так, как в документе (учитывай разделители). Добавь число и его ббокс в products[i].packages.
+products[*].price_per_unit: Извлеки цену за единицу (напр., «Price per carton 169,50»). Сохрани валюту, если указана, и формат числа как в документе (точка/запятая). Добавь значение и его ббокс в products[i].price_per_unit.
+products[*].total_price: Извлеки построчную сумму. Добавь сумму и её ббокс (или объединённый ббокс исходных значений при вычислении) в products[i].total_price.

@@ -1,0 +1,124 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "terms_of_payment": {"value": "", "token_refs": []}, "bank_details": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "proforma_no": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+invoice_no: Найди метку «Invoice No», «No.», «N°» или «№» рядом с заголовком «Commercial Invoice». Значение может содержать буквы, цифры и дефисы (например, N° 24636). Сохраняй точную строку как в документе и добавь её в поле invoice_no.
+invoice_date: Ищи «Date»/«Invoice date». Дата может быть одной строкой или разбита на D / M / Y. Собери полную дату и, если возможно, нормализуй в формат ГГГГ-ММ-ДД. Добавь найденную дату в поле invoice_date.
+buyer: Определи покупателя по меткам «Buyer», «Customer», «Consignee», «Bill to». Сохрани полное наименование и, если указано, адрес в единой строке, без сокращений. Добавь текст в поле buyer.
+seller: Определи продавца по меткам «Seller», «Supplier», «Shipper», «Exporter». Сохрани полное юридическое наименование и, если указано, адрес в единой строке. Добавь текст в поле seller.
+producer: Если в инвойсе указан «Producer»/«Manufacturer»/«Factory», извлеки юридическое наименование. Если перечислено несколько производителей — соедини значения через «; ». Добавь текст в поле producer.
+incoterms: Извлеки условия поставки (ИНКОТЕРМС) — трёхбуквенный код (например, EXW/FOB/CFR/CIF/DAP) и, если указано, пункт (например, «CFR ST. PETERSBURG - RUSSIA»). Сохраняй ровно так, как в документе, и добавь строку в поле incoterms.
+terms_of_payment: Найди условия оплаты («Terms of payment», «Payment»). Сохрани полную формулировку (напр., «ADV. 20%, BALANCE C/COPY DOC.») и добавь её в поле terms_of_payment.
+bank_details: Извлеки блок банковских реквизитов (банк, счёт/IBAN, SWIFT/BIC, бенефициар и адрес). Сохрани как один многострочный текст без нормализации и добавь его в поле bank_details.
+proforma_no: Если инвойс ссылается на проформу, найди «Proforma Invoice No.»/«Proforma No.»/«PI/P.I.». Извлекай только номер проформы, не путай с номером заказа («Order», «P.Code»). Добавь значение в поле proforma_no.
+container_no: Извлеки номер(а) контейнера/машины. Чаще всего формата 4 буквы + 7 цифр и, при наличии, суффикс (напр., «BMOU928899-1»). Если значений несколько — соедини через «; ». Добавь строку в поле container_no.
+HS_code: Найди «HS CODE»/«HS»/«Tariff code» и извлеки числовой код (напр., «0304.81»). Сохраняй формат кода как в документе и добавь его в поле HS_code.
+total_price: Найди итог по документу («Total», иногда вместе с ИНКОТЕРМС и валютой — напр., «Total CFR USD»). Предпочитай напечатанный итог; если он отсутствует, суммируй построчные суммы. Сохраняй валюту и разделители как в документе. Добавь строку в поле total_price.
+
+invoice_no (candidates): 019246
+invoice_date (candidates): 04 SEPTEMBER 2019; 12.08.2019; 04-09-2019
+incoterms (candidates): INCOTERMS 2010
+container (candidates): CONTAINER: PONU4832160
+bl_number (candidates): B/L NUMBER: 585585102
+buyer (candidates): OOO "MOREODOR"
+seller (candidates): SALMONES ANTARTICA S.A.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Salmones Antártica S.A.
+
+p0_t1:
+INVOICE № 019246
+
+p0_t2:
+SANTIAGO, 04 SEPTEMBER 2019
+
+p0_t3:
+SELLER/SHIPPER: SALMONES ANTARTICA S.A.
+AV. PROVIDENCIA 2653, PISO 15 SANTIAGO - CHILE
+
+p0_t4:
+BUYER/CONSIGNEE: OOO "MOREODOR"
+117036, MOSCOW, PROFSOYUZNAYA STREET, 3, OFFICE 412, RUSSIA
+
+p0_t5:
+TERMS OF DELIVERY: CFR SAINT-PETERSBURG (INCOTERMS 2010)
+
+p0_t6:
+TERMS OF PAYMENT: 100% PREPAYMENT
+
+p0_t7:
+CONTRACT: SAMO082019 dd. 12.08.2019
+
+p0_t8:
+CONTAINER: PONU4832160
+
+p0_t9:
+B/L NUMBER: 585585102
+
+p0_t10:
+SHIPMENT DATE: 04-09-2019
+
+p0_t11:
+<table><thead><tr><th>PRODUCT</th><th>QUALITY</th><th>SIZE</th><th>KG/BOX</th><th>CASES</th><th>UNIT</th><th>PRICE USD/UNIT</th><th>AMOUNT USD</th></tr></thead><tbody><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>6-9 LB (2,7 - 4,0 KG)</td><td>25</td><td>832</td><td>BOX</td><td>175,00</td><td>145.600,00</td></tr><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>9-12 LB (4,0 - 5,4 KG)</td><td>25</td><td>48</td><td>BOX</td><td>175,00</td><td>8.400,00</td></tr><tr><td></td><td>TOTAL</td><td></td><td></td><td>880</td><td></td><td></td><td>154.000,00</td></tr></tbody></table>
+
+p0_t12:
+PRODUCER: SALMONES ANTARTICA S.A. REGISTER 10735
+
+p0_t14:
+LATIN NAME: ONCORHYNCHUS MYKISS
+
+p0_t15:
+LOT SA 19-01 RU
+
+p0_t16:
+SALMONES ANTARTICA S.A.
+BANK NAME: MUFG BANK, LTD, NEW YORK BRANCH
+ADDRESS: 1251 AVENUE OF THE AMERICAS,
+NEW YORK, NY 10020-1104, USA
+SWIFT CODE: BOTKUS33
+BENEFICIARY NAME: SALMONES ANTARTICA S.A.
+BENEFICIARY ACCOUNT NUMBER: 0810-016-710
+
+p0_t18:
+JOHANNA OSORIO
+COMMERCIAL ASSISTANT
+
+p0_t19:
+(SALMONES ANTARTICA S.A.
+=== END RAW TOKENS ===

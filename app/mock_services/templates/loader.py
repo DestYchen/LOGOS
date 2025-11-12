@@ -19,9 +19,16 @@ _DOC_MAPPING = {
     DocumentType.VETERINARY_CERTIFICATE: "veterinary_certificate.json",
     DocumentType.PROFORMA: "proforma.json",
     DocumentType.SPECIFICATION: "specification.json",
+    # New in docs_json_2
+    DocumentType.CMR: "cmr.json",
+    DocumentType.CONTRACT: "contract.json",
+    DocumentType.FORM_A: "form_a.json",
+    DocumentType.EAV: "eav.json",
+    DocumentType.CT_3: "ct_3.json",
 }
 
-_BASE_DIR = Path(__file__).resolve().parent.parent / "docs_json"
+# Point loader to the new templates directory
+_BASE_DIR = Path(__file__).resolve().parent.parent / "docs_json_2"
 
 
 def load_template_definition(doc_type: DocumentType) -> Dict[str, Any]:

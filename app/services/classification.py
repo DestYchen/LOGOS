@@ -17,7 +17,30 @@ KEYWORDS_2 = {
     DocumentType.QUALITY_CERTIFICATE: [r"(?i)quality\s+certificate"],
     DocumentType.CERTIFICATE_OF_ORIGIN: [r"(?i)certificate\s+of\s+origin"],
     DocumentType.VETERINARY_CERTIFICATE: [r"(?i)veterinary\s+certificate"],
-    DocumentType.PROFORMA: [r"(?i)\bproforma(?:[\s-]+invoice)?\b"],
+    DocumentType.PROFORMA: [
+        r"(?i)\bproforma(?:[\s-]+invoice)?\b",
+        r"(?i)????\s+????", r"(?i)????\s+???", r"(?i)????\s+??????", 
+        r"(?i)proforma\s+fatura",  
+        r"(?i)proforma\s+factura",  
+        r"(?:????|????|????|????)"  
+    ],
+    DocumentType.CONTRACT: [
+        r"(?i)\bcontract\b",
+        r"(?i)???????",
+        r"(?i)contract\s+agreement",
+    ],
+    DocumentType.FORM_A: [
+        r"(?i)\bform\s*-?\s*a\b",
+        r"(?i)?????\s*?",
+    ],
+    DocumentType.EAV: [
+        r"(?i)\bEAV\b",
+        r"(?i)???",
+    ],
+    DocumentType.CT_3: [
+        r"(?i)\bCT[-\s]?3\b",
+        r"(?i)??[-\s]?3\b",
+    ]
 }
 
 KEYWORDS = {

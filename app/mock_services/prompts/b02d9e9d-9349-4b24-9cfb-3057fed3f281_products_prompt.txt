@@ -1,0 +1,118 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS (ignore totals or summary rows).
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк/позиций в инвойсе, соблюдая порядок в документе. Для каждого продукта заполняй все вложенные поля. Если часть атрибутов указана общим блоком (например, единая латинская номенклатура для нескольких строк), дублируй её значение в соответствующие product_i. В token_refs указывай ссылки на исходные токены/фрагменты, из которых собрано значение.
+products[*].name_product: Возьми коммерческое наименование товара из колонки «Description of goods»/«Description». Если описание многострочное, объедини строки с пробелами. Не включай латинское название (его помести в latin_name). Добавь текст в products[i].name_product.
+products[*].latin_name: Извлеки латинское (биологическое) название рядом с описанием, часто в скобках (напр., «SALMO SALAR»). Сохрани регистр, как в документе, и добавь текст в products[i].latin_name.
+products[*].size_product: Извлеки размер/градацию товара (например, «3-4 LB (1.3-1.8 KG)», «80/120» и т.п.). Если указаны и имперские, и метрические единицы, сохрани обе. Добавь текст в products[i].size_product.
+products[*].unit_box: Укажи ценовую/учётную единицу (например, «per carton», «per kg», «per case»). Если явно указано «Price per carton/kg/etc», используй эту единицу. Добавь значение в products[i].unit_box.
+products[*].packages: Извлеки количество мест/упаковок («Cases», «Cartons», «Packages», «Boxes»). Сохрани число так, как в документе (учитывай разделители). Добавь число в products[i].packages.
+products[*].price_per_unit: Извлеки цену за единицу (напр., «Price per carton 169,50»). Сохрани валюту, если указана, и формат числа как в документе (точка/запятая). Добавь значение в products[i].price_per_unit.
+products[*].total_price: Извлеки построчную сумму. Добавь сумму в products[i].total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Salmones Antártica S.A.
+
+p0_t1:
+INVOICE № 019246
+
+p0_t2:
+SANTIAGO, 04 SEPTEMBER 2019
+
+p0_t3:
+SELLER/SHIPPER: SALMONES ANTARTICA S.A.
+AV. PROVIDENCIA 2653, PISO 15 SANTIAGO - CHILE
+
+p0_t4:
+BUYER/CONSIGNEE: OOO "MOREODOR"
+117036, MOSCOW, PROFSOYUZNAYA STREET, 3, OFFICE 412, RUSSIA
+
+p0_t5:
+TERMS OF DELIVERY: CFR SAINT-PETERSBURG (INCOTERMS 2010)
+
+p0_t6:
+TERMS OF PAYMENT: 100% PREPAYMENT
+
+p0_t7:
+CONTRACT: SAMO082019 dd. 12.08.2019
+
+p0_t8:
+CONTAINER: PONU4832160
+
+p0_t9:
+B/L NUMBER: 585585102
+
+p0_t10:
+SHIPMENT DATE: 04-09-2019
+
+p0_t11:
+<table><thead><tr><th>PRODUCT</th><th>QUALITY</th><th>SIZE</th><th>KG/BOX</th><th>CASES</th><th>UNIT</th><th>PRICE USD/UNIT</th><th>AMOUNT USD</th></tr></thead><tbody><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>6-9 LB (2,7 - 4,0 KG)</td><td>25</td><td>832</td><td>BOX</td><td>175,00</td><td>145.600,00</td></tr><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>9-12 LB (4,0 - 5,4 KG)</td><td>25</td><td>48</td><td>BOX</td><td>175,00</td><td>8.400,00</td></tr><tr><td></td><td>TOTAL</td><td></td><td></td><td>880</td><td></td><td></td><td>154.000,00</td></tr></tbody></table>
+
+p0_t12:
+PRODUCER: SALMONES ANTARTICA S.A. REGISTER 10735
+
+p0_t14:
+LATIN NAME: ONCORHYNCHUS MYKISS
+
+p0_t15:
+LOT SA 19-01 RU
+
+p0_t16:
+SALMONES ANTARTICA S.A.
+BANK NAME: MUFG BANK, LTD, NEW YORK BRANCH
+ADDRESS: 1251 AVENUE OF THE AMERICAS,
+NEW YORK, NY 10020-1104, USA
+SWIFT CODE: BOTKUS33
+BENEFICIARY NAME: SALMONES ANTARTICA S.A.
+BENEFICIARY ACCOUNT NUMBER: 0810-016-710
+
+p0_t18:
+JOHANNA OSORIO
+COMMERCIAL ASSISTANT
+
+p0_t19:
+(SALMONES ANTARTICA S.A.
+=== END RAW TOKENS ===
+-- part 4 (text) --
+=== TABLE CANDIDATES ===
+p0_t11:
+<table><thead><tr><th>PRODUCT</th><th>QUALITY</th><th>SIZE</th><th>KG/BOX</th><th>CASES</th><th>UNIT</th><th>PRICE USD/UNIT</th><th>AMOUNT USD</th></tr></thead><tbody><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>6-9 LB (2,7 - 4,0 KG)</td><td>25</td><td>832</td><td>BOX</td><td>175,00</td><td>145.600,00</td></tr><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>9-12 LB (4,0 - 5,4 KG)</td><td>25</td><td>48</td><td>BOX</td><td>175,00</td><td>8.400,00</td></tr><tr><td></td><td>TOTAL</td><td></td><td></td><td>880</td><td></td><td></td><td>154.000,00</td></tr></tbody></table>
+=== END TABLE CANDIDATES ===

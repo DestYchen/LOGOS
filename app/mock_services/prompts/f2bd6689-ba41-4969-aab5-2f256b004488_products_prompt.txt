@@ -1,0 +1,164 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "net_weight": {"value": "", "token_refs": []}, "factory_number": {"value": "", "token_refs": []}, "date_of_production": {"value": "", "token_refs": []}, "seal_number": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: VETERINARY_CERTIFICATE
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк/партии в разделах 2.1–2.8. Соблюдай порядок. Если атрибут указан один раз общим блоком (например, одна ветпломба/один латинский вид), продублируй его в соответствующие product_i. В token_refs укажи ссылки на исходные фрагменты (ячейки/строки), из которых собрано значение. :contentReference[oaicite:9]{index=9}
+products[*].name_product: П.2.1 «Name of the product». Извлеки коммерческое наименование (например, «ATLANTIC SALMON … FILLETS» без латинского вида) и добавь текст в products[i].name_product.
+products[*].latin_name: П.2.1: если рядом с наименованием указан латинский вид в скобках (например, «SALMO SALAR»), извлеки его отдельно и добавь вместе в products[i].latin_name. Если нет — оставь пустым.
+products[*].packages: П.2.4 «Number of packages». Извлеки количество мест. Если указано несколько значений (по партиям) — перечисли через «; » в одной строке. Добавь значение в products[i].packages.
+products[*].net_weight: П.2.5 «Net weight (kg)». Извлеки массу нетто (в кг) ровно в исходном формате (точка/запятая). Если значений несколько — перечисли через «; ». Добавь число(а) в products[i].net_weight.
+products[*].factory_number: П.2.7 «Identification marks». Извлеки регистрационный номер предприятия/establishment No (например, «10751»). Если значений несколько — перечисли через «; ». Добавь значение в products[i].factory_number.
+products[*].date_of_production: П.2.2 «Date of production». Если дат несколько, перечисли их через «; » одной строкой. Добавь в products[i].date_of_production.
+products[*].seal_number: П.2.6 «Number of seal». Извлеки номер(а) ветпломбы для позиции. Если в сертификате указан один номер для всей партии — продублируй его и на уровень документа (поле veterinary_seal). Несколько значений перечисли через «; ». Добавь значение(я) в products[i].seal_number.
+products[*].unit_box: Это поле соответствует п.2.3 «Type of package». Извлеки тип упаковки (например, «CARDBOARD BOXES»). Сохрани формулировку как в бланке и добавь в products[i].unit_box.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+GOBIERNO DE CHILE
+SERVICIO NACIONAL DE PESCA
+
+p0_t1:
+ORIGINAL / ОРИГИНАЛ
+
+p0_t3:
+COPIA / КОПИЯ ☐
+
+p0_t4:
+Total number of copies issued / Количество выданных копий
+
+p0_t6:
+1.1 Name and address of consignor / Название и адрес грузоотправителя:
+
+SALMONES ANTARTICA S.A.
+AV. PROVIDENCIA 2653, PISO 15
+SANTIAGO - CHILE
+
+TEL: 56-02-24143600
+
+1.2 Name and address of consignee / Название и адрес грузоподачателя:
+
+ООО "MOREODOR",
+117036, MOSCOW, PROFSOYUZNAYA
+STREET, 3, OFFICE 412
+RUSSIA
+
+1.3 Means of transport / Транспорт:
+(the number of the container, flight-number, name of the ship / № конечнера, рейс самолета, название судна.)
+
+LEXA MAERSK V.935N, PONU4832160
+
+1.4 Country of transit / Страна транзита:
+
+NETHERLANDS
+
+1.5 Certificate / Сертификат №
+
+1142728
+
+Veterinary certificate for fish and seafood (fishery products) and products of their processing intended for human consumption, exported from the Republic of Chile into the Russian Federation
+
+Ветеринарный сертификат на экспортируемые из Республики Чили в Российскую Федерацию пищевую рыбу морепродукты, готовые изделия из них
+
+1.6 Competent authority in the Republic of Chile / Комитетское одеомство Республики Чили:
+
+Servicio Nacional de Pesca - Semapesca
+
+1.7 Organisation in the Republic of Chile, issuing this certificate / Учреждение Республики Чили, выдавшее сертификат:
+
+Servicio Nacional de Pesca - Semapesca
+
+1.8 Point of crossing the border of the Russian Federation / Пункт пересечения границы Российской Федерации:
+
+SAINT PETERSBURG, RUSSIA
+
+p0_t7:
+2. Identification of products / Идентификация продукции:
+
+p0_t8:
+2.1 Name of the product / Наименование продукта: [RAINBOW TROUT (ONCORHYNCHUS MYKISS), FROZEN, RAW IQF, HG]
+
+p0_t9:
+2.2 Date of production /Дата эксперимента продукције: [05/06/2019, 23/07/2019, 25/07/2019, 26/07/2019, 27/07/2019, 29/07/2019, 30/07/2019, 31/07/2019]
+
+p0_t10:
+2.3 Type of package / Упаковка: CARDBOARD BOXES
+
+p0_t11:
+2.4 Number of packages / Количество месов [1, 4, 107, 236, 180, 61, 206, 83]
+
+p0_t12:
+2.5 Net weight (kg) / Вес непро (кг): [25.00, 100.00, 2675.00, 5950.00, 4500.00, 1525.00, 5150.00, 2075.00]
+
+p0_t13:
+2.6 Number of seal / Номер пломбы: ML-CL0931771; A0020050
+
+p0_t14:
+2.7 Identification marks / Маркировка: 10735
+
+p0_t15:
+2.8 Conditions of storage and transport / Условия хранения и перевозки: FROZEN - 18°C
+
+p0_t16:
+3. Origin of the products / Происхождение продукции:
+
+p0_t17:
+3.1 Name (Nº) and address of establishment, approved by the Competent Service in the Republic of Chile:
+
+p0_t18:
+Название (№) и адрес предприятия, зарегистрированного компетентной службой Республики Чечни:
+
+p0_t19:
+[SALMONES ANTARTICA S A, 10735, RUTA W 853 KM 3,7 HUICHA RURAL, CHONCHI, REGION DE LOS LAGOS]
+
+p0_t20:
+- factory vessel / птичабазы
+
+p0_t22:
+INMOBILIARIAS SAKE SPA, 4199, LOTE 38 LOTEO SAN IGNACIO PUERTO VARAS REGION DE LOS LAGOS
+
+p0_t23:
+3.2 Administrative-territorial unit / Административно-территориальная единица: REGION DE LOS LAGOS
+
+p0_t24:
+REGION DE LOS LAGOS
+
+p0_t25:
+0820229
+=== END RAW TOKENS ===

@@ -1,0 +1,74 @@
+﻿{
+    "file": "",
+    "doc_type": "BILL_OF_LANDING",
+    "fields": {
+        "bill_of_landing_date": {
+            "value": "",
+            "bbox": []
+        },
+        "bill_of_landing_number": {
+            "value": "",
+            "bbox": []
+        },
+        "exporter": {
+            "value": "",
+            "bbox": []
+        },
+        "destination": {
+            "value": "",
+            "bbox": []
+        },
+        "packages": {
+            "value": "",
+            "bbox": []
+        },
+        "net_weight": {
+            "value": "",
+            "bbox": []
+        },
+        "gross_weight": {
+            "value": "",
+            "bbox": []
+        },
+        "vessel": {
+            "value": "",
+            "bbox": []
+        },
+        "container_no": {
+            "value": "",
+            "bbox": []
+        },
+        "veterinary_seal": {
+            "value": "",
+            "bbox": []
+        },
+        "country_of_origin": {
+            "value": "",
+            "bbox": []
+        },
+        "linear_seal": {
+            "value": "",
+            "bbox": []
+        },
+        "importer": {
+            "value": "",
+            "bbox": []
+        },
+        "name_product": {
+            "value": "",
+            "bbox": []
+        },
+        "latin_name": {
+            "value": "",
+            "bbox": []
+        },
+        "commodity_code": {
+            "value": "",
+            "bbox": []
+        },
+        "size_product": {
+            "value": "",
+            "bbox": []
+        }
+    }
+}

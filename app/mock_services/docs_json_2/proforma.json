@@ -1,0 +1,112 @@
+﻿{
+    "file": "",
+    "doc_type": "PROFORMA",
+    "fields": {
+        "proforma_date": {
+            "value": "",
+            "bbox": []
+        },
+        "proforma_no": {
+            "value": "",
+            "bbox": []
+        },
+        "country_of_origin": {
+            "value": "",
+            "bbox": []
+        },
+        "HS_code": {
+            "value": "",
+            "bbox": []
+        },
+        "additional_agreements": {
+            "value": "",
+            "bbox": []
+        },
+        "buyer": {
+            "value": "",
+            "bbox": []
+        },
+        "seller": {
+            "value": "",
+            "bbox": []
+        },
+        "producer": {
+            "value": "",
+            "bbox": []
+        },
+        "incoterms": {
+            "value": "",
+            "bbox": []
+        },
+        "terms_of_payment": {
+            "value": "",
+            "bbox": []
+        },
+        "bank_details": {
+            "value": "",
+            "bbox": []
+        },
+        "total_price": {
+            "value": "",
+            "bbox": []
+        },
+        "products": {
+            "product_1": {
+                "name_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "latin_name": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "size_product": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "unit_box": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "packages": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "net_weight": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "gross_weight": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "price_per_unit": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                },
+                "total_price": {
+                    "value": "",
+                    "bbox": [],
+                    "token_refs": [],
+                    "required": true
+                }
+            }
+        }
+    }
+}
