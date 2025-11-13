@@ -190,8 +190,9 @@ const FIELD_MATRIX_ACTUAL_TO_DISPLAY: Record<string, string> = Object.entries(FI
 
 const BASE_VIEWER_HEIGHT = 640;
 const TARGET_PREVIEW_HEIGHT = 360;
-const PREVIEW_MAGNIFICATION = 4;
-const MIN_FRAME_SIZE = 36;
+const PREVIEW_MAGNIFICATION = 6;
+const MIN_FRAME_SIZE = 1;
+const PREVIEW_PADDING = 6;
 
 function toActualDocType(docType: string): string {
   return FIELD_MATRIX_DOC_TYPE_MAP[docType] ?? docType;
@@ -360,8 +361,14 @@ function computeOverlayFrame(bbox: RawBBox, metaWidth: number, metaHeight: numbe
   const adjustedScaleX = baseScaleX * PREVIEW_CALIBRATION.scaleX;
   const adjustedScaleY = baseScaleY * PREVIEW_CALIBRATION.scaleY;
 
-  const baseWidth = (x2 - x1) * adjustedScaleX;
-  const baseHeight = (y2 - y1) * adjustedScaleY;
+  const rawWidth = x2 - x1;
+  const rawHeight = y2 - y1;
+  if (rawWidth <= 0 || rawHeight <= 0) {
+    return null;
+  }
+
+  const baseWidth = rawWidth * adjustedScaleX;
+  const baseHeight = rawHeight * adjustedScaleY;
   const baseLeft = x1 * adjustedScaleX + PREVIEW_CALIBRATION.offsetX;
   const baseTop = y1 * adjustedScaleY + PREVIEW_CALIBRATION.offsetY;
 
@@ -385,14 +392,19 @@ function computeOverlayFrame(bbox: RawBBox, metaWidth: number, metaHeight: numbe
   const clampedWidth = clamp(overlayWidth, MIN_FRAME_SIZE, imageWidth - clampedLeft);
   const clampedHeight = clamp(overlayHeight, MIN_FRAME_SIZE, imageHeight - clampedTop);
 
+  const paddedLeft = clamp(clampedLeft - PREVIEW_PADDING, 0, Math.max(imageWidth - MIN_FRAME_SIZE, 0));
+  const paddedTop = clamp(clampedTop - PREVIEW_PADDING, 0, Math.max(imageHeight - MIN_FRAME_SIZE, 0));
+  const paddedWidth = clamp(clampedWidth + PREVIEW_PADDING * 2, MIN_FRAME_SIZE, imageWidth - paddedLeft);
+  const paddedHeight = clamp(clampedHeight + PREVIEW_PADDING * 2, MIN_FRAME_SIZE, imageHeight - paddedTop);
+
   return {
     imageWidth,
     imageHeight,
     frame: {
-      width: clampedWidth,
-      height: clampedHeight,
-      left: clampedLeft,
-      top: clampedTop,
+      width: paddedWidth,
+      height: paddedHeight,
+      left: paddedLeft,
+      top: paddedTop,
     },
   };
 }
