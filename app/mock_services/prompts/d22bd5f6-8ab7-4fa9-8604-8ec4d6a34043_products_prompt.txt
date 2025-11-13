@@ -1,0 +1,146 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "gross_weight": {"value": "", "token_refs": []}, "net_weight": {"value": "", "token_refs": []}, "date_of_production": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: QUALITY_CERTIFICATE
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных позиций/табличных строк в документе и соблюдай их порядок. Для каждого product_i заполняй все доступные поля. Если атрибут указан один раз общим блоком (например, один латинский вид для всех строк), продублируй его в соответствующие product_i. В token_refs укажи ссылки на исходные фрагменты (ячейки/строки), из которых собрано значение.
+products[*].name_product: Возьми коммерческое наименование из «Description of Goods» (пример: «FROZEN ATLANTIC SALMON FILLETS»). Объедини переносы в одну строку и добавь текст в products[i].name_product.
+products[*].latin_name: Если рядом указано научное (латинское) название из «Species and Scientific name» — извлеки его отдельно (пример: «SALMO SALAR») и добавь в products[i].latin_name. Если нет — оставь пустым.
+products[*].size_product: Если присутствует размер/калибр/фасовка в описании товара — извлеки как единую строку и добавь вместе в products[i].size_product. Если размер не указан в сертификате — оставь пустым.
+products[*].unit_box: Если указан тип единицы/тары (например, «Kind of Packing: CASES»), сохрани формулировку («CASES», «BOXES», и т.п.) и добавь её вместе в products[i].unit_box. Если нет явной единицы — оставь пустым.
+products[*].packages: Извлеки количество мест из «Number of Packages» (пример: «1375»). При наличии типа тары («Kind of Packing: CASES») можно сохранить «1375 CASES» одной строкой. Добавь значение в products[i].packages.
+products[*].gross_weight: Если в сертификате дана масса брутто по позиции — извлеки число с единицей в исходном формате и добавь в products[i].gross_weight. Если указан только суммарный брутто в примечаниях/итогах — используй явное табличное значение; при отсутствии брутто оставь пустым.
+products[*].net_weight: Извлеки нетто по позиции. Если указан общий «Total Net Weight», а по позициям приведены нетто в таблице — используй табличные значения для products[i].net_weight, общий итог не дублируй в позиции. Добавь значение в products[i].net_weight. (Пример суммарного нетто: «Total Net Weight: 20.625,00».)
+products[*].date_of_production: Возьми дату(ы) производства из раздела «Production Date». Если дат несколько (табличные строки), перечисли их через «; » в одной строке и добавь каждую дату в products[i].date_of_production. Не путай с «Expiry Date».
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+RONGCHENG MINGWEI AQUATIC FOOD CO.,LTD
+
+p0_t1:
+DONGSHANGZHUANG VILLAGE, SHANGZHUANG TOWN, RONGCHENG, SHANDONG
+
+p0_t2:
+QUALITY CERTIFICATE
+
+p0_t3:
+发货人 QINGDAO CALYPSO FOOD CO.,LTD
+
+p0_t4:
+ADD NO. 50 HONGKONG MIDDLE ROAD, SHINAN DISTRICT, QINGDAO, SHANDONG, CHINA.
+
+p0_t5:
+收货人 OOO “MOREODOR”
+
+p0_t6:
+117292,MOSCOW,PROFSOYUZNAYA STREET,3,RUSSIA,OFFICE 412
+
+Consignee
+
+p0_t7:
+品名
+
+p0_t8:
+Description of Goods FROZEN GREEN MUSSELS IN THE HALF SHELL, IQF (PERNA CANALICULUS)
+
+p0_t9:
+加工种类或状态
+
+p0_t10:
+State or Type of Processing
+
+FROZEN
+
+p0_t11:
+报检数量/重量
+
+p0_t12:
+Quantity/Weight Declared ***1738CARTONS/**20856KGS
+
+p0_t13:
+包装种类及数量
+
+p0_t14:
+Number and Type of Packages CARTONS/**1738CARTONS
+
+p0_t15:
+运输工具
+
+p0_t16:
+Means of Conveyance BY VESSEL
+
+p0_t17:
+标记及号码
+
+p0_t18:
+| Mark & No.
+
+p0_t19:
+3700/02B07
+
+p0_t20:
+RESULTS OF INSPECTION:
+
+p0_t21:
+THIS IS TO VERIFY THAT MERCHANDISE IS FIT FOR HUMAN CONSUMPTION.
+
+p0_t22:
+REMARKS:
+
+p0_t23:
+1. CONTAINER AND SEAL NO.: MEDU9763238/FX38428560
+
+p0_t24:
+2. REG. NO.: 3700/02B07
+
+p0_t25:
+3. DATE OF PRODUCTION: 12/11/2024
+
+p0_t26:
+4. EXPIRY DATE: 24 MONTHS FROM PRODUCTION DATE
+
+p0_t27:
+5.LOT NO.:24111224024J
+
+p0_t28:
+签名 Signature
+
+p0_t30:
+签证日期 Date of Issue 18 DEC,2024
+=== END RAW TOKENS ===

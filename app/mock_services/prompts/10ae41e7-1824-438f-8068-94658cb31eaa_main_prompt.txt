@@ -1,0 +1,76 @@
+MODEL: google/gemma-3-27b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"price_list_1_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "valid_till": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: PRICE_LIST_1
+price_list_1_date: Найди дату прайс-листа по метке «DATE»/«Date» в шапке/титуле прайса. Используй точный формат из документа (не нормализуй) и добавь дату в поле price_list_1_date.
+producer: Возьми юридическое наименование производителя по метке «Producer»/«Manufacturer» или из контактного блока компании, выпускающей прайс. Сохрани полное название (и адрес, если рядом) одной строкой. Добавь текст в поле producer.
+seller: Если в прайсе явно указан «Seller»/«Supplier», извлеки полное наименование (и адрес, если есть) одной строкой. Если такой метки нет, оставь пустым (не подменяй продавца производителем). Добавь значение в поле seller.
+incoterms: Извлеки условия поставки в формате ИНКОТЕРМС (например, «CFR SAINT-PETERSBURG, RUSSIA»). Сохрани код (EXW/FOB/CFR/CIF/DAP и т.д.) и пункт так, как напечатано, и добавь строку в поле incoterms.
+valid_till: Найди срок действия прайса по метке «VALID TILL»/«Valid until». Сохрани значение (дату/период) в исходном виде и добавь его в поле valid_till.
+HS_code: Если в прайсе указан «HS CODE»/«Tariff code», извлеки код (или коды) в точном формате (напр., «0304.81»). Если кодов несколько, перечисли через «; ». Добавь строку в поле HS_code. Если кода нет — оставь пустым.
+country_of_origin: Если указан «ORIGIN OF GOODS»/«Country of origin», извлеки страну происхождения (напр., «CHILE») и добавь её в поле country_of_origin. Если поле отсутствует — оставь пустым.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t1:
+QINGDAO CALYPSO FOOD CO.,LTD
+
+p0_t2:
+ADD No. 50 Hongkong Middle Road, Shinan District, Qingdao, Shandong, China.
+
+p0_t3:
+**Price List**
+
+p0_t4:
+DATE PRICE LIST: NOV 05. 2024
+
+p0_t5:
+VALID TILL: 22 DEC, 2024
+
+p0_t6:
+To whom it may concern:
+
+p0_t7:
+<table><thead><tr><th></th><th>SIZE</th><th>UNIT PRICE /CTN</th><th>Origin</th></tr></thead><tbody><tr><td>FROZEN GREEN MUSSELS IN THE HALF SHELL, IQF (PERNA CANALICULUS)<br>Packed 12*1kg=12kg/ctn<br>HS Code:0307320000</td><td>30-45PCS/KG</td><td>RMB¥744.00/ctn</td><td>CHINA</td></tr></tbody></table>
+
+p0_t8:
+Term of shipment: EXW RONGCHENG
+
+p0_t9:
+Factory No.:3700/02B07
+=== END RAW TOKENS ===

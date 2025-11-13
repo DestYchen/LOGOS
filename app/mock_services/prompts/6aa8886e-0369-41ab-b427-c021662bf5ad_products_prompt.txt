@@ -1,0 +1,131 @@
+MODEL: google/gemma-3-27b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}, "net_weight": {"value": "", "token_refs": []}, "gross_weight": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: EXPORT_DECLARATION
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк (ITEM 1, ITEM 2, …) в разделе описания товаров. Соблюдай порядок из документа. Для каждой позиции заполняй все доступные поля; если общий атрибут указан один раз (например, общий латинский вид), продублируй его в соответствующие product_i. В token_refs указывай ссылки на исходные фрагменты текста/таблицы, из которых собрано значение.
+products[*].name_product: Возьми коммерческое описание из блока «Descripción de mercancías / Description of goods / Nombre». Если описание разбито на несколько строк (включая «Observaciones»), объедини в одну строку. Добавь текст в products[i].name_product.
+products[*].latin_name: Если рядом с описанием указан латинский вид в скобках (например, «SALMO SALAR»), извлеки его отдельно и добавь в products[i].latin_name. Если нет — оставь пустым.
+products[*].size_product: Извлеки размер/калибр (напр., «Calibre 3–4 LBS», «1.3–1.8 KG», «80/120»). Сохрани запись как в документе и добавь в products[i].size_product.
+products[*].unit_box: Возьми единицу учёта/измерения из соответствующей графы (напр., «U. Medida / Unit», значения вроде «KG», «CASE», «PCS», иногда «KN» = kilos netos). Добавь значение в products[i].unit_box.
+products[*].packages: Укажи количество мест/упаковок по графе «Number and kind of packages / Cantidad de bultos / Cases/Cartons». Если тип тары указан (например, «1375 CAJAS»), сохрани число и тип в одной строке. Добавь значение в products[i].packages.
+products[*].price_per_unit: Возьми цену за единицу из графы «Precio unitario FOB / Unit price». Сохраняй валюту и формат числа (точка/запятая) как в документе. Добавь значение в products[i].price_per_unit.
+products[*].total_price: Возьми построчную сумму (обычно «Valor FOB» для строки). Если явного значения нет, вычисли как количество × цена за единицу, сохранив формат и валюту. Добавь сумму в products[i].total_price.
+products[*].net_weight: Извлеки нетто по позиции. В некоторых формах Чили нетто обозначают «KN» (kilos netos) в табличной части; также могут использовать «Peso Neto / Net weight». Сохрани число и единицу как в документе. Добавь значение в products[i].net_weight.
+products[*].gross_weight: Извлеки брутто по позиции из поля «Peso Bruto / Gross weight». Сохраняй формат числа и единицу. Добавь значение в products[i].gross_weight.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t4:
+中华人民共和国海关出口货物报关单
+
+p0_t5:
+《预录》编号：421820240000045068
+
+p0_t6:
+海关编号: 421820240000045068
+
+p0_t7:
+(青开发区)
+
+p0_t8:
+仅供校对用
+
+p0_t9:
+页码/页数:111
+
+p0_t10:
+<table><tr><td>境内发货人(91370202MA3ELM5J7W)<br/>青岛格利利斯食品有限公司</td><td>出境关别(4202)<br/>日照海关</td><td>出口日期</td><td>申报日期<br/>20241219</td><td>备案号<br/>C420924A0242</td></tr><tr><td>境外收货人<br/>000“MOREODOR”</td><td>运输方式(2)<br/>水路运输</td><td>运输工具名称及航次号<br/>MSC TRADER II/HX451A</td><td>提运单号</td><td>177HDIDIZ1424VZRF</td></tr><tr><td>生产销售单位(91371082684813765N)<br/>荣成市铭威水产食品有限公司</td><td>监管方式(0615)<br/>进料对口</td><td>征免性质(503)<br/>进料加工</td><td>许可证号</td><td></td></tr><tr><td>合同协议号<br/>2311ML-9</td><td>贸易国(地区)(RUS)<br/>俄罗斯</td><td>运抵国(地区)(RUS)<br/>俄罗斯</td><td>指运港(RUS000)<br/>俄罗斯</td><td>离境口岸(370002)<br/>日照</td></tr><tr><td>包装种类(22)<br/>纸制或纤维板制盒/箱</td><td>件数<br/>1738</td><td>毛重(千克)<br/>23393.48</td><td>净重(千克)<br/>20856</td><td>运费<br/>3000</td><td>保费<br/>3000</td><td>杂费</td></tr></table>
+
+p0_t11:
+随附单位证明编号
+
+p0_t12:
+随附单证1:保税核注清单 QD420924E000021895 电子底账224N428900358999001
+
+随附单证2:代理报关委托协议(电子
+
+p0_t13:
+标记喷码及备注
+
+p0_t14:
+集装箱标箱数及号码: 2; MEDU19763238;
+
+p0_t15:
+<table><thead><tr><th>项号</th><th>商品编码</th><th>商品名称及规格型号</th><th>数量及单位</th><th>单价/总价/币制</th><th>原产国(地区)</th><th>最终目的国(地区)</th><th>境内货源地</th><th>征免</th></tr></thead><tbody><tr><td>1</td><td>0307320000冻半壳青口贝<br/>(1) 0|0|冻|半壳|拉丁名: Perna canaliculus|16-35G/个|1kg/盒 12盒/箱</td><td></td><td>20856千克</td><td>62.4300<br/>1302040.08</td><td>中国<br/>(CHN)</td><td>俄罗斯<br/>(RUS)</td><td>(37279)荣城<br/>(3)</td><td>全免<br/>(3)</td></tr></tbody></table>
+
+<table><tr><td>特殊关系确认:否</td><td>价格影响确认:否</td><td>支付特许权使用费确认:否</td><td>公式定价确认:</td><td>暂定价格确认:</td><td>自报自缴:否</td><td>水运中转:是</td></tr></table>
+
+海关批注及签章
+
+申报人员
+
+报关人员证号42001409
+
+电话
+
+兹申明对以上内容承担如实申报、依法纳税之法律责任
+
+申报单位 (913702027636474782) 青岛运佳国际货运代理有限公司
+
+申报单位(签章)
+=== END RAW TOKENS ===
+-- part 4 (text) --
+=== TABLE CANDIDATES ===
+p0_t10:
+<table><tr><td>境内发货人(91370202MA3ELM5J7W)<br/>青岛格利利斯食品有限公司</td><td>出境关别(4202)<br/>日照海关</td><td>出口日期</td><td>申报日期<br/>20241219</td><td>备案号<br/>C420924A0242</td></tr><tr><td>境外收货人<br/>000“MOREODOR”</td><td>运输方式(2)<br/>水路运输</td><td>运输工具名称及航次号<br/>MSC TRADER II/HX451A</td><td>提运单号</td><td>177HDIDIZ1424VZRF</td></tr><tr><td>生产销售单位(91371082684813765N)<br/>荣成市铭威水产食品有限公司</td><td>监管方式(0615)<br/>进料对口</td><td>征免性质(503)<br/>进料加工</td><td>许可证号</td><td></td></tr><tr><td>合同协议号<br/>2311ML-9</td><td>贸易国(地区)(RUS)<br/>俄罗斯</td><td>运抵国(地区)(RUS)<br/>俄罗斯</td><td>指运港(RUS000)<br/>俄罗斯</td><td>离境口岸(370002)<br/>日照</td></tr><tr><td>包装种类(22)<br/>纸制或纤维板制盒/箱</td><td>件数<br/>1738</td><td>毛重(千克)<br/>23393.48</td><td>净重(千克)<br/>20856</td><td>运费<br/>3000</td><td>保费<br/>3000</td><td>杂费</td></tr></table>
+
+p0_t15:
+<table><thead><tr><th>项号</th><th>商品编码</th><th>商品名称及规格型号</th><th>数量及单位</th><th>单价/总价/币制</th><th>原产国(地区)</th><th>最终目的国(地区)</th><th>境内货源地</th><th>征免</th></tr></thead><tbody><tr><td>1</td><td>0307320000冻半壳青口贝<br/>(1) 0|0|冻|半壳|拉丁名: Perna canaliculus|16-35G/个|1kg/盒 12盒/箱</td><td></td><td>20856千克</td><td>62.4300<br/>1302040.08</td><td>中国<br/>(CHN)</td><td>俄罗斯<br/>(RUS)</td><td>(37279)荣城<br/>(3)</td><td>全免<br/>(3)</td></tr></tbody></table>
+
+<table><tr><td>特殊关系确认:否</td><td>价格影响确认:否</td><td>支付特许权使用费确认:否</td><td>公式定价确认:</td><td>暂定价格确认:</td><td>自报自缴:否</td><td>水运中转:是</td></tr></table>
+
+海关批注及签章
+
+申报人员
+
+报关人员证号42001409
+
+电话
+
+兹申明对以上内容承担如实申报、依法纳税之法律责任
+
+申报单位 (913702027636474782) 青岛运佳国际货运代理有限公司
+
+申报单位(签章)
+=== END TABLE CANDIDATES ===

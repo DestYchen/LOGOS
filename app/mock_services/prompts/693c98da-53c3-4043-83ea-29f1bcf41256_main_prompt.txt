@@ -1,0 +1,97 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"quality_certificate_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "vessel": {"value": "", "token_refs": []}, "veterinary_seal": {"value": "", "token_refs": []}, "linear_seal": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: QUALITY_CERTIFICATE
+quality_certificate_date: Найди дату сертификата в заголовке/шапке рядом с местом выдачи (пример: «Puerto Montt, July 13th. 2025»). Сохраняй точный формат из документа и добавь дату в поле quality_certificate_date.
+producer: Возьми юридическое наименование производителя из блока «Name and Address of processing Plant» (пример: «GRANJA MARINA TORNAGALEONES S A …»). Сохрани только наименование (адрес можно опустить) и добавь его в поле producer.
+container_no: Извлеки номер(а) контейнера из строки «Container and Seals Number», формат обычно 4 буквы + 7 цифр (пример: «BMOU 9288991»). Если контейнеров несколько — перечисли через «; ». Добавь значение(я) в поле container_no.
+vessel: Найди «Name of Vessel» и извлеки название судна и, если указано, номер рейса/войяжа в одной строке (пример: «MSC TAKORADI VIII - NX528R»). Добавь строку в поле vessel.
+veterinary_seal: Извлекай только явные номера ветеринарных/санитарных пломб («Veterinary/Health seal»). Не путай с линейной пломбой «Seal». Если в документе приводится только «SEAL: …» без пометки о ветеринарной пломбе — это линейная пломба, оставь veterinary_seal пустым. Добавь найденное значение в поле veterinary_seal.
+linear_seal: Возьми номер(а) линейной пломбы из «Container and Seals Number / SEAL: …» (пример: «FX34197306; A0036355»). Если номеров несколько — запиши через «; ». Добавь значение(я) в поле linear_seal.
+
+invoice_date (candidates): 05-06-2019; 23-07-2019; 25-07-2019; 26-07-2019; 27-07-2019; 29-07-2019; 30-07-2019; 31-07-2019
+container (candidates): CONTAINER N
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Salmones Antártica S.A.
+
+p0_t1:
+QUALITY CERTIFICATE
+
+p0_t2:
+EXPORTER
+
+SALMONES ANTARTICA S.A.
+AV, PORVIDENCIA 2653 PISO 15
+SANTIAGO, CHILE
+
+p0_t3:
+CONSIGNEE : OOO " MOREODOR"
+117036 MOSCOW, PROFSOYUZNAYA STREET,3,
+OFFICE 412,
+RUSSIA
+
+p0_t4:
+MEANS OF TRANSPORT : LEXA MAERSK 935N
+
+p0_t5:
+CONTAINER N° : PONU4832160
+
+p0_t6:
+NUMBER OF PACKAGES : 880 CARTONS
+
+p0_t7:
+TOTAL NET WEIGHT IN KG. : 22,000,00 KGS
+
+p0_t8:
+DESCRIPTION OF GOODS : FROZEN RAINBOW TROUT HG (ONCORHUNCHUS MYKISS)
+
+p0_t9:
+PRODUCTION DATE : 05-06-2019(1), 23-07-2019(4), 25-07-2019(107), 26-07-2019(238), 27-07-2019(180), 29-07-2019(61), 30-07-2019(206), 31-07-2019(83).
+
+p0_t10:
+TO BE CONSUMED BEFORE : JUNE- JULY 2021
+
+p0_t11:
+NAME AND ADDRESS OF PROCESSING ESTABLISHMENT : SALMONES ANTARTICA S.A. 10735 RUTA W-853 KM3,7 HUICHA-CHONCHI CHILE
+
+p0_t12:
+WE HEREBY CONFIRM THAT ABOVE MENTIONED GOODS ARE FIT FOR HUMAN CONSUMPTION
+=== END RAW TOKENS ===

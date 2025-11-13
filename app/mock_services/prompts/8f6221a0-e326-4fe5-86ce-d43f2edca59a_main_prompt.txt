@@ -1,0 +1,87 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"export_declaration_no": {"value": "", "token_refs": []}, "export_declaration_date": {"value": "", "token_refs": []}, "invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "exporter": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}, "proforma_no": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: EXPORT_DECLARATION
+export_declaration_no: Найди номер ЭД по меткам вроде «Número de identificación», «Customs export declaration No», «ID/Reference No». Сохраняй точное значение (буквы/цифры) и добавь его в поле export_declaration_no.
+export_declaration_date: Определи дату декларации по метке «FECHA/Date» в шапке формы. Если в документе есть технические даты («Aceptación a trámite», «Autorización de salida»), приоритет отдавай основной дате декларации. Добавь дату в поле export_declaration_date.
+invoice_no: Извлеки номер(а) инвойса из блока со ссылкой на счета, например «Número y fecha de Invoices / Factura de exportación». Если номеров несколько — перечисли через «; ». Добавь значение(я) в поле invoice_no.
+invoice_date: Возьми дату(ы) инвойса, идущие рядом с номером(ами) инвойса («Número y fecha…»). Если несколько — перечисли через «; ». Сохраняй формат, как в документе, и добавь дату(ы) в поле invoice_date.
+country_of_origin: Если в ЭД явно указана страна происхождения (напр., «País de origen / Country of origin»), извлеки её. Если поле отсутствует, оставь пустым (не выводи страну по косвенным признакам типа отправителя или порта). Добавь значение в поле country_of_origin.
+producer: Если производитель указан как «Producer/Manufacturer/Fabricante» (часто в описании товара или примечаниях), извлеки юридическое наименование. При нескольких значениях — перечисли через «; ». Добавь текст в поле producer.
+buyer: Определи покупателя по полю «Consignatario / Consignee / Buyer». Сохрани полное наименование (и адрес, если указан) одной строкой. Добавь текст в поле buyer.
+seller: Если в ЭД явно присутствует «Seller/Supplier/Vendedor», извлеки это значение. Если такого поля нет (что типично), оставь пустым. Добавь найденный текст в поле seller.
+exporter: Возьми экспортёра из поля «Consignante o Exportador / Exporter». Сохрани полное юридическое наименование (и адрес, если есть) одной строкой и добавь его в поле exporter.
+incoterms: Извлеки условия поставки из поля «Cláusula de venta / Terms of sale» (напр., FOB/CFR/CIF/DAP). Сохраняй код ИНКОТЕРМС и, если указан, пункт (порт/город). Добавь строку в поле incoterms.
+total_price: Возьми общий итог по документу. Предпочитай итог, согласованный с ИНКОТЕРМС: при FOB — «Total Valor FOB», при CIF — «Valor CIF». Если явного итога нет, суммируй построчные значения «Valor FOB». Сохрани валюту и формат числа как в документе. Добавь строку в поле total_price.
+proforma_no: Если ЭД ссылается на проформу («Proforma Invoice», «PI», «Proforma No.»), извлеки номер(а). При множественных значениях — перечисли через «; ». Добавь значение(я) в поле proforma_no.
+HS_code: Собери все встречающиеся коды ТН ВЭД из граф по строкам («Cód. Arancel», «HS Code», «Tariff code»). Запиши уникальные коды в один список, разделённый «; », сохранив формат из документа (напр., 0304.81.20). Добавь строку в поле HS_code.
+
+invoice_date (candidates): 30/08/2019; 01/10/2019
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+GOBIERNO DE CHILE
+
+p0_t1:
+SERVICIO NACIONAL DE ADUANAS
+
+p0_t2:
+DOCUMENTO UNICO DE SALIDA
+
+p0_t4:
+Número Aceptación
+
+p0_t5:
+9129269-6
+
+p0_t6:
+Fecha
+
+p0_t7:
+30/08/2019
+
+p0_t9:
+Ref.Cite.: GD: 681711/F.19246
+
+p0_t10:
+PED: PDAFC
+
+p0_t11:
+01/10/2019
+=== END RAW TOKENS ===

@@ -66,19 +66,20 @@ function QueuePage() {
   }, [batchId, refresh]);
 
   useEffect(() => {
-    if (!batchId) return;
-    if (!batch) return;
-    if (!batch.awaiting_processing && batch.pending_total === 0) {
-      navigate(`/resolve/${batch.id}`, { replace: true });
+    if (!batchId || !batch) {
+      return;
+    }
+    if (batch.report?.available) {
+      navigate(`/table/${batch.id}`, { replace: true });
       return;
     }
     const interval = window.setInterval(async () => {
       try {
         const response = await fetchBatchDetails(batchId);
         setBatch(response.batch);
-        if (!response.batch.awaiting_processing && response.batch.pending_total === 0) {
+        if (response.batch.report?.available) {
           window.clearInterval(interval);
-          navigate(`/resolve/${response.batch.id}`, { replace: true });
+          navigate(`/table/${response.batch.id}`, { replace: true });
         }
       } catch (err) {
         setError(err as Error);

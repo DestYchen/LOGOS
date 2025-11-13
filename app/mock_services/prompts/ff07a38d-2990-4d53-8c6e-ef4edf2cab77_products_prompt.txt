@@ -1,0 +1,155 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: PRICE_LIST_1
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк/позиций в том порядке, как в прайсе. Для каждой позиции заполняй все доступные поля; если общий атрибут (напр., один латинский вид для нескольких позиций) указан один раз, продублируй его в соответствующие product_i. В token_refs указывай ссылки на исходные фрагменты (ячейки/строки), из которых собрано значение.
+products[*].name_product: Возьми коммерческое наименование из колонки «PRODUCT»/«Description» (например, «FROZEN ATLANTIC SALMON FILLET TRIM D VP PREMIUM …»). Объедини переносы строк, сохраняя точное написание. Добавь текст в products[i].name_product.
+products[*].latin_name: Если рядом с наименованием указан латинский вид в скобках (например, «Salmo salar»), извлеки его отдельно и добавь в products[i].latin_name. Если латинское имя отсутствует — оставь пустым.
+products[*].size_product: Извлеки размер/градацию (например, «3–4 LB (1.3–1.8 KG)», «80/120»). Сохрани обе системы измерений, если напечатаны обе. Добавь строку в products[i].size_product.
+products[*].unit_box: Зафиксируй учётную/ценовую единицу, если явно указана. Сохрани формулировку как в документе и добавь в products[i].unit_box.
+products[*].packages: Если в прайсе есть колонка/поле про упаковки («Packages», «Cartons», «Cases») — извлеки количество и, при наличии, тип (например, «10 CARTONS»). Если такого поля нет — оставь пустым. Добавь значение в products[i].packages.
+products[*].price_per_unit: Найди цену за единицу в колонке «Price», «Price per CARTON» и т.п. Сохрани валюту и формат числа (точка/запятая) ровно как в документе. Не вычисляй и не меняй НДС. Добавь значение в products[i].price_per_unit.
+products[*].total_price: Если в прайс-листе у позиции есть итоговая сумма (метки вроде «Total», «Line total», «Ext. price»), извлеки её со всеми символами валюты и в исходном формате числа. Если такого столбца нет — оставь поле пустым (не вычисляй как packages × price_per_unit). Добавь найденное значение в products[i].total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t1:
+QINGDAO CALYPSO FOOD CO.,LTD
+
+p0_t2:
+ADD No. 50 Hongkong Middle Road, Shinan District, Qingdao, Shandong, China.
+
+p0_t3:
+Price List
+
+p0_t4:
+DATE PRICE LIST: 23 DEC, 2024
+
+p0_t5:
+VALID TILL: 30 JAN, 2025
+
+p0_t6:
+To whom it may concern:
+
+p0_t7:
+<table>
+   <thead>
+    <tr>
+     <td>
+     </td>
+     <td>
+      SIZE
+     </td>
+     <td>
+      UNIT PRICE /CTN
+     </td>
+     <td>
+      Origin
+     </td>
+    </tr>
+   </thead>
+   <tbody>
+    <tr>
+     <td>
+      FROZEN GREEN MUSSELS IN THE HALF SHELL, IQF (PERNA CANALICULUS)
+      <br/>
+      Packed 12*1kg=12kg/ctn
+      <br/>
+      HS Code:0307320000
+     </td>
+     <td>
+      30-45PCS/KG
+     </td>
+     <td>
+      RMB¥749.16/ctn
+     </td>
+     <td>
+      CHINA
+     </td>
+    </tr>
+   </tbody>
+  </table>
+
+p0_t8:
+Term of shipment: FOB RIZHAO
+
+p0_t9:
+Factory No.:3700/02B07
+=== END RAW TOKENS ===
+-- part 4 (text) --
+=== TABLE CANDIDATES ===
+p0_t7:
+<table>
+   <thead>
+    <tr>
+     <td>
+     </td>
+     <td>
+      SIZE
+     </td>
+     <td>
+      UNIT PRICE /CTN
+     </td>
+     <td>
+      Origin
+     </td>
+    </tr>
+   </thead>
+   <tbody>
+    <tr>
+     <td>
+      FROZEN GREEN MUSSELS IN THE HALF SHELL, IQF (PERNA CANALICULUS)
+      <br/>
+      Packed 12*1kg=12kg/ctn
+      <br/>
+      HS Code:0307320000
+     </td>
+     <td>
+      30-45PCS/KG
+     </td>
+     <td>
+      RMB¥749.16/ctn
+     </td>
+     <td>
+      CHINA
+     </td>
+    </tr>
+   </tbody>
+  </table>
+=== END TABLE CANDIDATES ===

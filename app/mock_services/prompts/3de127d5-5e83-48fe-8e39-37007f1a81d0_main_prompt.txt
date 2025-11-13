@@ -1,0 +1,156 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"certificate_of_origin_no": {"value": "", "token_refs": []}, "certificate_of_origin_date": {"value": "", "token_refs": []}, "invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}, "exporter": {"value": "", "token_refs": []}, "destination": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "vessel": {"value": "", "token_refs": []}, "veterinary_seal": {"value": "", "token_refs": []}, "linear_seal": {"value": "", "token_refs": []}, "importer": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: CERTIFICATE_OF_ORIGIN
+certificate_of_origin_no: Найди номер сертификата по меткам «Certificate of Origin No», «Certificate No», «Register No», «REG. No» или «REGISTER Nº». Сохраняй точную строку (буквы/цифры/символы) и добавь в поле certificate_of_origin_no.
+certificate_of_origin_date: Определи дату выдачи сертификата по блоку сертифицирующего органа («Place and date, signature and stamp of certifying authority»). Если есть несколько дат (например, дата декларации экспортёра и дата сертификации), отдай приоритет дате сертификации. Добавь дату в поле certificate_of_origin_date.
+invoice_no: Извлеки номер(а) инвойса из секции с явной ссылкой на инвойс (например, «Number and date of Invoices»). Если номеров несколько, перечисли через «; ». Добавь значение(я) в поле invoice_no.
+invoice_date: Рядом с номером инвойса извлеки дату(ы) инвойса. Если несколько — перечисли через «; ». Сохраняй формат как в документе и добавь дату(ы) в поле invoice_date.
+country_of_origin: Ищи явную метку «Origin: …», «Country of origin» или заголовок с указанием страны происхождения (например, «Goods produced in …»). Извлеки страну и добавь в поле country_of_origin.
+exporter: Возьми полное юридическое наименование экспортёра из секции «Goods consigned from (Exporter’s …)». Сохрани строку целиком (при наличии адреса — в одной строке) и добавь в поле exporter.
+importer: Возьми полное юридическое наименование импортёра/получателя из секции «Goods consigned to (Consignee’s …)». Сохрани строку целиком (при наличии адреса — в одной строке) и добавь её в поле importer.
+destination: Определи пункт/страну назначения по полям «Importing country», «To … (route)» или аналогичной пометке. Предпочитай явное поле «Importing country»; при наличии города доставки укажи его вместе со страной. Добавь значение в поле destination.
+vessel: Найди сведения о транспорте и маршруте («Means of transport and route»). Извлеки наименование судна и, если указано, номер рейса/войяжа как единую строку. Добавь её в поле vessel.
+container_no: В блоке маркировок/упаковок извлеки номер(а) контейнера формата 4 буквы + 7 цифр (например, BMOU9288991). Если контейнеров несколько — перечисли через «; ». Добавь значение(я) в поле container_no.
+veterinary_seal: Извлекай только явные номера ветеринарных пломб («Veterinary seal», «Health seal»). Не путай с линейной пломбой/Seal No. Если номера нет — оставь пустым. Добавь найденное значение в поле veterinary_seal.
+linear_seal: Если в сертификате указаны номера пломб («Seal No.», «Seal Number») для контейнеров — извлеки их. При множественных значениях перечисли через «; ». Добавь значение(я) в поле linear_seal.
+HS_code: Если указан «HS CODE»/«Tariff code», извлеки код(ы) в точном формате (например, 0304.81). Если кодов несколько (по строкам товаров) — собери уникальные и перечисли через «; ». Добавь значение в поле HS_code.
+
+container (candidates): CONTAINER: MEDU9763238
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.1.
+
+p0_t1:
+QINGDAO CALYPSO FOOD CO.,LTD
+
+ADD NO. 50 HONGKONG MIDDLE ROAD, SHINAN DISTRICT, QINGDAO, SHANDONG, CHINA.
+
+p0_t2:
+2. Consignee
+
+p0_t3:
+OOO"MOREODOR"
+117292,MOSCOW,PROFSOYUZNAYA
+STREET,3,OFFICE 412,RUSSIA
+
+p0_t4:
+3. Means of transport and route
+
+p0_t5:
+FROM RIZHAO, CHINA TO VLADIVOSTOK, RUSSIAN
+FEDERATION BY SEA
+
+p0_t6:
+4. Destination port
+
+p0_t7:
+RUSSIAN FEDERATION
+
+p0_t8:
+Certificate No.2024129763238MU09
+
+p0_t9:
+CERTIFICATE OF ORIGIN
+
+p0_t10:
+5. For certifying authority use only
+
+p0_t11:
+6. Marks and numbers
+N/M
+
+p0_t12:
+Number and kind of packages; description of goods
+
+ONE THOUSAND SEVEN HUNDRED AND THIRTY
+OF FROZEN GREEN MUSSELS IN THE HALF SIZE
+(CANALICULUS) SIZE 30-45 PCS/KG,
+
+TOTAL N.W.:20856.00KGS
+
+*** *** *** *** ***
+
+CONTAINER: MEDU9763238
+
+p0_t13:
+8.H.S.Code
+
+p0_t14:
+03.07
+
+p0_t15:
+9. Quantity
+
+p0_t16:
+23393.48KGS
+
+G. W.
+
+p0_t17:
+10.Number
+and date of invoices
+2311MU-9
+DEC. 23, 2024
+
+p0_t18:
+11. Declaration by the producer
+
+p0_t19:
+The undersigned hereby declares that the above details and statements are correct that all the goods were produced in China and that they comply with the Rules of Origin of People's Republic of China
+
+p0_t20:
+Qingdao, China, DEC. 23, 2024
+
+p0_t22:
+Place and date. Signature and stamp of authorized signatory
+
+p0_t23:
+12.Certification
+
+p0_t24:
+It is hereby certified the declaration by the producer is correct.
+
+p0_t25:
+Qingdao, China, DEC. 23, 2024
+
+p0_t27:
+Place and date, signature and stamp of certifying authority
+=== END RAW TOKENS ===

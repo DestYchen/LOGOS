@@ -1,0 +1,91 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"packing_list_date": {"value": "", "token_refs": []}, "invoice_no": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "veterinary_seal": {"value": "", "token_refs": []}, "linear_seal": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: PACKING_LIST
+packing_list_date: Извлеки дату пакинг-листа из зоны заголовка/шапки («Packing List», «DATE»). Если дата разбита на день/месяц/год, собери в одну строку без нормализации формата. Добавь найденную дату в поле packing_list_date.
+invoice_no: Найди ссылку на инвойс по меткам «Invoice No», «P.Code or Invoice N°», «Commercial Invoice». Сохраняй номер точь-в-точь как в документе (включая символы «N°», дефисы и т.п.) и добавь его в поле invoice_no.
+producer: Если указан производитель («Producer», «Manufacturer», наименование завода/фабрики) — извлеки полное юр. наименование, при наличии адреса оставь в одной строке. Добавь значение в поле producer.
+buyer: Если в бланке есть «Buyer», «Customer», «Consignee» — извлеки полное наименование (и адрес, если есть) одной строкой. Добавь текст в поле buyer. Если поле отсутствует — оставь пустым.
+seller: Если в бланке есть «Seller», «Supplier», «Shipper» — извлеки полное наименование одной строкой. Добавь текст в поле seller. Если поле отсутствует — оставь пустым.
+veterinary_seal: Ищи явное упоминание ветеринарной пломбы («Veterinary seal», «Health seal»). Не путай с линейной пломбой «Seal No». Если номер ветпломбы указан — сохрани его как есть и добавь в поле veterinary_seal; если нет — оставь пустым.
+linear_seal: Извлеки номер(а) линейной пломбы по меткам «Seal No», «Seal Number». Если значений несколько (несколько контейнеров) — перечисли через «; ». Добавь значение(я) в поле linear_seal.
+country_of_origin: Если явно указана «Country of origin / Origin» — извлеки страну и добавь в поле country_of_origin. Если нет явного поля, оставь пустым (не выводи страну по косвенным признакам).
+
+invoice_date (candidates): 17.04.2015; 04-09-2019; 05-07-2019; 05-07-2021; 11-07-2019; 11-07-2021; 12-07-2019; 12-07-2021; 19-07-2019; 19-07-2021; 23-07-2019; 23-07-2021
+container (candidates): CONTAINER NUMBER
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Salmones Antártica S.A.
+
+p0_t1:
+PACKING LIST
+
+p0_t2:
+SHIPPER: SALMONES ANTARTICA S.A.
+AV. PROVIDENCIA 2653 PISO 15 SANTIAGO-CHILE
+
+p0_t3:
+CONSIGNEE: LLC NORDIC SEAFOOD RUS
+194100, ST. PETERSBURG, RUSSIA, NOVOLITOVSKAYA UL.
+BUILDING 15, LIT. A, KORPUS B, OF. 315
+INN 7842400891
+CONTRACT: NS-SA-01/15 DD 17.04.2015
+
+p0_t4:
+PRODUCER: SALMONES ANTARTICA S.A., 10735
+
+p0_t5:
+CONTAINER NUMBER: PONU4920996
+VESSEL: LEXA MAERSK 935N
+SHIPPED ON BOARD: 04-09-2019
+
+p0_t6:
+<table><thead><tr><th rowspan="2">PRODUCT</th><th rowspan="2">QUALITY</th><th rowspan="2">SIZE</th><th rowspan="2">PRODUCTION DATE</th><th rowspan="2">KG/BOX</th><th rowspan="2">CASES</th><th rowspan="2">NET.WEIGHT</th><th colspan="2">GLAZED & PACKED WEIGHT</th><th rowspan="2">BEST BEFORE</th></tr><tr><th>GROSS WEIGHT</th></tr></thead><tbody><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>6-9 LB (2,7 - 4,KG)</td><td>05-07-2019</td><td>25,00</td><td>1</td><td>25,00</td><td>26,25</td><td>27,50</td><td>05-07-2021</td></tr><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>6-9 LB (2,7 - 4,KG)</td><td>11-07-2019</td><td>25,00</td><td>17</td><td>425,00</td><td>446,25</td><td>467,50</td><td>11-07-2021</td></tr><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>6-9 LB (2,7 - 4,KG)</td><td>12-07-2019</td><td>25,00</td><td>9</td><td>225,00</td><td>236,25</td><td>247,50</td><td>12-07-2021</td></tr><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>6-9 LB (2,7 - 4,KG)</td><td>19-07-2019</td><td>25,00</td><td>189</td><td>4.725,00</td><td>4.961,25</td><td>5.197,50</td><td>19-07-2021</td></tr><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>6-9 LB (2,7 - 4,KG)</td><td>23-07-2019</td><td>25,00</td><td>23</td><td>575,00</td><td>603,75</td><td>632,50</td><td>23-07-2021</td></tr><tr><td>FROZEN RAINBOW TROUT HG</td><td>PREM</td><td>
+
+p0_t7:
+ISSUE 04-09-2019
+
+p0_t8:
+JOHANNA OSORIO
+COMMERCIAL ASSISTANT
+
+p0_t9:
+SALMONES ANTARTICA S.A.
+=== END RAW TOKENS ===

@@ -1,0 +1,89 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"packing_list_date": {"value": "", "token_refs": []}, "invoice_no": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "veterinary_seal": {"value": "", "token_refs": []}, "linear_seal": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: PACKING_LIST
+packing_list_date: Извлеки дату пакинг-листа из зоны заголовка/шапки («Packing List», «DATE»). Если дата разбита на день/месяц/год, собери в одну строку без нормализации формата. Добавь найденную дату в поле packing_list_date.
+invoice_no: Найди ссылку на инвойс по меткам «Invoice No», «P.Code or Invoice N°», «Commercial Invoice». Сохраняй номер точь-в-точь как в документе (включая символы «N°», дефисы и т.п.) и добавь его в поле invoice_no.
+producer: Если указан производитель («Producer», «Manufacturer», наименование завода/фабрики) — извлеки полное юр. наименование, при наличии адреса оставь в одной строке. Добавь значение в поле producer.
+buyer: Если в бланке есть «Buyer», «Customer», «Consignee» — извлеки полное наименование (и адрес, если есть) одной строкой. Добавь текст в поле buyer. Если поле отсутствует — оставь пустым.
+seller: Если в бланке есть «Seller», «Supplier», «Shipper» — извлеки полное наименование одной строкой. Добавь текст в поле seller. Если поле отсутствует — оставь пустым.
+veterinary_seal: Ищи явное упоминание ветеринарной пломбы («Veterinary seal», «Health seal»). Не путай с линейной пломбой «Seal No». Если номер ветпломбы указан — сохрани его как есть и добавь в поле veterinary_seal; если нет — оставь пустым.
+linear_seal: Извлеки номер(а) линейной пломбы по меткам «Seal No», «Seal Number». Если значений несколько (несколько контейнеров) — перечисли через «; ». Добавь значение(я) в поле linear_seal.
+country_of_origin: Если явно указана «Country of origin / Origin» — извлеки страну и добавь в поле country_of_origin. Если нет явного поля, оставь пустым (не выводи страну по косвенным признакам).
+
+invoice_date (candidates): 12.11.2024
+container (candidates): Container No
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t1:
+QINGDAO CALYPSO FOOD CO.,LTD
+
+p0_t2:
+ADD No. 50 Hongkong Middle Road, Shinan District, Qingdao, Shandong, China.
+
+p0_t3:
+Packing List
+
+p0_t4:
+INVOICE NO.: 2311MU-9
+
+p0_t5:
+DATE: DEC 23.2024
+
+p0_t6:
+To: OOO “MOREODOR”
+
+p0_t7:
+117292 MOSCOW, PROFSOYUZNAYA STREET, 3, RUSSIA, OFFICE 412
+
+p0_t8:
+<table><thead><tr><th>DESCRIPTION OF PRODUCTS</th><th>SIZE</th><th>QTY IN CTNS</th><th>N.W(KGS)</th><th>G.W (KGS)</th><th>NW with glazing /kgs</th></tr></thead><tbody><tr><td>FROZEN GREEN MUSSELS IN THE HALF SHELL, IQF (PERNA CANALICULUS)<br/>Packed 12*1kg=12kg/ctn<br/>Date of production: 12.11.2024<br/>HS Code:0307320000</td><td>30-45PCS/KG</td><td>1738</td><td>20856.00</td><td>23393.48</td><td>22262.04</td></tr><tr><td>TOTAL</td><td></td><td>1738</td><td>20856.00kgs</td><td>23393.48kgs</td><td>22262.04kgs</td></tr></tbody></table>
+
+p0_t9:
+EXPIRY DATE: 24 MONTHS FROM PRODUCTION DATE
+
+p0_t10:
+From RIZHAO to VLADIVOSTOK RUSSIA by VESSEL.
+
+p0_t11:
+Container No.: MEDU9763238
+
+p0_t12:
+Factory No.:3700/02B07
+=== END RAW TOKENS ===

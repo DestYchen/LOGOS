@@ -1,0 +1,109 @@
+MODEL: google/gemma-3-27b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"export_declaration_no": {"value": "", "token_refs": []}, "export_declaration_date": {"value": "", "token_refs": []}, "invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "exporter": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}, "proforma_no": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: EXPORT_DECLARATION
+export_declaration_no: Найди номер ЭД по меткам вроде «Número de identificación», «Customs export declaration No», «ID/Reference No». Сохраняй точное значение (буквы/цифры) и добавь его в поле export_declaration_no.
+export_declaration_date: Определи дату декларации по метке «FECHA/Date» в шапке формы. Если в документе есть технические даты («Aceptación a trámite», «Autorización de salida»), приоритет отдавай основной дате декларации. Добавь дату в поле export_declaration_date.
+invoice_no: Извлеки номер(а) инвойса из блока со ссылкой на счета, например «Número y fecha de Invoices / Factura de exportación». Если номеров несколько — перечисли через «; ». Добавь значение(я) в поле invoice_no.
+invoice_date: Возьми дату(ы) инвойса, идущие рядом с номером(ами) инвойса («Número y fecha…»). Если несколько — перечисли через «; ». Сохраняй формат, как в документе, и добавь дату(ы) в поле invoice_date.
+country_of_origin: Если в ЭД явно указана страна происхождения (напр., «País de origen / Country of origin»), извлеки её. Если поле отсутствует, оставь пустым (не выводи страну по косвенным признакам типа отправителя или порта). Добавь значение в поле country_of_origin.
+producer: Если производитель указан как «Producer/Manufacturer/Fabricante» (часто в описании товара или примечаниях), извлеки юридическое наименование. При нескольких значениях — перечисли через «; ». Добавь текст в поле producer.
+buyer: Определи покупателя по полю «Consignatario / Consignee / Buyer». Сохрани полное наименование (и адрес, если указан) одной строкой. Добавь текст в поле buyer.
+seller: Если в ЭД явно присутствует «Seller/Supplier/Vendedor», извлеки это значение. Если такого поля нет (что типично), оставь пустым. Добавь найденный текст в поле seller.
+exporter: Возьми экспортёра из поля «Consignante o Exportador / Exporter». Сохрани полное юридическое наименование (и адрес, если есть) одной строкой и добавь его в поле exporter.
+incoterms: Извлеки условия поставки из поля «Cláusula de venta / Terms of sale» (напр., FOB/CFR/CIF/DAP). Сохраняй код ИНКОТЕРМС и, если указан, пункт (порт/город). Добавь строку в поле incoterms.
+total_price: Возьми общий итог по документу. Предпочитай итог, согласованный с ИНКОТЕРМС: при FOB — «Total Valor FOB», при CIF — «Valor CIF». Если явного итога нет, суммируй построчные значения «Valor FOB». Сохрани валюту и формат числа как в документе. Добавь строку в поле total_price.
+proforma_no: Если ЭД ссылается на проформу («Proforma Invoice», «PI», «Proforma No.»), извлеки номер(а). При множественных значениях — перечисли через «; ». Добавь значение(я) в поле proforma_no.
+HS_code: Собери все встречающиеся коды ТН ВЭД из граф по строкам («Cód. Arancel», «HS Code», «Tariff code»). Запиши уникальные коды в один список, разделённый «; », сохранив формат из документа (напр., 0304.81.20). Добавь строку в поле HS_code.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t4:
+中华人民共和国海关出口货物报关单
+
+p0_t5:
+《预录》编号：421820240000045068
+
+p0_t6:
+海关编号: 421820240000045068
+
+p0_t7:
+(青开发区)
+
+p0_t8:
+仅供校对用
+
+p0_t9:
+页码/页数:111
+
+p0_t10:
+<table><tr><td>境内发货人(91370202MA3ELM5J7W)<br/>青岛格利利斯食品有限公司</td><td>出境关别(4202)<br/>日照海关</td><td>出口日期</td><td>申报日期<br/>20241219</td><td>备案号<br/>C420924A0242</td></tr><tr><td>境外收货人<br/>000“MOREODOR”</td><td>运输方式(2)<br/>水路运输</td><td>运输工具名称及航次号<br/>MSC TRADER II/HX451A</td><td>提运单号</td><td>177HDIDIZ1424VZRF</td></tr><tr><td>生产销售单位(91371082684813765N)<br/>荣成市铭威水产食品有限公司</td><td>监管方式(0615)<br/>进料对口</td><td>征免性质(503)<br/>进料加工</td><td>许可证号</td><td></td></tr><tr><td>合同协议号<br/>2311ML-9</td><td>贸易国(地区)(RUS)<br/>俄罗斯</td><td>运抵国(地区)(RUS)<br/>俄罗斯</td><td>指运港(RUS000)<br/>俄罗斯</td><td>离境口岸(370002)<br/>日照</td></tr><tr><td>包装种类(22)<br/>纸制或纤维板制盒/箱</td><td>件数<br/>1738</td><td>毛重(千克)<br/>23393.48</td><td>净重(千克)<br/>20856</td><td>运费<br/>3000</td><td>保费<br/>3000</td><td>杂费</td></tr></table>
+
+p0_t11:
+随附单位证明编号
+
+p0_t12:
+随附单证1:保税核注清单 QD420924E000021895 电子底账224N428900358999001
+
+随附单证2:代理报关委托协议(电子
+
+p0_t13:
+标记喷码及备注
+
+p0_t14:
+集装箱标箱数及号码: 2; MEDU19763238;
+
+p0_t15:
+<table><thead><tr><th>项号</th><th>商品编码</th><th>商品名称及规格型号</th><th>数量及单位</th><th>单价/总价/币制</th><th>原产国(地区)</th><th>最终目的国(地区)</th><th>境内货源地</th><th>征免</th></tr></thead><tbody><tr><td>1</td><td>0307320000冻半壳青口贝<br/>(1) 0|0|冻|半壳|拉丁名: Perna canaliculus|16-35G/个|1kg/盒 12盒/箱</td><td></td><td>20856千克</td><td>62.4300<br/>1302040.08</td><td>中国<br/>(CHN)</td><td>俄罗斯<br/>(RUS)</td><td>(37279)荣城<br/>(3)</td><td>全免<br/>(3)</td></tr></tbody></table>
+
+<table><tr><td>特殊关系确认:否</td><td>价格影响确认:否</td><td>支付特许权使用费确认:否</td><td>公式定价确认:</td><td>暂定价格确认:</td><td>自报自缴:否</td><td>水运中转:是</td></tr></table>
+
+海关批注及签章
+
+申报人员
+
+报关人员证号42001409
+
+电话
+
+兹申明对以上内容承担如实申报、依法纳税之法律责任
+
+申报单位 (913702027636474782) 青岛运佳国际货运代理有限公司
+
+申报单位(签章)
+=== END RAW TOKENS ===

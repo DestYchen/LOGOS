@@ -157,6 +157,7 @@ def _plain_text_tokens(raw_text: str) -> List[Dict[str, Any]]:
 
 
 async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
+    auto_validate = False
     try:
         async with get_session() as session:
             batch = await batch_service.get_batch(session, batch_id)
@@ -225,11 +226,21 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
                     active_batches=1,
                     active_docs=len(batch.documents),
                 )
+            if batch.status not in CANCELLATION_STATUSES and batch.status != BatchStatus.FAILED:
+                auto_validate = True
     except asyncio.CancelledError:
         logger.info("Batch pipeline cancelled for %s", batch_id)
         raise
     finally:
         await task_tracker.remove_task(batch_id, kind="process")
+
+    if auto_validate:
+        try:
+            await run_validation_pipeline(batch_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Automatic validation failed for batch %s", batch_id)
 
 
 async def _run_ocr_step(session, batch_id: uuid.UUID, document: Document) -> ProcessingResult:

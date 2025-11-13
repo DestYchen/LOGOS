@@ -1,0 +1,172 @@
+MODEL: google/gemma-3-27b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"veterinary_certificate_no": {"value": "", "token_refs": []}, "veterinary_certificate_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "exporter": {"value": "", "token_refs": []}, "vessel": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "veterinary_seal": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: VETERINARY_CERTIFICATE
+veterinary_certificate_no: Возьми номер сертификата из п.1.5 «Certificate / Сертификат №» или из нижнего колонтитула «Certificate Number …». Сохрани строку ровно как в бланке и добавь её в поле veterinary_certificate_no.
+veterinary_certificate_date: Найди дату и место выдачи в строке «PLACE AND DATE OF ISSUE» (внизу документа, например «TALCAHUANO 02/07/2025»). Сохрани формат как в источнике и добавь дату в поле veterinary_certificate_date.
+producer: Извлеки наименование предприятия из п.3.1 «Name (Nº) and address of establishment…» (это производитель/завод; нередко рядом указан Establishment No). Сохрани полное юр. наименование одной строкой и добавь его в поле producer.
+buyer: Возьми получателя из п.1.2 «Name and address of consignee». Сохрани наименование (и адрес, если указан) одной строкой и добавь в поле buyer.
+exporter: Возьми отправителя/экспортёра из п.1.1 «Name and address of consignor». Сохрани наименование (и адрес, если указан) одной строкой и добавь в поле exporter.
+vessel: В п.1.3 «Means of transport» извлеки название судна без номера контейнера (например, «MSC TAKORADI VIII NX528R»). Сохрани в одной строке и добавь в поле vessel.
+container_no: В п.1.3 найди номер(а) контейнера формата 4 буквы + 7 цифр (например, «BMOU9288991»). Если их несколько — перечисли через «; ». Добавь значение(я) в поле container_no.
+veterinary_seal: Из п.2.6 «Number of seal» извлеки номер(а) ветпломбы (Health/Veterinary seal), если значение приведено общим блоком. Если номеров несколько — перечисли через «; ». Добавь значение(я) в поле veterinary_seal.
+country_of_origin: Определи страну происхождения по п.1.6 (Competent authority/страна) или по формулировке происхождения в шаблоне; зафиксируй именно страну (например, «CHILE»). Добавь её в поле country_of_origin.
+
+invoice_date (candidates): 18 DEC 2024
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t1:
+证书
+CERTIFICATE
+
+p0_t2:
+正本
+ORIGINAL 2
+
+p0_t3:
+共 页 第 页 Page of
+
+p0_t4:
+编号-No.: 224N42090035999001
+
+p0_t5:
+4. Statement of fit for human consumption / Священство о природе и достоинства товара вultiy
+
+p0_t6:
+I, the undersigned state/official veterinarian, certify that / Я, ведущий/leadса государственный/официальный ветеринарный ведч,
+настоящим удостовермо следующее:
+
+The certificate is issued on the base of the following pre-export certificates (a list is attached if two or more pre-export certificates are used) /
+Сертификат выдан в основе следующих докспортных сертификатов (при наличии более 2 докспортных сертификатов прилагается
+сивок):
+
+p0_t7:
+<table><thead><tr><th>Date / Дата</th><th>Number /Номер</th><th>Country of origin / Страны прописхождения</th><th>Administrative territory / Административная территория</th><th>Registration number of establishment/Регистрационный номер предприятия</th><th>Type and quantity (net weight) of the goods / Вид и количество (вес нетто) товара</th></tr></thead><tbody><tr><td>1-06-1</td><td>4-44</td><td>4-64-1</td><td>4-06-4</td><td>4-44-1</td><td>0-06-1</td></tr><tr><td>0-06-1</td><td>4-44-1</td><td>4-44-4</td><td>4-44-4</td><td>4-44-4</td><td>4-44-4</td></tr></tbody></table>
+
+p0_t8:
+4.1. Exported to the customs territory of the Eurasian Economic Union products from water biological resources (live, chilled, frozen fish, roe, crustaceans, shellfish, mammals and other water animals and species)
+
+p0_t9:
+(hereinafter referred to as the "fish products") exported to the Custom Union, raised or harvested in ecologically clean water reservoir (aqualo-
+area), products of their processing, produced at facilities, in respect to which veterinary and sanitary restrictions were not established. /
+
+Экспортируемая на таможенную территорию Евразийского экономического союза продукция из водных биологических ресурсов
+(хлеба, охождения, морожения рыбы, лекра, моллюскы, мекопитгающие и другие водные животные и объекты промысла) (далее -
+рыбня продуцента) выращена из добытая в экологически чистых водоемах (акваториях), штщевые продукты ее переработки
+прописаны на предпринятых, в отношении которых не был установлены ветеринарно-сAPHIAрные ограничения.
+
+p0_t10:
+4.2. In case there are some parasite-worms within allowed limits, fish products is inactivated by the current methods. /В случае наиточны паразитов в пределах допустимых норм рыбная продукция обезврежена существующими методами.
+
+p0_t11:
+4.3. Fish products exported to the customers' territory of the Eurasian Economic Union: / Рыбная продукция, экспортируемая на возможенную терригорию Евразийского экономического союза:
+
+p0_t12:
+- do not contain poisonous fish species from families Tetraodontidae, Molidae, Diodontidae и Canthigasteridae, as well as fish products containing blotoxins harmful for human health; / не содержит ядовитых рыб, семейств Tetraodontidae, Molidae, Diodontidae и Canthigasteridae, также рыбопродукция содержащего биотоксин, опасные для здоровья человека;
+
+p0_t13:
+- tested for parasites, bacterial and viral infections; / исследования на
+
+p0_t14:
+- do not contain natural or synthetic estrogenic, hormonal substances, thyrostatic drugs, antibiotics, other medicines and pesticides. / Не содержит натуральных юни спектрических эстrogенических, гормональных веществ, преостатических препаратов, атибиотиков, других медикаментозных средств и пестницoidов;
+
+p0_t15:
+frozen fish products have temperature in the muscle thickness not higher than -18°C; / мороженая рыбная продукция имеет температуру в толще продукта не выше -18°C;
+
+p0_t16:
+- are not contaminated with salmonella or other bacteria disease agents; / не kontаминирована сацьмонелламі і щодо возбудівпелмі друғих бактерійних липфекціюл
+
+p0_t17:
+have not been treated with coloring, ionizing radiation or ultra violet rays; / не обработана красившим веществам, низкочастотным
+
+облученном пилт ультрафиолетовым личамт
+
+p0_t18:
+have no changes typical for contagious diseases; / не имеет изменений, характерных для заразных болезней
+
+p0_t19:
+of good quality as for organoleptic indicators; / не имеет недоброкачественных элементов по органолептическим показателям
+
+p0_t20:
+- were not defrosted during storage; / не подвергалось дефростаццит в перпод хранения.
+
+p0_t21:
+4.4. Clanis, echinoderms, turnicates and sea gastropods were subjected to necessary aging in cleaning centers. / Двусторонние моллюскы, эпилококкие, оболочки и морские гастроподы прошли необходимую выдержку в центрах очистки.
+
+p0_t22:
+4.5. Microbiological, chemical and toxicological and radiological indexes of fish products, phycotoxins content and other contaminants (for shellfish) comply with the current veterinary and sanitary norms and rules that are in force on the customs territory of the Eurasian Economic Union. / Микробиологические, химикотоксикологические и радиологические показатели рыбной продукции, содержание фиботоксинов и других загрязнителей (для моллюков) соответствуют действующим на таможенном территории Евразийского экономического союза ветеринарным и санитарным нормам и правилам.
+
+p0_t23:
+4.6. Fish products are fit for human consumption. / Рыба – продукция признана природной для употребления в пищу человеку.
+
+p0_t24:
+4.7. Packages and packaging material are disposable and comply with the requirements of the Eurasian Economic Union. / Тара п улъковочный материал одноразовые п соответствуют требованиям Евразийского экономического союза.
+
+p0_t25:
+4.8. The means of transport are treated and prepared in accordance with the requirements approved by the corresponding country. / Транспортное средство обработано и подготовлено в соответствии с правилами, прописанными в стране- transporte.
+
+p0_t26:
+Place/ Mecto : RONGCHENG, CHINA
+
+p0_t27:
+Date/Data 18 DEC 2024
+
+p0_t28:
+Stamp/Stampin' Guarantors?
+
+p0_t29:
+Signature of State/official Veterinarian / Подпись государственного/официального ветеринара / Ведущий в рядах
+
+Name and position /Ф.И.О. и должность: Authorized Officer: YUE FUJIE / О.Ю.В. Ведущий в рядах
+
+青岛博大
+
+青岛博大
+
+p0_t30:
+Note1. Veterinary certificate is executed in the Russian language as well as the language of the exporting country, and (or) the English language. /Присягosome/.
+
+Ветеринарный сертификат оформляется на русском языке, в также на языке стршыв-экспортера и (или) на языке языка.
+
+p0_t31:
+2 113 2
+
+p0_t34:
+扫描全能王™
+=== END RAW TOKENS ===

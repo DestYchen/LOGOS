@@ -1,0 +1,145 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}, "net_weight": {"value": "", "token_refs": []}, "gross_weight": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: CERTIFICATE_OF_ORIGIN
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк. Соблюдай порядок следования. Для каждой позиции заполняй все доступные поля и указывай token_refs для исходных фрагментов. Если часть атрибутов указана общим блоком (например, один HS-код для всех), дублируй эти значения во все соответствующие product_i.
+products[*].name_product: Возьми коммерческое наименование из описания товара (например, «FROZEN ATLANTIC SALMON FILLET»). Если описание многострочное — объедини в одну строку. Латинское видовое имя вынеси отдельно в latin_name. Добавь текст в products[i].name_product.
+products[*].latin_name: Если рядом с описанием указано латинское видовое название в скобках (например, «SALMO SALAR»), извлеки его и добавь в products[i].latin_name. Если нет — оставь пустым.
+products[*].size_product: Если указан размер/градация (например, «3–4 LB», «80/120», «1.3–1.8 KG»), извлеки как единую строку и добавь в products[i].size_product. Если размер не указан — оставь пустым.
+products[*].unit_box: Если явно указана учётная/ценовая единица («per carton», «per kg», «unit»), извлеки её и добавь в products[i].unit_box. Если единица не указана в CoO — оставь пустым (не выдумывай).
+products[*].packages: Извлеки количество мест/упаковок по пометкам «Number and kind of packages», «Cases/Cartons/Packages». Сохрани число и при необходимости тип (например, «1375 CASES») в одной строке. Добавь значение в products[i].packages.
+products[*].price_per_unit: Если в CoO указана цена за единицу (встречается редко), извлеки её с валютой/форматом как в документе и добавь в products[i].price_per_unit. Если цены нет — оставь пустым.
+products[*].total_price: Если в CoO указана итоговая стоимость по позиции (редко), извлеки её с валютой/форматом как в документе и добавь в products[i].total_price. Если суммы нет — оставь пустым (не вычисляй).
+products[*].net_weight: Извлеки нетто по позиции («NET KGS», «Net weight», возможно внутри описания). Сохраняй число и единицу как в документе. Добавь значение в products[i].net_weight.
+products[*].gross_weight: Извлеки брутто по позиции из поля «Gross weight»/«Gross weight or other quantity». Сохраняй формат числа и единицу. Добавь значение в products[i].gross_weight.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Form. N° 3397
+
+p0_t1:
+1. Goods consigned from (exporter's business name, address, country)
+
+**SALMONES ANTARTICA S.A.**
+AV. PROVIDENCIA 2653, PISO 15 SANTIAGO - CHILE
+TEL: 56-02-24143600
+
+2. Goods consigned to (consignee's name, address, country)
+
+**OOO "MOREODOR"**
+117036, MOSCOW, PROFSOYUZNAYA STREET, 3,
+RUSSIA, OFFICE 412
+
+3. Means of transport and route (as far as known)
+
+**SEA FREIGHT**
+**VESSEL:** LEXA MAERSK V.935N
+**FROM:** SAN VICENTE, CHILE
+**TO:** ST. PETERSBURG, RUSSIA
+
+4. For official use
+
+<table><tr><td>Reference N°</td><td>1142728</td></tr><tr><td colspan="2">97391</td></tr><tr><td colspan="2">GENERALIZED SYSTEM OF PREFERENCES<br/>CERTIFICATE OF ORIGIN<br/>(Combined declaration and certificate)</td></tr><tr><td colspan="2">FORM A</td></tr><tr><td>Issued in</td><td>CHILE<br/>(country)</td><td>See Notes overleaf</td></tr><tr><td colspan="3">4. For official use</td></tr><tr><td>5. Item<br/>number</td><td>6. Marks and<br/>numbers of<br/>packages</td><td>7. Number and kind of packages; description of goods</td></tr><tr><td>1</td><td>N/M</td><td><b>FROZEN RAINBOW TROUT HG</b><br/>880 CARTONS<br/>22.000,00 KGS. NET WEIGHT<br/>24.200,00 KGS. GROSS WEIGHT<br/>"Oncorhynchus mykiss"<br/><br/>ELABORATED BY:<br/>SALMONES ANTARTICA S A<br/>REGISTER: 10735<br/><br/>PONU4832160 SEAL: ML-CL0931771; A0020050</td></tr><tr><td>8.</td><td>Origin<br/>criterion<br/>(see notes<br/>overleaf)</td><td>"P"</td></tr><tr><td>9.</td><td>Gross weight<br/>or other<br/>quantity</td><td>24.200,00 KGS.<br/>GROSS WEIGHT</td></tr><tr><td>10.</td><td>Number<br/>and date<br/>of invoices</td><td>No 019246<br/>04/09/2019</td></tr></table>
+
+11. Certification
+
+It is hereby certified, on the basis of control carried out, that the declaration by the exporter is correct.
+
+ROMINA VACCAREZZA GARRIDO
+Inspector Official
+Servicio Nacional de Pesca y Acuicultura
+
+12. Declaration by the exporter
+
+The undersigned hereby declares that the above details and statements are correct; that all the goods were produced in
+
+CHILE
+
+(country)
+
+and that they comply with the origin requirements specified for those goods
+
+p0_t2:
+IMPRESOS RONY - (32) 225 6422
+=== END RAW TOKENS ===
+-- part 4 (text) --
+=== TABLE CANDIDATES ===
+p0_t1:
+1. Goods consigned from (exporter's business name, address, country)
+
+**SALMONES ANTARTICA S.A.**
+AV. PROVIDENCIA 2653, PISO 15 SANTIAGO - CHILE
+TEL: 56-02-24143600
+
+2. Goods consigned to (consignee's name, address, country)
+
+**OOO "MOREODOR"**
+117036, MOSCOW, PROFSOYUZNAYA STREET, 3,
+RUSSIA, OFFICE 412
+
+3. Means of transport and route (as far as known)
+
+**SEA FREIGHT**
+**VESSEL:** LEXA MAERSK V.935N
+**FROM:** SAN VICENTE, CHILE
+**TO:** ST. PETERSBURG, RUSSIA
+
+4. For official use
+
+<table><tr><td>Reference N°</td><td>1142728</td></tr><tr><td colspan="2">97391</td></tr><tr><td colspan="2">GENERALIZED SYSTEM OF PREFERENCES<br/>CERTIFICATE OF ORIGIN<br/>(Combined declaration and certificate)</td></tr><tr><td colspan="2">FORM A</td></tr><tr><td>Issued in</td><td>CHILE<br/>(country)</td><td>See Notes overleaf</td></tr><tr><td colspan="3">4. For official use</td></tr><tr><td>5. Item<br/>number</td><td>6. Marks and<br/>numbers of<br/>packages</td><td>7. Number and kind of packages; description of goods</td></tr><tr><td>1</td><td>N/M</td><td><b>FROZEN RAINBOW TROUT HG</b><br/>880 CARTONS<br/>22.000,00 KGS. NET WEIGHT<br/>24.200,00 KGS. GROSS WEIGHT<br/>"Oncorhynchus mykiss"<br/><br/>ELABORATED BY:<br/>SALMONES ANTARTICA S A<br/>REGISTER: 10735<br/><br/>PONU4832160 SEAL: ML-CL0931771; A0020050</td></tr><tr><td>8.</td><td>Origin<br/>criterion<br/>(see notes<br/>overleaf)</td><td>"P"</td></tr><tr><td>9.</td><td>Gross weight<br/>or other<br/>quantity</td><td>24.200,00 KGS.<br/>GROSS WEIGHT</td></tr><tr><td>10.</td><td>Number<br/>and date<br/>of invoices</td><td>No 019246<br/>04/09/2019</td></tr></table>
+
+11. Certification
+
+It is hereby certified, on the basis of control carried out, that the declaration by the exporter is correct.
+
+ROMINA VACCAREZZA GARRIDO
+Inspector Official
+Servicio Nacional de Pesca y Acuicultura
+
+12. Declaration by the exporter
+
+The undersigned hereby declares that the above details and statements are correct; that all the goods were produced in
+
+CHILE
+
+(country)
+
+and that they comply with the origin requirements specified for those goods
+=== END TABLE CANDIDATES ===
