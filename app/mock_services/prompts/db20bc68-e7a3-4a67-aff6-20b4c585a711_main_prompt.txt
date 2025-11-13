@@ -1,0 +1,66 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"certificate_of_origin_no": {"value": "", "token_refs": []}, "certificate_of_origin_date": {"value": "", "token_refs": []}, "invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}, "exporter": {"value": "", "token_refs": []}, "destination": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "vessel": {"value": "", "token_refs": []}, "veterinary_seal": {"value": "", "token_refs": []}, "linear_seal": {"value": "", "token_refs": []}, "importer": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: CERTIFICATE_OF_ORIGIN
+certificate_of_origin_no: Найди номер сертификата по меткам «Certificate of Origin No», «Certificate No», «Register No», «REG. No» или «REGISTER Nº». Сохраняй точную строку (буквы/цифры/символы) и добавь в поле certificate_of_origin_no.
+certificate_of_origin_date: Определи дату выдачи сертификата по блоку сертифицирующего органа («Place and date, signature and stamp of certifying authority»). Если есть несколько дат (например, дата декларации экспортёра и дата сертификации), отдай приоритет дате сертификации. Добавь дату в поле certificate_of_origin_date.
+invoice_no: Извлеки номер(а) инвойса из секции с явной ссылкой на инвойс (например, «Number and date of Invoices»). Если номеров несколько, перечисли через «; ». Добавь значение(я) в поле invoice_no.
+invoice_date: Рядом с номером инвойса извлеки дату(ы) инвойса. Если несколько — перечисли через «; ». Сохраняй формат как в документе и добавь дату(ы) в поле invoice_date.
+country_of_origin: Ищи явную метку «Origin: …», «Country of origin» или заголовок с указанием страны происхождения (например, «Goods produced in …»). Извлеки страну и добавь в поле country_of_origin.
+exporter: Возьми полное юридическое наименование экспортёра из секции «Goods consigned from (Exporter’s …)». Сохрани строку целиком (при наличии адреса — в одной строке) и добавь в поле exporter.
+importer: Возьми полное юридическое наименование импортёра/получателя из секции «Goods consigned to (Consignee’s …)». Сохрани строку целиком (при наличии адреса — в одной строке) и добавь её в поле importer.
+destination: Определи пункт/страну назначения по полям «Importing country», «To … (route)» или аналогичной пометке. Предпочитай явное поле «Importing country»; при наличии города доставки укажи его вместе со страной. Добавь значение в поле destination.
+vessel: Найди сведения о транспорте и маршруте («Means of transport and route»). Извлеки наименование судна и, если указано, номер рейса/войяжа как единую строку. Добавь её в поле vessel.
+container_no: В блоке маркировок/упаковок извлеки номер(а) контейнера формата 4 буквы + 7 цифр (например, BMOU9288991). Если контейнеров несколько — перечисли через «; ». Добавь значение(я) в поле container_no.
+veterinary_seal: Извлекай только явные номера ветеринарных пломб («Veterinary seal», «Health seal»). Не путай с линейной пломбой/Seal No. Если номера нет — оставь пустым. Добавь найденное значение в поле veterinary_seal.
+linear_seal: Если в сертификате указаны номера пломб («Seal No.», «Seal Number») для контейнеров — извлеки их. При множественных значениях перечисли через «; ». Добавь значение(я) в поле linear_seal.
+HS_code: Если указан «HS CODE»/«Tariff code», извлеки код(ы) в точном формате (например, 0304.81). Если кодов несколько (по строкам товаров) — собери уникальные и перечисли через «; ». Добавь значение в поле HS_code.
+
+invoice_date (candidates): 21.10.2025
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t2:
+(253)8682022062758D1767063
+
+p0_t3:
+<table><tr><td>1. İhracatçı<br/>Consignor<br/>Expéditeur</td><td>NO D 1767063</td><td>ORJINAL<br/>ORIGINAL<br/>ORIGINAL</td></tr><tr><td colspan="3">NORDZEE SU ÜRÜNLERİ İHRACATI SANAYİ VE TİC. A.Ş.<br/>KOCAKIŞLA MAH. GÜLLÜK YOLU NO:14 GÜLLÜK MİLAS/MUĞLA Türkiye</td></tr><tr><td>2. Alicı<br/>Consignee<br/>Destinataire</td><td colspan="2">MENŞE ŞAHADETNAMESİ<br/>CERTIFICATE OF ORIGIN<br/>CERTIFICAT D'ORIGINE</td></tr><tr><td>LLC "MOREODOR"<br/>PROFSOYUZNAYA STREET 3, OFFICE 412,117292 INN7727734159<br/>MOSCOW Russian Federation</td><td>3. Menşe Ülkesi<br/>Country of Origin<br/>Pays d'origine</td><td></td></tr><tr><td></td><td>Türkiye</td><td></td></tr><tr><td>4. Taşımaya İlişkin Bilgiler (Tercihe Bağlı)<br/>Transport Details (Optional)<br/>Informations relatives au transport (mention facultative)</td><td>5. Gözlemler<br/>Remarks<br/>Remarques</td><td></td></tr><tr><td colspan="3">BY TRUCK 68 KL 900 / 33 AIV 007</td></tr><tr><td>6. Sıra No; kolilerin marka ve işaretleri, sayı ve türleri; esyanın tanımı<br/>Item number; marks, numbers, number and kind of packages; description of goods<br/>Numéro d'ordre - Marques, numéros, nombre et nature des colis - Désignation des marchandises</td><td colspan="2">7. Miktar<br/>Quantity<br/>Quantité</td></tr><tr><td>ADDR 1-3900 BOXES 20252115 - 21.10.2025<br/>FROZEN SEABREAM WHOLE ROUND IQF NET W. 19.500 KG<br/>(SPARUS AURATA)</td><td>21840 KGS</td><td></td></tr><tr><td colspan="3">8. Yukarıda Tanımlanan Eşyaların 3 Nolu Kutuda Belirtilen Ülke Menşeli Olduğu Tasdik Olunur.<br/>The Undersigned Authority Certifies That The Goods Described Above Originate In The Country Shown In Box 3<br/>L'autorité soussignée certifie que les marchandises désignées ci-dessus sont originaires du pays figurant dans la case No 3</td></tr><tr><td colspan="3"><p>Düzenleme Yeri ve Tarihi, İsim, İmza ve Yetkili Merciinin Mührü</p><p>Place and date of issue, name, signature and stamp of competent authority M
+
+p0_t4:
+ankaraform +90 (312) 278 30 40
+=== END RAW TOKENS ===

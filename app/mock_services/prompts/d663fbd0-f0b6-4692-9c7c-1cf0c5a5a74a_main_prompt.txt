@@ -1,0 +1,124 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "terms_of_payment": {"value": "", "token_refs": []}, "bank_details": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "proforma_no": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+invoice_no: Найди метку «Invoice No», «No.», «N°» или «№» рядом с заголовком «Commercial Invoice». Значение может содержать буквы, цифры и дефисы (например, N° 24636). Сохраняй точную строку как в документе и добавь её в поле invoice_no.
+invoice_date: Ищи «Date»/«Invoice date». Дата может быть одной строкой или разбита на D / M / Y. Собери полную дату и, если возможно, нормализуй в формат ГГГГ-ММ-ДД. Добавь найденную дату в поле invoice_date.
+buyer: Определи покупателя по меткам «Buyer», «Customer», «Consignee», «Bill to». Сохрани полное наименование и, если указано, адрес в единой строке, без сокращений. Добавь текст в поле buyer.
+seller: Определи продавца по меткам «Seller», «Supplier», «Shipper», «Exporter». Сохрани полное юридическое наименование и, если указано, адрес в единой строке. Добавь текст в поле seller.
+producer: Если в инвойсе указан «Producer»/«Manufacturer»/«Factory», извлеки юридическое наименование. Если перечислено несколько производителей — соедини значения через «; ». Добавь текст в поле producer.
+incoterms: Извлеки условия поставки (ИНКОТЕРМС) — трёхбуквенный код (например, EXW/FOB/CFR/CIF/DAP) и, если указано, пункт (например, «CFR ST. PETERSBURG - RUSSIA»). Сохраняй ровно так, как в документе, и добавь строку в поле incoterms.
+terms_of_payment: Найди условия оплаты («Terms of payment», «Payment»). Сохрани полную формулировку (напр., «ADV. 20%, BALANCE C/COPY DOC.») и добавь её в поле terms_of_payment.
+bank_details: Извлеки блок банковских реквизитов (банк, счёт/IBAN, SWIFT/BIC, бенефициар и адрес). Сохрани как один многострочный текст без нормализации и добавь его в поле bank_details.
+proforma_no: Если инвойс ссылается на проформу, найди «Proforma Invoice No.»/«Proforma No.»/«PI/P.I.». Извлекай только номер проформы, не путай с номером заказа («Order», «P.Code»). Добавь значение в поле proforma_no.
+container_no: Извлеки номер(а) контейнера/машины. Чаще всего формата 4 буквы + 7 цифр и, при наличии, суффикс (напр., «BMOU928899-1»). Если значений несколько — соедини через «; ». Добавь строку в поле container_no.
+HS_code: Найди «HS CODE»/«HS»/«Tariff code» и извлеки числовой код (напр., «0304.81»). Сохраняй формат кода как в документе и добавь его в поле HS_code.
+total_price: Найди итог по документу («Total», иногда вместе с ИНКОТЕРМС и валютой — напр., «Total CFR USD»). Предпочитай напечатанный итог; если он отсутствует, суммируй построчные суммы. Сохраняй валюту и разделители как в документе. Добавь строку в поле total_price.
+
+invoice_date (candidates): 21.10.2025; 19.05.2025
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+<table><tr><td>CUSTOMER & PLACE OF DELIVERY</td></tr><tr><td>LLC "Moreodor"<br>117292, Moscow, Profsoyuznaya street, 3, office 412<br>Russian Federation<br>INN 7727734159</td></tr></table>
+
+<table><tr><td>EXPORTER</td></tr><tr><td>Noordzee Su Urünleri Ihracatı Sanayi ve Ticaret A.Ş.<br>KOCAKIŞLA MAH. GÜLLÜK YOLU NO:14 Güllük<br>Milas - Muğla TURKEY<br>VAT Milas 631 049 0189</td></tr></table>
+
+<table><tr><td>Approval Number</td><td>TR 09-0572</td></tr><tr><td>INVOICE DATE</td><td>21.10.2025</td></tr><tr><td>INVOICE NO</td><td>20252115</td></tr><tr><td>COUNTRY OF ORIGIN</td><td>TURKEY</td></tr></table>
+
+p0_t2:
+COMMERCIAL INVOICE
+
+p0_t3:
+<table><thead><tr><th>DESCRIPTION OF THE GOODS</th><th>LATIN NAMES</th><th>HS CODE</th><th>QUANTITY (BOXES,PCS)</th><th>PRICE / BOX USD</th><th>TOTAL</th></tr></thead><tbody><tr><td>FROZEN SEABREAM WHOLE ROUND IQF</td><td>(300 - 400 gr)</td><td>SPARUS AURATA</td><td>0303 89 55 00 00</td><td>2400</td><td>$78.000,00</td></tr><tr><td>FROZEN SEABREAM WHOLE ROUND IQF</td><td>(400 - 600 gr)</td><td>SPARUS AURATA</td><td>0303 89 55 00 00</td><td>1500</td><td>$48.750,00</td></tr><tr><td>TOTAL</td><td></td><td></td><td></td><td>3900</td><td>$126750,00</td></tr></tbody><tfoot><tr><td colspan="4"></td><td>TOTAL</td><td>$126750,00</td></tr></tfoot></table>
+
+p0_t4:
+<table>
+   <tr>
+    <td>
+     TOTAL PALLETS
+    </td>
+    <td>
+     32 EURO PALLETS
+    </td>
+   </tr>
+   <tr>
+    <td>
+     PAYMENT TERMS
+    </td>
+    <td>
+     100% PREPAYMENT
+    </td>
+   </tr>
+   <tr>
+    <td>
+     SHIPPED BY TRUCK
+    </td>
+    <td>
+     68 KL 900 / 33 AIV 007
+    </td>
+   </tr>
+   <tr>
+    <td>
+     SEAL NUMBER
+    </td>
+    <td>
+     ANT-00674661
+    </td>
+   </tr>
+   <tr>
+    <td>
+     DELIVERY TERMS
+    </td>
+    <td>
+     FCA / AYDIN/ TURKEY
+    </td>
+   </tr>
+   <tr>
+    <td>
+     CONTRACT NUMBER &amp; DATE
+    </td>
+    <td>
+     NORDMO25 dd 19.05.2025
+    </td>
+   </tr>
+  </table>
+
+p0_t5:
+<table><tr><td>BANK INFORMATION</td><td>Türkiye Vakıflar Bankası T.A.O</td></tr><tr><td>BENEFICIARY</td><td>Noordzee Su Ürünleri İhracatı Sanayi ve Ticaret A.Ş.</td></tr><tr><td>IBAN NO</td><td>TR34 0001 5001 5804 8000 3792 96</td></tr><tr><td>SWIFT</td><td>TVBATR2AXXX</td></tr><tr><td>ADDRESS</td><td>Istanbul Saray Mahallesi Dr. Adnan Büyükdeniz Caddesi No: 7/A-B Umraniye Istanbul Turkey</td></tr></table>
+=== END RAW TOKENS ===

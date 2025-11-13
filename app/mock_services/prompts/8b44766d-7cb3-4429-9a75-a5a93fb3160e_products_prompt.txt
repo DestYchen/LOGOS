@@ -1,0 +1,146 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "net_weight": {"value": "", "token_refs": []}, "net_weight_with_glaze": {"value": "", "token_refs": []}, "net_weight_with_ice": {"value": "", "token_refs": []}, "net_weight_with_glaze_and_pack": {"value": "", "token_refs": []}, "gross_weight": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}, "factory_number": {"value": "", "token_refs": []}, "date_of_production": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: PACKING_LIST
+products: Блок «products» расширяемый: создай product_1, product_2, … в порядке следования товарных строк в документе. Для каждой позиции заполняй все доступные поля. Если какой-то атрибут указан один раз общим блоком для нескольких строк (например, один латинский вид), продублируй его во все соответствующие product_i. В token_refs укажи ссылки на исходные фрагменты текста/таблицы, из которых собрано значение.
+products[*].name_product: Возьми коммерческое наименование из описания позиции («Product», «Description of goods»), например «FROZEN ATLANTIC SALMON FILLET …». Объедини переносы в одну строку. Добавь текст в products[i].name_product.
+products[*].latin_name: Если возле описания указан латинский вид (часто в скобках, например «SALMO SALAR»), извлеки его отдельно и добавь в products[i].latin_name. Если не указан — оставь пустым.
+products[*].size_product: Извлеки размер/калибр (например, «3-4 LB (1.3-1.8 KG)», «80/120»). Сохрани формат как в источнике и добавь в products[i].size_product.
+products[*].unit_box: Если явно обозначена учётная/ценовая единица или единица упаковки («Unit», «per carton», «per kg», «CASE» и т.п.) — извлеки её и добавь в products[i].unit_box. Если не указана — оставь пустым.
+products[*].packages: Извлеки количество мест/упаковок по меткам «Cases», «Cartons», «Packages», «No. of packages». Если указан и тип тары — сохрани в одной строке (например, «1375 CASES»). Добавь значение в products[i].packages.
+products[*].net_weight: Возьми нетто («Net Weight», «NET»). Сохрани число и единицу («KG» и т.п.) в исходном формате (точки/запятые). Добавь значение в products[i].net_weight.
+products[*].net_weight_with_glaze: Если указано «Net Weight with Glazing» — извлеки это значение отдельно от обычного нетто и добавь его в products[i].net_weight_with_glaze. Если отсутствует — оставь пустым.
+products[*].net_weight_with_ice: Если указано «Net Weight with Ice» — извлеки это значение и добавь в products[i].net_weight_with_ice. Если отсутствует — оставь пустым.
+products[*].net_weight_with_glaze_and_pack: Извлеки показатель вида «Net Weight with Glazing and Primary [Packing]» (или аналогичную формулировку) как отдельное значение. Добавь его в products[i].net_weight_with_glaze_and_pack. Если отсутствует — оставь пустым.
+products[*].gross_weight: Возьми брутто («Gross Weight», «G.W.»). Сохрани число и единицу как в документе. Добавь значение в products[i].gross_weight.
+products[*].price_per_unit: Если в пакинг-листе указана цена за единицу (встречается не всегда), извлеки её с валютой и исходным форматированием и добавь в products[i].price_per_unit. Если цены нет — оставь пустым.
+products[*].total_price: Если в пакинг-листе указана итоговая стоимость по позиции, извлеки её с валютой и форматом и добавь в products[i].total_price. Если суммы нет — оставь пустым (не вычисляй).
+products[*].factory_number: Извлеки номер завода/предприятия производителя (например, «Establishment No», «Factory No», регистрационный номер цеха), если он указан для позиции. Добавь значение в products[i].factory_number.
+products[*].date_of_production: Извлеки дату производства по позиции («Date of production», «Production date», «Дата производства»). Если дат несколько (диапазон) — сохрани как в источнике одной строкой. Добавь значение в products[i].date_of_production.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Date 21.10.2025
+
+p0_t1:
+**IMPORTER: LLC "Moreodor"**
+
+117292, Moscow, Profsoyuznaya street, 3, office 412
+Russian Federation INN 7727734159
+
+**EXPORTER: Noordzee Su Ürünleri İhracatı Sanayi ve Ticaret A.Ş.**
+
+Kocakışla Mah. Güllük Yolu No: 14 Güllük Milas- Muğla TURKEY
+
+p0_t2:
+PACKING LIST
+
+p0_t3:
+PACKING LIST
+
+<table><thead><tr><th>DESCRIPTION</th><th>HS CODE</th><th>Latin Name</th><th>BOXES/PCS</th><th>NET WEIGHT (KG)</th><th>NET WEIGHT WITH GLAZING (KG)</th><th>GROSS WEIGHT WITH PALLETS (KG)</th><th>GROSS WEIGHT WITHOUT PALLETS (KG)</th><th>PALLET QUANTITY</th></tr></thead><tbody><tr><td>FROZEN SEABREAM WHOLE ROUND (300 - 400 gr) IOF</td><td>030389550000</td><td>SPARUS AURATA</td><td>2400</td><td>12000,00</td><td>12071,20</td><td>13440,00</td><td>13000,00</td><td>20</td></tr><tr><td>FROZEN SEABREAM WHOLE ROUND (400 - 600 gr) IOF</td><td>030389550000</td><td>SPARUS AURATA</td><td>1500</td><td>7500,00</td><td>7555,50</td><td>8400,00</td><td>8136,00</td><td>12</td></tr><tr><td></td><td></td><td></td><td>3900</td><td>19500,00</td><td>19626,70</td><td>21840,00</td><td>21136,00</td><td>32</td></tr></tbody></table>
+
+p0_t4:
+DATE OF SHIPMENT:
+
+p0_t5:
+SHIPPED BY:
+
+p0_t6:
+INVOICE NUMBER:
+
+p0_t7:
+INVOICE DATE:
+
+p0_t8:
+DATE OF PRODUCTION:
+
+p0_t9:
+TOTAL PALLETS
+
+p0_t10:
+TOTAL GROSS WEIGHT WITH PALLET WEIGHT
+
+p0_t11:
+Product of Aquaculture
+
+p0_t12:
+21.10.2025
+
+p0_t13:
+68 KL 900 / 33 AIV 007
+
+p0_t14:
+20252115
+
+p0_t15:
+21.10.2025
+
+p0_t16:
+FROZEN SEABREAM WHOLE ROUND (300-400 qr) IQF 10.09.2025(400BXS;2000,00KG);29.09.2025(2000BXS;10000,00KG)
+
+p0_t17:
+FROZEN SEABREAM WHOLE ROUND (400 - 600 qr) IQF 17.09.2025(1500BXS;7500,00KG)
+
+p0_t18:
+32 EURO PALLETS (22 kg each; total pallets' weight is 704)
+
+p0_t19:
+21840,00 KG
+
+p0_t20:
+Turkey
+
+p0_t21:
+PRODUCER: Noordzee Su Ürünleri İhracat Sanayi ve Ticaret Anonim Sirketi Söke Subesi
+
+p0_t22:
+Söke OSB Mah. 1.Sokak No:35 Söke / Aydın / TURKEY TR 09-0572
+
+p0_t23:
+Approval Number: TR 09-0572
+=== END RAW TOKENS ===
+-- part 4 (text) --
+=== TABLE CANDIDATES ===
+p0_t3:
+PACKING LIST
+
+<table><thead><tr><th>DESCRIPTION</th><th>HS CODE</th><th>Latin Name</th><th>BOXES/PCS</th><th>NET WEIGHT (KG)</th><th>NET WEIGHT WITH GLAZING (KG)</th><th>GROSS WEIGHT WITH PALLETS (KG)</th><th>GROSS WEIGHT WITHOUT PALLETS (KG)</th><th>PALLET QUANTITY</th></tr></thead><tbody><tr><td>FROZEN SEABREAM WHOLE ROUND (300 - 400 gr) IOF</td><td>030389550000</td><td>SPARUS AURATA</td><td>2400</td><td>12000,00</td><td>12071,20</td><td>13440,00</td><td>13000,00</td><td>20</td></tr><tr><td>FROZEN SEABREAM WHOLE ROUND (400 - 600 gr) IOF</td><td>030389550000</td><td>SPARUS AURATA</td><td>1500</td><td>7500,00</td><td>7555,50</td><td>8400,00</td><td>8136,00</td><td>12</td></tr><tr><td></td><td></td><td></td><td>3900</td><td>19500,00</td><td>19626,70</td><td>21840,00</td><td>21136,00</td><td>32</td></tr></tbody></table>
+=== END TABLE CANDIDATES ===

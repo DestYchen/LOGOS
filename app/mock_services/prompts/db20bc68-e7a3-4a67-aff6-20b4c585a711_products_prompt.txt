@@ -1,0 +1,67 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}, "net_weight": {"value": "", "token_refs": []}, "gross_weight": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: CERTIFICATE_OF_ORIGIN
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк. Соблюдай порядок следования. Для каждой позиции заполняй все доступные поля и указывай token_refs для исходных фрагментов. Если часть атрибутов указана общим блоком (например, один HS-код для всех), дублируй эти значения во все соответствующие product_i.
+products[*].name_product: Возьми коммерческое наименование из описания товара (например, «FROZEN ATLANTIC SALMON FILLET»). Если описание многострочное — объедини в одну строку. Латинское видовое имя вынеси отдельно в latin_name. Добавь текст в products[i].name_product.
+products[*].latin_name: Если рядом с описанием указано латинское видовое название в скобках (например, «SALMO SALAR»), извлеки его и добавь в products[i].latin_name. Если нет — оставь пустым.
+products[*].size_product: Если указан размер/градация (например, «3–4 LB», «80/120», «1.3–1.8 KG»), извлеки как единую строку и добавь в products[i].size_product. Если размер не указан — оставь пустым.
+products[*].unit_box: Если явно указана учётная/ценовая единица («per carton», «per kg», «unit»), извлеки её и добавь в products[i].unit_box. Если единица не указана в CoO — оставь пустым (не выдумывай).
+products[*].packages: Извлеки количество мест/упаковок по пометкам «Number and kind of packages», «Cases/Cartons/Packages». Сохрани число и при необходимости тип (например, «1375 CASES») в одной строке. Добавь значение в products[i].packages.
+products[*].price_per_unit: Если в CoO указана цена за единицу (встречается редко), извлеки её с валютой/форматом как в документе и добавь в products[i].price_per_unit. Если цены нет — оставь пустым.
+products[*].total_price: Если в CoO указана итоговая стоимость по позиции (редко), извлеки её с валютой/форматом как в документе и добавь в products[i].total_price. Если суммы нет — оставь пустым (не вычисляй).
+products[*].net_weight: Извлеки нетто по позиции («NET KGS», «Net weight», возможно внутри описания). Сохраняй число и единицу как в документе. Добавь значение в products[i].net_weight.
+products[*].gross_weight: Извлеки брутто по позиции из поля «Gross weight»/«Gross weight or other quantity». Сохраняй формат числа и единицу. Добавь значение в products[i].gross_weight.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t2:
+(253)8682022062758D1767063
+
+p0_t3:
+<table><tr><td>1. İhracatçı<br/>Consignor<br/>Expéditeur</td><td>NO D 1767063</td><td>ORJINAL<br/>ORIGINAL<br/>ORIGINAL</td></tr><tr><td colspan="3">NORDZEE SU ÜRÜNLERİ İHRACATI SANAYİ VE TİC. A.Ş.<br/>KOCAKIŞLA MAH. GÜLLÜK YOLU NO:14 GÜLLÜK MİLAS/MUĞLA Türkiye</td></tr><tr><td>2. Alicı<br/>Consignee<br/>Destinataire</td><td colspan="2">MENŞE ŞAHADETNAMESİ<br/>CERTIFICATE OF ORIGIN<br/>CERTIFICAT D'ORIGINE</td></tr><tr><td>LLC "MOREODOR"<br/>PROFSOYUZNAYA STREET 3, OFFICE 412,117292 INN7727734159<br/>MOSCOW Russian Federation</td><td>3. Menşe Ülkesi<br/>Country of Origin<br/>Pays d'origine</td><td></td></tr><tr><td></td><td>Türkiye</td><td></td></tr><tr><td>4. Taşımaya İlişkin Bilgiler (Tercihe Bağlı)<br/>Transport Details (Optional)<br/>Informations relatives au transport (mention facultative)</td><td>5. Gözlemler<br/>Remarks<br/>Remarques</td><td></td></tr><tr><td colspan="3">BY TRUCK 68 KL 900 / 33 AIV 007</td></tr><tr><td>6. Sıra No; kolilerin marka ve işaretleri, sayı ve türleri; esyanın tanımı<br/>Item number; marks, numbers, number and kind of packages; description of goods<br/>Numéro d'ordre - Marques, numéros, nombre et nature des colis - Désignation des marchandises</td><td colspan="2">7. Miktar<br/>Quantity<br/>Quantité</td></tr><tr><td>ADDR 1-3900 BOXES 20252115 - 21.10.2025<br/>FROZEN SEABREAM WHOLE ROUND IQF NET W. 19.500 KG<br/>(SPARUS AURATA)</td><td>21840 KGS</td><td></td></tr><tr><td colspan="3">8. Yukarıda Tanımlanan Eşyaların 3 Nolu Kutuda Belirtilen Ülke Menşeli Olduğu Tasdik Olunur.<br/>The Undersigned Authority Certifies That The Goods Described Above Originate In The Country Shown In Box 3<br/>L'autorité soussignée certifie que les marchandises désignées ci-dessus sont originaires du pays figurant dans la case No 3</td></tr><tr><td colspan="3"><p>Düzenleme Yeri ve Tarihi, İsim, İmza ve Yetkili Merciinin Mührü</p><p>Place and date of issue, name, signature and stamp of competent authority M
+
+p0_t4:
+ankaraform +90 (312) 278 30 40
+=== END RAW TOKENS ===
+-- part 4 (text) --
+=== TABLE CANDIDATES ===
+p0_t3:
+<table><tr><td>1. İhracatçı<br/>Consignor<br/>Expéditeur</td><td>NO D 1767063</td><td>ORJINAL<br/>ORIGINAL<br/>ORIGINAL</td></tr><tr><td colspan="3">NORDZEE SU ÜRÜNLERİ İHRACATI SANAYİ VE TİC. A.Ş.<br/>KOCAKIŞLA MAH. GÜLLÜK YOLU NO:14 GÜLLÜK MİLAS/MUĞLA Türkiye</td></tr><tr><td>2. Alicı<br/>Consignee<br/>Destinataire</td><td colspan="2">MENŞE ŞAHADETNAMESİ<br/>CERTIFICATE OF ORIGIN<br/>CERTIFICAT D'ORIGINE</td></tr><tr><td>LLC "MOREODOR"<br/>PROFSOYUZNAYA STREET 3, OFFICE 412,117292 INN7727734159<br/>MOSCOW Russian Federation</td><td>3. Menşe Ülkesi<br/>Country of Origin<br/>Pays d'origine</td><td></td></tr><tr><td></td><td>Türkiye</td><td></td></tr><tr><td>4. Taşımaya İlişkin Bilgiler (Tercihe Bağlı)<br/>Transport Details (Optional)<br/>Informations relatives au transport (mention facultative)</td><td>5. Gözlemler<br/>Remarks<br/>Remarques</td><td></td></tr><tr><td colspan="3">BY TRUCK 68 KL 900 / 33 AIV 007</td></tr><tr><td>6. Sıra No; kolilerin marka ve işaretleri, sayı ve türleri; esyanın tanımı<br/>Item number; marks, numbers, number and kind of packages; description of goods<br/>Numéro d'ordre - Marques, numéros, nombre et nature des colis - Désignation des marchandises</td><td colspan="2">7. Miktar<br/>Quantity<br/>Quantité</td></tr><tr><td>ADDR 1-3900 BOXES 20252115 - 21.10.2025<br/>FROZEN SEABREAM WHOLE ROUND IQF NET W. 19.500 KG<br/>(SPARUS AURATA)</td><td>21840 KGS</td><td></td></tr><tr><td colspan="3">8. Yukarıda Tanımlanan Eşyaların 3 Nolu Kutuda Belirtilen Ülke Menşeli Olduğu Tasdik Olunur.<br/>The Undersigned Authority Certifies That The Goods Described Above Originate In The Country Shown In Box 3<br/>L'autorité soussignée certifie que les marchandises désignées ci-dessus sont originaires du pays figurant dans la case No 3</td></tr><tr><td colspan="3"><p>Düzenleme Yeri ve Tarihi, İsim, İmza ve Yetkili Merciinin Mührü</p><p>Place and date of issue, name, signature and stamp of competent authority M
+=== END TABLE CANDIDATES ===

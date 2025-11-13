@@ -1,0 +1,96 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: PRICE_LIST_1
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк/позиций в том порядке, как в прайсе. Для каждой позиции заполняй все доступные поля; если общий атрибут (напр., один латинский вид для нескольких позиций) указан один раз, продублируй его в соответствующие product_i. В token_refs указывай ссылки на исходные фрагменты (ячейки/строки), из которых собрано значение.
+products[*].name_product: Возьми коммерческое наименование из колонки «PRODUCT»/«Description» (например, «FROZEN ATLANTIC SALMON FILLET TRIM D VP PREMIUM …»). Объедини переносы строк, сохраняя точное написание. Добавь текст в products[i].name_product.
+products[*].latin_name: Если рядом с наименованием указан латинский вид в скобках (например, «Salmo salar»), извлеки его отдельно и добавь в products[i].latin_name. Если латинское имя отсутствует — оставь пустым.
+products[*].size_product: Извлеки размер/градацию (например, «3–4 LB (1.3–1.8 KG)», «80/120»). Сохрани обе системы измерений, если напечатаны обе. Добавь строку в products[i].size_product.
+products[*].unit_box: Зафиксируй учётную/ценовую единицу, если явно указана. Сохрани формулировку как в документе и добавь в products[i].unit_box.
+products[*].packages: Если в прайсе есть колонка/поле про упаковки («Packages», «Cartons», «Cases») — извлеки количество и, при наличии, тип (например, «10 CARTONS»). Если такого поля нет — оставь пустым. Добавь значение в products[i].packages.
+products[*].price_per_unit: Найди цену за единицу в колонке «Price», «Price per CARTON» и т.п. Сохрани валюту и формат числа (точка/запятая) ровно как в документе. Не вычисляй и не меняй НДС. Добавь значение в products[i].price_per_unit.
+products[*].total_price: Если в прайс-листе у позиции есть итоговая сумма (метки вроде «Total», «Line total», «Ext. price»), извлеки её со всеми символами валюты и в исходном формате числа. Если такого столбца нет — оставь поле пустым (не вычисляй как packages × price_per_unit). Добавь найденное значение в products[i].total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Price List
+
+p0_t1:
+Date: 21.10.2025
+
+p0_t2:
+Conditions of delivery : FCA AYDIN
+
+Period of Validity : Valid until 31.10.2025
+
+p0_t3:
+Exporter
+
+Noordzee Su Ürünleri İhracatı Sanayi ve Ticaret A.Ş.
+
+KOCAKIŞLA MAH. GÜLLÜK YOLU ÜZERİ NO:14 MİLAS/MUĞLA TURKEY
+
+Producer
+
+Noordzee Su Ürünleri Ihr. San. ve Tic. A.Ş. Söke Şubesi
+
+Söke OSB Mah. 1.Sokak No:35 Söke / Aydın / TURKEY TR 09-0572
+
+Approval Number: TR 09-0572
+
+p0_t4:
+<table><thead><tr><td>Desctption of Goods</td><td>Latin Names</td><td>Price / per box USD</td></tr></thead><tbody><tr><td>FROZEN SEABREAM WHOLE ROUND IQF (300 - 400 gr)</td><td>SPARUS AURATA</td><td>$32,50</td></tr><tr><td>FROZEN SEABREAM WHOLE ROUND IQF (400 - 600 gr)</td><td>SPARUS AURATA</td><td>$32,50</td></tr></tbody></table>
+
+p0_t5:
+NO CARDZEE
+
+NO CARDZEE SU ÜRUNLERI İHRACATı
+SANAYİVE TİCARET ANONİM SIRKET
+GÜL KURULU CADDESİ
+Tel: 0.252 522 3705 Fax: 0 252 522 3788
+SIC No.: 0004
+Mias V.D.: 063104901898
+Mersis No.: 0631049018900012
+=== END RAW TOKENS ===
+-- part 4 (text) --
+=== TABLE CANDIDATES ===
+p0_t4:
+<table><thead><tr><td>Desctption of Goods</td><td>Latin Names</td><td>Price / per box USD</td></tr></thead><tbody><tr><td>FROZEN SEABREAM WHOLE ROUND IQF (300 - 400 gr)</td><td>SPARUS AURATA</td><td>$32,50</td></tr><tr><td>FROZEN SEABREAM WHOLE ROUND IQF (400 - 600 gr)</td><td>SPARUS AURATA</td><td>$32,50</td></tr></tbody></table>
+=== END TABLE CANDIDATES ===

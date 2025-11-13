@@ -1,0 +1,154 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"packing_list_date": {"value": "", "token_refs": []}, "invoice_no": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "veterinary_seal": {"value": "", "token_refs": []}, "linear_seal": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: PACKING_LIST
+packing_list_date: Извлеки дату пакинг-листа из зоны заголовка/шапки («Packing List», «DATE»). Если дата разбита на день/месяц/год, собери в одну строку без нормализации формата. Добавь найденную дату в поле packing_list_date.
+invoice_no: Найди ссылку на инвойс по меткам «Invoice No», «P.Code or Invoice N°», «Commercial Invoice». Сохраняй номер точь-в-точь как в документе (включая символы «N°», дефисы и т.п.) и добавь его в поле invoice_no.
+producer: Если указан производитель («Producer», «Manufacturer», наименование завода/фабрики) — извлеки полное юр. наименование, при наличии адреса оставь в одной строке. Добавь значение в поле producer.
+buyer: Если в бланке есть «Buyer», «Customer», «Consignee» — извлеки полное наименование (и адрес, если есть) одной строкой. Добавь текст в поле buyer. Если поле отсутствует — оставь пустым.
+seller: Если в бланке есть «Seller», «Supplier», «Shipper» — извлеки полное наименование одной строкой. Добавь текст в поле seller. Если поле отсутствует — оставь пустым.
+veterinary_seal: Ищи явное упоминание ветеринарной пломбы («Veterinary seal», «Health seal»). Не путай с линейной пломбой «Seal No». Если номер ветпломбы указан — сохрани его как есть и добавь в поле veterinary_seal; если нет — оставь пустым.
+linear_seal: Извлеки номер(а) линейной пломбы по меткам «Seal No», «Seal Number». Если значений несколько (несколько контейнеров) — перечисли через «; ». Добавь значение(я) в поле linear_seal.
+country_of_origin: Если явно указана «Country of origin / Origin» — извлеки страну и добавь в поле country_of_origin. Если нет явного поля, оставь пустым (не выводи страну по косвенным признакам).
+
+container (candidates): container downtime
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Покупателю экспресс-почтой оригиналы
+документов, указанных в запросе Покупателя.
+
+p0_t1:
+6.3 Если задержка в получении оригинальных документов произошла по вине Продавца, Продавец обязан возместить покупателю убытки связанные с простоями контейнеров и сверхнормативным хранением груза в порту назначения. В случае направления в адрес Покупателя по электронной почте и/или экспресс-почтой копии и/или оригиналы документов, перечисленных в п. 6.1 Контракта, заполненные и/или оформленные и/или скрепленные ненадлежащим образом (т.е. не в соответствии с действующим законодательством РФ), Продавец обязан возместить Покупателю все понесенные, в связи с этим убытки, в случае их возникновения.
+
+p0_t2:
+7. Доставка и приемка товара
+
+p0_t3:
+7.1. Товар должен быть доставлен Продавцом и принят Покупателем:
+
+p0_t4:
+а) по количеству - согласно количеству мест и весу, указанному в Упаковочном листе;
+
+p0_t5:
+б) по качеству - согласно характеристикам товара, указанным в Спецификации.
+
+p0_t6:
+7.1.1. Товар может быть проинспектирован
+Покупателем или его представителем на фабрике
+Продавца перед отгрузкой Товара.
+
+p0_t7:
+7.2 Приемка товара по количеству и качеству осуществляется Покупателем в сроки, установленные в статье 9 Контакта (если Спецификацией не установлен иной порядок и срок приемки).
+
+p0_t8:
+8. Качество. Упаковка
+
+p0_t9:
+8.1. Товар и степень его заморозки должны соответствовать ветеринарным и санитарным требованиям Департамента Ветеринарии при Министерстве сельского хозяйства РФ, ГОСТам и техническим условиям (ТУ) Российской Федерации и ЕАЭС.
+
+p0_t10:
+8.2. Качество поставленного Товара должно подтверждаться следующими документами, выданными компетентными органами страны происхождения:
+
+p0_t11:
+- Сертификатом происхождения
+
+p0_t12:
+- Ветеринарным сертификатом,
+
+p0_t13:
+8.2.1 Весь Товар, поставляемый Продавцом, должен быть разрешен для свободной реализации на территории РФ согласно законодательству РФ.
+
+p0_t14:
+8.3. В случае, если поставленный Товар не будет соответствовать по качественным и/или количественным показателям условиям Контракта, несоответствующим Спецификациям и/или договоренностям о качестве, ассортименту и количестве Товара, Покупатель имеет право отказаться от принятия такого Товара на основании акта Торгово-промышленной палаты РФ, другого независимого эксперта или сюрвейера. Продавец имеет право отправить своего представителя для дополнительной оценки качества Товара и составления акта, в течение 14 (четырнадцати) дней
+
+p0_t15:
+compensate the Buyer for losses associated with
+container downtime and excess storage of cargo at the
+port of destination. In the event that copies and/or
+originals of the documents listed in paragraph 6.1 of the
+Contract are sent to the Buyer by e-mail and/or express
+mail, completed and/or executed and/or sealed
+improperly (i.e. not in accordance with the current
+legislation of the Russian Federation), the Seller shall
+compensate the Buyer for all losses incurred in
+connection therewith, if any.
+
+p0_t16:
+7. Goods Delivery and Acceptance
+
+p0_t17:
+7.1. The Goods must be delivered by the Seller and accepted by the Buyer:
+
+p0_t18:
+a) by quantity - according to the number of places and weight specified in the Packing List;
+
+p0_t19:
+b) by quality - according to the characteristics of the goods specified in the Specification.
+
+p0_t20:
+7.1.1. The Goods may be inspected by the Buyer or its representative at the Seller's factory before shipment of the Goods.
+
+p0_t21:
+7.2 Acceptance of the Goods by quantity and quality is carried out by the Buyer within the timeframes established in Article 9 of the Contract (unless the Specification establishes a different procedure and timeframe for acceptance).
+
+p0_t22:
+8. Quality. Package.
+
+p0_t23:
+8.1. The goods and its freezing should be produced in accordance with the veterinary and sanitary requirements of the Veterinary Department of the Ministry of Agriculture of the Russian Federation, GOST and technical requirements of the Russian Federation.
+
+p0_t24:
+8.2. The quality of the supplied goods should be confirmed by the following documents, given by the authorized organization of the producing country:
+
+p0_t25:
+- The certificate of origin
+
+p0_t26:
+- Veterinary certificate
+
+p0_t27:
+8.2.1 All the goods, delivered by the Seller should be allowed for the free sales on the territory of Russian Federation.
+
+p0_t28:
+8.3. If the delivered Goods do not meet the terms of the Contract in terms of quality and/or quantity, do not correspond to the Specifications and/or agreements on the quality, range and quantity of the Goods, the Buyer has the right to refuse to accept such Goods on the basis of an act of the Chamber of Commerce and Industry of the Russian Federation, another independent expert or surveyor. The Seller has the right to send its representative for an additional assessment of the quality of the Goods and to draw up an act within 14 (fourteen) days after receiving the Buyer's notification of the problem. In this case, the Seller is obliged, within 10 (ten) days from the date of receipt of the Buyer's notification and documentary evidence of the defects of the goods, to return the money for the Goods, and also accept the Goods back by paying all costs for the return
+
+p0_t29:
+4
+=== END RAW TOKENS ===

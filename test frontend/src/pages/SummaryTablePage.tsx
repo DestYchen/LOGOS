@@ -599,8 +599,20 @@ function SummaryTablePage() {
       const bbox = ensureBBox(field.bbox);
       const sliceKey = buildPreviewSliceKey(doc.id, field.field_key, pageIndex, previewUrl, bbox);
       const slice = sliceKey ? previewSlices[sliceKey] : null;
-      const frameStyle: CSSProperties = slice ? { width: slice.width, height: slice.height } : { width: 560, height: 360 };
-      const imageStyle: CSSProperties = { width: "100%", height: "100%", objectFit: "contain" };
+      const frameStyle: CSSProperties = slice
+        ? {
+            width: "100%",
+            maxWidth: `${slice.width}px`,
+            aspectRatio: `${slice.width} / ${slice.height}`,
+          }
+        : { width: 560, height: 360 };
+      const imageStyle: CSSProperties = slice
+        ? {
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+          }
+        : { width: "100%", height: "100%", objectFit: "contain" };
       const confidenceValue =
         field.confidence_display ?? (field.confidence != null ? Number(field.confidence).toFixed(2) : null);
       return {

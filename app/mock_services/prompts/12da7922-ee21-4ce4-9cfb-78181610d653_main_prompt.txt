@@ -1,0 +1,131 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "terms_of_payment": {"value": "", "token_refs": []}, "bank_details": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "proforma_no": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+invoice_no: Найди метку «Invoice No», «No.», «N°» или «№» рядом с заголовком «Commercial Invoice». Значение может содержать буквы, цифры и дефисы (например, N° 24636). Сохраняй точную строку как в документе и добавь её в поле invoice_no.
+invoice_date: Ищи «Date»/«Invoice date». Дата может быть одной строкой или разбита на D / M / Y. Собери полную дату и, если возможно, нормализуй в формат ГГГГ-ММ-ДД. Добавь найденную дату в поле invoice_date.
+buyer: Определи покупателя по меткам «Buyer», «Customer», «Consignee», «Bill to». Сохрани полное наименование и, если указано, адрес в единой строке, без сокращений. Добавь текст в поле buyer.
+seller: Определи продавца по меткам «Seller», «Supplier», «Shipper», «Exporter». Сохрани полное юридическое наименование и, если указано, адрес в единой строке. Добавь текст в поле seller.
+producer: Если в инвойсе указан «Producer»/«Manufacturer»/«Factory», извлеки юридическое наименование. Если перечислено несколько производителей — соедини значения через «; ». Добавь текст в поле producer.
+incoterms: Извлеки условия поставки (ИНКОТЕРМС) — трёхбуквенный код (например, EXW/FOB/CFR/CIF/DAP) и, если указано, пункт (например, «CFR ST. PETERSBURG - RUSSIA»). Сохраняй ровно так, как в документе, и добавь строку в поле incoterms.
+terms_of_payment: Найди условия оплаты («Terms of payment», «Payment»). Сохрани полную формулировку (напр., «ADV. 20%, BALANCE C/COPY DOC.») и добавь её в поле terms_of_payment.
+bank_details: Извлеки блок банковских реквизитов (банк, счёт/IBAN, SWIFT/BIC, бенефициар и адрес). Сохрани как один многострочный текст без нормализации и добавь его в поле bank_details.
+proforma_no: Если инвойс ссылается на проформу, найди «Proforma Invoice No.»/«Proforma No.»/«PI/P.I.». Извлекай только номер проформы, не путай с номером заказа («Order», «P.Code»). Добавь значение в поле proforma_no.
+container_no: Извлеки номер(а) контейнера/машины. Чаще всего формата 4 буквы + 7 цифр и, при наличии, суффикс (напр., «BMOU928899-1»). Если значений несколько — соедини через «; ». Добавь строку в поле container_no.
+HS_code: Найди «HS CODE»/«HS»/«Tariff code» и извлеки числовой код (напр., «0304.81»). Сохраняй формат кода как в документе и добавь его в поле HS_code.
+total_price: Найди итог по документу («Total», иногда вместе с ИНКОТЕРМС и валютой — напр., «Total CFR USD»). Предпочитай напечатанный итог; если он отсутствует, суммируй построчные суммы. Сохраняй валюту и разделители как в документе. Добавь строку в поле total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+- Товар задержан пограничными ветеринарными
+органами по причине неправильного оформления
+документов и (или) санкций в отношении
+отправителя (производителя товара), а также если
+поставленный товар не соответствует по своим
+качественным характеристикам требованию
+ветеринарной службы РФ и ЕАЭС.
+
+p0_t1:
+3.2.1 Стороны договорились, что отправителями в адрес Покупателя могут являться третьи лица по поручению Продавца. Все сертификаты отправитель может предоставить Покупателю от своего имени, и они будут иметь ту же силу, что и сертификаты, предоставленные Продавцом.
+
+p0_t2:
+3.2.3. Всю ответственность за действия третьих лиц по совершению действий в рамках исполнения данного контракта несет Продавец.
+
+p0_t3:
+3.3. Момент перехода права собственности на товар от Продавца к Покупателю определяется датой выпуска товара в свободное обращение на территории РФ, что подтверждается указанной в Таможенной декларации, оформленной таможенным органом РФ.
+
+p0_t4:
+4. **Условия платежа**
+
+p0_t5:
+4.1. Оплата Товара по настоящему контракту осуществляется банковским переводом на счет Продавца. Оплата Товара может осуществляться в валюте отличной от валюты контракта: в рублях, долларах США, Евро, Китайских юанях, дирхамах, Казахстанских тенге, по курсу установленному в дополнительных соглашениях к контракту. Оплата Товара по настоящему контракту может производиться в адрес третьих лиц по дополнительному соглашению сторон.
+
+p0_t6:
+4.2. Оплата может осуществляться Покупателем, в виде полной или частичной предоплаты авансовым платежом, а также в виде отсрочки оплаты до 90 (девяносто) дней с момента ввоза Товара на территорию РФ.
+
+p0_t7:
+4.2.1. В случае оплаты Товара авансовым платежом на счет Продавца, срок ввоза Товара на территорию РФ не может превышать 180 (сто восемьдесят) дней с даты авансового платежа.
+
+p0_t8:
+В случае не поставки Товара в этот срок, сумма
+авансового платежа возвращается на счет
+Покупателя в течение 10 (десять) календарных дней
+после истечения указанного срока поставки.
+
+p0_t9:
+4.2.3. В случае если Продавец не исполнил свои обязательства в соответствии с настоящим контрактом по поставке товара (пункты 3.1-3.3) Покупатель имеет право отказаться от Товара, и Продавец обязан вернуть ему внесенную предоплату за товар и погасить все, документально подтвержденные, убытки Покупателя, вызванные не поставкой товара.
+
+p0_t10:
+4.2.4. Если Продавец получил предоплату за Товар и не смог, по любым причинам, выполнить свои обязательства по отгрузке Товара Покупателю, Продавец обязан немедленно известить об этом Покупателя, равно как и Покупатель вправе
+
+p0_t11:
+goods do not meet the requirements of the veterinary
+service of the Russian Federation and the EAEU in
+terms of their quality characteristics.
+
+p0_t12:
+3.2.1 The parties have agreed that third parties may be consignees to the Buyer on behalf of the Seller. All certificates may be provided by the Shipper to the Buyer in its own name and shall have the same force as the certificates provided by the Seller.
+
+p0_t13:
+3.2.3. The Seller shall bear all liability for acts of third parties in performing any actions under this contract.
+
+p0_t14:
+3.3. The moment of transfer of ownership of goods from the Seller to the Buyer is determined by the date of release of goods into free circulation in the territory of the Russian Federation, which is confirmed in the customs declaration drawn up by the customs authority of the Russian Federation.
+
+p0_t15:
+4. Term of Payment
+
+p0_t16:
+4.1. Payment for the Goods under this contract shall be made by bank transfer to the Seller's account. Payment for the Goods may be made in a currency other than the contract currency: in rubles, US dollars, Euros, Chinese yuan, dirhams, Kazakh tenge, at the exchange rate established in additional agreements to the contract. Payment for the Goods under this contract may be made to third parties by additional agreement of the parties.
+
+p0_t17:
+4.2. Payment may be made by the Buyer in the form of full or partial prepayment by advance payment, as well as in the form of a deferred payment of up to 90 (ninety) days from the date of import of the Goods into the territory of the Russian Federation.
+
+p0_t18:
+4.2.1. In case of payment for the Goods by advance payment to the Seller's account, the period of import of the Goods into the territory of the Russian Federation may not exceed 180 (one hundred eighty) days from the date of advance payment. In case of failure to deliver the Goods within this period, the advance payment amount shall be returned to the Buyer's account within 10 (ten) calendar days after the expiration of the specified delivery period.
+
+p0_t19:
+4.2.3. In case the Seller has failed to fulfill its obligations under this contract for the delivery of the goods (clauses 3.1-3.3), the Buyer has the right to refuse the Goods, and the Seller is obliged to return the advance payment made for the goods and pay off all documented losses of the Buyer caused by the failure to deliver the goods.
+
+p0_t20:
+4.2.4. If the Seller has received an advance payment for the Goods and has been unable, for any reason, to fulfill its obligations to ship the Goods to the Buyer, the Seller is obliged to immediately notify the Buyer of this and the Buyer shall also have the right to send a demand for the return of the advance payment if it has information that the delivery obligations will not be fulfilled. The
+
+p0_t21:
+2
+=== END RAW TOKENS ===

@@ -1,0 +1,163 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"veterinary_certificate_no": {"value": "", "token_refs": []}, "veterinary_certificate_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "exporter": {"value": "", "token_refs": []}, "vessel": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "veterinary_seal": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: VETERINARY_CERTIFICATE
+veterinary_certificate_no: Возьми номер сертификата из п.1.5 «Certificate / Сертификат №» или из нижнего колонтитула «Certificate Number …». Сохрани строку ровно как в бланке и добавь её в поле veterinary_certificate_no.
+veterinary_certificate_date: Найди дату и место выдачи в строке «PLACE AND DATE OF ISSUE» (внизу документа, например «TALCAHUANO 02/07/2025»). Сохрани формат как в источнике и добавь дату в поле veterinary_certificate_date.
+producer: Извлеки наименование предприятия из п.3.1 «Name (Nº) and address of establishment…» (это производитель/завод; нередко рядом указан Establishment No). Сохрани полное юр. наименование одной строкой и добавь его в поле producer.
+buyer: Возьми получателя из п.1.2 «Name and address of consignee». Сохрани наименование (и адрес, если указан) одной строкой и добавь в поле buyer.
+exporter: Возьми отправителя/экспортёра из п.1.1 «Name and address of consignor». Сохрани наименование (и адрес, если указан) одной строкой и добавь в поле exporter.
+vessel: В п.1.3 «Means of transport» извлеки название судна без номера контейнера (например, «MSC TAKORADI VIII NX528R»). Сохрани в одной строке и добавь в поле vessel.
+container_no: В п.1.3 найди номер(а) контейнера формата 4 буквы + 7 цифр (например, «BMOU9288991»). Если их несколько — перечисли через «; ». Добавь значение(я) в поле container_no.
+veterinary_seal: Из п.2.6 «Number of seal» извлеки номер(а) ветпломбы (Health/Veterinary seal), если значение приведено общим блоком. Если номеров несколько — перечисли через «; ». Добавь значение(я) в поле veterinary_seal.
+country_of_origin: Определи страну происхождения по п.1.6 (Competent authority/страна) или по формулировке происхождения в шаблоне; зафиксируй именно страну (например, «CHILE»). Добавь её в поле country_of_origin.
+
+container (candidates): Container Said; CONTAINER WITH; containers
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t1:
+MAERSK LINE
+
+p0_t2:
+BILL OF LADING FOR OCEAN TRANSPORT
+OR MULTIMODAL TRANSPORT
+
+p0_t3:
+MAEU
+
+p0_t4:
+430000 565585102
+
+p0_t6:
+Salmones
+SALMONES ANTARTICA S.A.
+AV. PROVIDENCIA 2653, PISO 15
+SANTIAGO, CHILE
+TEL: 56-02-24143503
+
+p0_t7:
+695485739
+
+p0_t9:
+The command
+
+p0_t10:
+297272933
+
+p0_t11:
+Original end meeting (not part of carriage as stated in clause 1). For account and dis. of Merchants'
+
+p0_t12:
+GOD MOREOORO,
+117036, MOSCOW, PROFSOYUZNAYA STREET, 3,
+OFFICE 412
+RUSSIA
+
+p0_t13:
+117036, MOSCOW, PROFSOYUZNAYA STREET, 3
+OFFICE 412
+RUSSIA
+lgg@moreodor.ru
+
+p0_t14:
+LEXA MAERSK
+
+p0_t15:
+935N
+
+p0_t16:
+Mars is a planet, applicable only when the planet used is a stationary planet (i.e. the distance
+
+p0_t17:
+text of learning
+
+p0_t18:
+San Vicente, Chile
+
+p0_t19:
+ST. PETERSBURG RUSSIA
+
+p0_t20:
+The above statement, together with the other documents herewith attached hereto, constitutes the complete statement of all material transactions between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and all material contracts between us and our stockholders, and all material agreements between us and our stockholders, and
+
+p0_t21:
+PARTICULARS FURNISHED BY SHIPPER
+
+p0_t22:
+# India of Inclusive Development of goods, Marks and Trademarks - Consumer No. Total No.
+
+p0_t25:
+1 Container Said to Contain 880 CARTONS
+
+p0_t26:
+1X40' HC REEFER CONTAINER WITH:
+880 CARTONS
+
+FROZEN RAINBOW TROUT HG
+(ONCORHYNCHUS MYKISS)
+22,000.00 KGS NET WEIGHT
+
+SIZE 6-9 LB (2.7 -4.0 KG) 832 CARTONS
+SIZE 9-12 LB (4.0 - 5.4 KG) 48 CARTONS
+
+GROSS WEIGHT 24.200.00 KG
+
+VETERINARY CERTIFICATE: 1142728
+COMMODITY CODE: 0303142000
+FREIGHT PREPAID
+
+p0_t27:
+COMMODITY CODE: 0303142000
+
+p0_t28:
+SALMONES ANTARTICA S.A.
+(FACTORY NUMBER: 10735)
+
+p0_t29:
+PONU4832160 ML-CL0931771 40 REEF 9'6 880 CARTONS 24200.000 KGS 58.0000 CBM
+
+p0_t30:
+Temperature, -23.0 C
+
+p0_t31:
+Above particulars are declared by Shewter but without responsibility of or representation by Carter (but class 14).
+
+p0_t32:
+<table><thead><tr><th>Freight & Charges</th><th>Date</th><th>Unit</th><th>Currency</th><th>Prepaid</th><th>Check</th></tr></thead><tbody><tr><td>Cartier's Receipt (this clause 1 and 101 Total number of containers or packages received by Cartier's</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>1 container</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>1/THREE</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>Cartier's Receipt (this clause 1 and 101 Total number of containers or packages received by Cartier's</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>1 container</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>1/THREE</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>Cartier's Receipt (this clause 1 and 101 Total number of containers or packages received by Cartier's</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>1 container</td><td></td><td></td><td></td><td></td><td></td></tr><tr><td>1/THREE</td><td></td><td></td><td></td><td></td><td></td></tr></tbody></table>
+=== END RAW TOKENS ===

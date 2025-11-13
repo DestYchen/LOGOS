@@ -1,0 +1,105 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк/позиций в инвойсе, соблюдая порядок в документе. Для каждого продукта заполняй все вложенные поля. Если часть атрибутов указана общим блоком (например, единая латинская номенклатура для нескольких строк), дублируй её значение в соответствующие product_i. В token_refs указывай ссылки на исходные токены/фрагменты, из которых собрано значение.
+products[*].name_product: Возьми коммерческое наименование товара из колонки «Description of goods»/«Description». Если описание многострочное, объедини строки с пробелами. Не включай латинское название (его помести в latin_name). Добавь текст в products[i].name_product.
+products[*].latin_name: Извлеки латинское (биологическое) название рядом с описанием, часто в скобках (напр., «SALMO SALAR»). Сохрани регистр, как в документе, и добавь текст в products[i].latin_name.
+products[*].size_product: Извлеки размер/градацию товара (например, «3-4 LB (1.3-1.8 KG)», «80/120» и т.п.). Если указаны и имперские, и метрические единицы, сохрани обе. Добавь текст в products[i].size_product.
+products[*].unit_box: Укажи ценовую/учётную единицу (например, «per carton», «per kg», «per case»). Если явно указано «Price per carton/kg/etc», используй эту единицу. Добавь значение в products[i].unit_box.
+products[*].packages: Извлеки количество мест/упаковок («Cases», «Cartons», «Packages», «Boxes»). Сохрани число так, как в документе (учитывай разделители). Добавь число в products[i].packages.
+products[*].price_per_unit: Извлеки цену за единицу (напр., «Price per carton 169,50»). Сохрани валюту, если указана, и формат числа как в документе (точка/запятая). Добавь значение в products[i].price_per_unit.
+products[*].total_price: Извлеки построчную сумму. Добавь сумму в products[i].total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Контракту, если он подписан уполномоченным Стороной лицом, скреплен печатью Стороны, отсканирован и отправлен в виде электронного документа с электронного адреса Стороны, указанного в Контракте и/или содержащей доменный адрес Сторон, равно как с электронного адреса, позволяющего достоверно установить, что данным адресом (эл. почтой) пользуется Сторона и/или ее представители на электронный адрес другой Стороны. Документы, исходящие от другой Стороны, признаются Сторонами действительными и оформленными надлежащим образом, прошедшими процедуру идентификации и аутентификации при входе в электронную почту, имеющими равную юридическую и доказательственную силу аналогичным по содержанию и смыслу документам на бумажном носителе, составленным в соответствии с требованиями, предъявляемыми к документам такого рода, и подписанным уполномоченным на то лицом.
+
+p0_t1:
+Эл. Почта Продавца alp.vural@noordzee.com.tr,
+доменное имя Продавца @noordzee.com.tr.
+
+p0_t2:
+Эл. Почта Покупателя – log@moreodor.ru, доменное имя Покупателя - @moreodor.ru.
+
+p0_t3:
+Дополнительно Стороны согласовали, что каждая из Сторон обязана в течение 180 (сто восемьдесят) дней с даты подписания Контракта направить другой Стороне оригинал заключенного Контракта.
+
+p0_t4:
+14.5. Стороны пришли к соглашению о том, что условия о качестве товара, его упаковке и маркировке, указанные в пунктах 5.1, 5.2, 8.1-8.2.1, 8.4-8.6 Контракта, являются существенными условиями. В случае однократного нарушения какого-либо из указанных условий Покупатель вправе расторгнуть Контракт в одностороннем внесудебном порядке путём направления уведомления Продавцу. В этом случае Контракт считается расторгнутым с момента получения указанного уведомления Продавец в отношении всех согласованных сторонами поставок (в том числе тех Товаров, которые находятся в пути), Продавец обязуется осуществить возврат уплаченных за некачественный товар денежных средств в течение 3 дней с момента получения уведомления, а также своими силами и за свой счет произвести возврат поставленного некачественного товара. Продавец обязуется самостоятельно оплатить расходы по транспортировке товара обратно.
+
+p0_t5:
+14.6. Стороны пришли к соглашению о том, что надлежащим подтверждением несоответствия качества Товара условиям настоящего Контракта будет являться акт (отчет об инспекции/заключение или иной документ), составленный экспертом Торгово-Промышленной Палаты РФ, экспертом IPC Homann Gmbh, ООО «ИПЦ Хорманн», ООО «ТопФрейм» или иным независимым экспертом. Результаты исследований эксперта, содержащиеся в акте, распространяются на всю партию Товара, в отношении которой проводится инспекция.
+
+p0_t6:
+well as from an electronic address that allows one to
+reliably establish that the given address (e-mail) is used
+by the Party and/or its representatives to the e-mail
+address of the other Party. Documents coming from the
+other Party are recognized by the Parties as valid and
+duly executed, having undergone the identification and
+authentication procedure when logging into e-mail,
+having equal legal and evidentiary force similar in
+content and meaning to documents on paper, drawn up
+in accordance with the requirements for documents of
+this kind, and signed by a person authorized to do so.
+
+Seller's e-mail is alp.vural@noordzee.com.tr, Seller's
+domain name is @noordzee.com.tr.
+
+p0_t7:
+E-mail Buyer's email - log@moreodor.ru, Buyer's
+domain name - @moreodor.ru.
+
+p0_t8:
+Additionally, the Parties have agreed that each Party is obliged to send the original of the concluded Contract to the other Party within 180 (one hundred eighty) days from the date of signing the Contract.
+
+p0_t9:
+14.5. The Parties have agreed that the conditions regarding the quality of the goods, their packaging and labeling specified in paragraphs 5.1, 5.2, 8.1-8.2.1, 8.4-8.6 of the Contract are material conditions. In the event of a single violation of any of the specified conditions, the Buyer has the right to terminate the Contract unilaterally and extrajudicially by sending a notice to the Seller. In this case, the Contract is considered terminated from the moment the Seller receives the said notice. In relation to all deliveries agreed upon by the parties (including those Goods that are in transit), the Seller undertakes to refund the money paid for the defective goods within 3 days from the date of receipt of the notice, and also, at its own expense and at its own expense, return the delivered defective goods. The Seller undertakes to independently pay the costs of transporting the goods back.
+
+p0_t10:
+14.6. The Parties have agreed that the proper confirmation of non-conformity of the quality of the Goods with the terms of this Contract will be a report (inspection report/conclusion or other document) drawn up by an expert of the Chamber of Commerce and Industry of the Russian Federation, an expert of IPC Hormann Gmbh, OOO IPC Hormann, OOO TopFrame or another independent expert. The results of the expert's research contained in the report shall apply to the entire batch of Goods in respect of which the inspection is carried out.
+
+p0_t11:
+14.7. If the supplied Goods are detained in Russian ports by the border service, Rospotrebnadzor, Rosselkhoznadzor, the Ministry of Internal Affairs or veterinary authorities of the Russian Federation and are not allowed to be imported into the territory of the Russian Federation, the Seller undertakes to pay directly to the carrier all costs for temporary storage and return of the Goods within 5 (five) working days from the date of the Buyer's presentation of the corresponding demand to the Seller.
+
+p0_t12:
+8
+=== END RAW TOKENS ===

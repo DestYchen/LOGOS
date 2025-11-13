@@ -1,0 +1,132 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк/позиций в инвойсе, соблюдая порядок в документе. Для каждого продукта заполняй все вложенные поля. Если часть атрибутов указана общим блоком (например, единая латинская номенклатура для нескольких строк), дублируй её значение в соответствующие product_i. В token_refs указывай ссылки на исходные токены/фрагменты, из которых собрано значение.
+products[*].name_product: Возьми коммерческое наименование товара из колонки «Description of goods»/«Description». Если описание многострочное, объедини строки с пробелами. Не включай латинское название (его помести в latin_name). Добавь текст в products[i].name_product.
+products[*].latin_name: Извлеки латинское (биологическое) название рядом с описанием, часто в скобках (напр., «SALMO SALAR»). Сохрани регистр, как в документе, и добавь текст в products[i].latin_name.
+products[*].size_product: Извлеки размер/градацию товара (например, «3-4 LB (1.3-1.8 KG)», «80/120» и т.п.). Если указаны и имперские, и метрические единицы, сохрани обе. Добавь текст в products[i].size_product.
+products[*].unit_box: Укажи ценовую/учётную единицу (например, «per carton», «per kg», «per case»). Если явно указано «Price per carton/kg/etc», используй эту единицу. Добавь значение в products[i].unit_box.
+products[*].packages: Извлеки количество мест/упаковок («Cases», «Cartons», «Packages», «Boxes»). Сохрани число так, как в документе (учитывай разделители). Добавь число в products[i].packages.
+products[*].price_per_unit: Извлеки цену за единицу (напр., «Price per carton 169,50»). Сохрани валюту, если указана, и формат числа как в документе (точка/запятая). Добавь значение в products[i].price_per_unit.
+products[*].total_price: Извлеки построчную сумму. Добавь сумму в products[i].total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+после получения уведомления от Покупателя о возникновении проблемы. В этом случае Продавец обязан в течение 10 (десяти) дней с момента получения извещения Покупателя и документального подтверждения недостатков товара вернуть деньги за Товар, а также принять Товар обратно оплатив все расходы на возврат Товара либо его утилизации (в случае если реэкспорт товара невозможен) и возместить Покупателю все понесенные, в связи с этим обстоятельством расходы, путем перевода денежных средств на счет Покупателя.
+
+p0_t1:
+8.4. Если в ходе приемки у поставленного Товара обнаружены следующие недостатки – наличие кровоподтеков, заветренность продукции, товар поставлен в рваных коробках, поставленная рыбная продукция обладает язвами, продукция обладает запахом, несвойственным рыбному, но при этом Товар пригоден к употреблению, Покупатель вправе требовать уплаты штрафа в размере 20% (двадцать процентов) от стоимости партии Товара, поставленной с указанными недостатками. Для определения и подтверждения недостатков, порядка и условия выплаты штрафа Стороны руководствуются п. 8.3 Контракта.
+
+p0_t2:
+9. Претензии
+
+p0_t3:
+9.1 Претензии относительно количества поставленного Товара предъявляются в течение 10 (десять) дней с момента разгрузки контейнера на складе Покупателя.
+
+p0_t4:
+9.2. Претензии относительно качества поставленного товара предъявляются в течение 10 (десять) дней после истечения срока на приемки Товара относительно количества.
+
+p0_t5:
+9.3 Претензии относительно скрытых недостатков (которые невозможно установить путем осмотра, без внутритарной приемки и дефростации) могут быть предъявлены в течение всего срока годности Товара, при этом Покупатель обязан направить соответствующую претензию не позднее 10 дней с даты обнаружения скрытых недостатков.
+
+p0_t6:
+9.4. Претензия покупателя может быть удовлетворена одним из следующих способов:
+
+p0_t7:
+- Обмен Товара на аналогичный, либо иной Товар интересный для Покупателя.
+
+p0_t8:
+-Предоставление дополнительной скидки на Товар путем выставления Продавцом Кредит-ноты, являющейся основанием для снижения последующих платежей за поставляемый в будущем Товара в пользу Покупателя.
+
+p0_t9:
+- Возврат Товара Продавцу с полным возмещением его стоимости Покупателю. Стороны договорились, что в случае невозможности возврата Товара (реэкспорта) Продавец предоставляет Покупателю право на утилизацию Товара, при этом Продавец обязан возместить не только его стоимость, но и расходы на его утилизацию.
+
+p0_t10:
+10. Кредит-нота
+
+p0_t11:
+of the Goods or their disposal (if re-export of the goods
+is impossible) and reimburse the Buyer for all expenses
+incurred in connection with this circumstance by
+transferring funds to the Buyer's account.
+
+p0_t12:
+8.4. If during acceptance the following defects are found in the delivered Goods - the presence of bruises, weathered products, the goods were delivered in torn boxes, the delivered fish products have ulcers, the products have an odor that is not typical of fish, but the Goods are fit for consumption, the Buyer has the right to demand payment of a fine in the amount of 20% (twenty percent) of the cost of the batch of Goods delivered with the specified defects. To determine and confirm the defects, the procedure and conditions for payment of the penalty, the Parties are guided by clause 8.3 of the Contract.
+
+p0_t13:
+9. Claims
+
+p0_t14:
+9.1. The claim for the quantity of the delivered goods are made in 10 days since the arrival of the goods at the store of the buyer.
+
+p0_t15:
+9.2. The claim for the quality of the goods are made in 10 days since the arrival of the goods at the store of the buyer.
+
+p0_t16:
+9.3 Claims regarding hidden defects (which cannot be identified by inspection, without internal acceptance and defrosting) may be submitted throughout the entire shelf life of the Product, and the Buyer is obliged to send the corresponding claim no later than 10 days from the date of discovery of hidden defects.
+
+p0_t17:
+9.4. The Buyer's claim may be satisfied in one of the following ways:
+
+p0_t18:
+- Exchange of the Product for a similar or other Product of interest to the Buyer.
+
+p0_t19:
+- Providing an additional discount on the Product by issuing a Credit Note by the Seller, which is the basis for reducing subsequent payments for the Product supplied in the future in favor of the Buyer.
+
+p0_t20:
+- Return of the Product to the Seller with full compensation for its cost to the Buyer. The Parties have agreed that if it is impossible to return the Product (re-export), the Seller grants the Buyer the right to dispose of the Product, and the Seller is obliged to reimburse not only its cost, but also the costs of its disposal.
+
+p0_t21:
+10. Credit Note
+
+p0_t22:
+Any debt of the Parties arising from the breach of
+obligations under the Contract may be reimbursed by
+issuing Credit Notes, which serve as the basis for
+reducing subsequent payments under the Contract by
+the amount of the loss and/or the amount of
+fines/penalties recognized by the guilty Party. The
+Parties agree that by issuing a Credit Note they have the
+
+p0_t23:
+5
+=== END RAW TOKENS ===

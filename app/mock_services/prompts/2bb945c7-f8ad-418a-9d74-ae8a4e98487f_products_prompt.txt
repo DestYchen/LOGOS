@@ -1,0 +1,160 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "net_weight": {"value": "", "token_refs": []}, "net_weight_with_glaze": {"value": "", "token_refs": []}, "net_weight_with_ice": {"value": "", "token_refs": []}, "net_weight_with_glaze_and_pack": {"value": "", "token_refs": []}, "gross_weight": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}, "factory_number": {"value": "", "token_refs": []}, "date_of_production": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: PACKING_LIST
+products: Блок «products» расширяемый: создай product_1, product_2, … в порядке следования товарных строк в документе. Для каждой позиции заполняй все доступные поля. Если какой-то атрибут указан один раз общим блоком для нескольких строк (например, один латинский вид), продублируй его во все соответствующие product_i. В token_refs укажи ссылки на исходные фрагменты текста/таблицы, из которых собрано значение.
+products[*].name_product: Возьми коммерческое наименование из описания позиции («Product», «Description of goods»), например «FROZEN ATLANTIC SALMON FILLET …». Объедини переносы в одну строку. Добавь текст в products[i].name_product.
+products[*].latin_name: Если возле описания указан латинский вид (часто в скобках, например «SALMO SALAR»), извлеки его отдельно и добавь в products[i].latin_name. Если не указан — оставь пустым.
+products[*].size_product: Извлеки размер/калибр (например, «3-4 LB (1.3-1.8 KG)», «80/120»). Сохрани формат как в источнике и добавь в products[i].size_product.
+products[*].unit_box: Если явно обозначена учётная/ценовая единица или единица упаковки («Unit», «per carton», «per kg», «CASE» и т.п.) — извлеки её и добавь в products[i].unit_box. Если не указана — оставь пустым.
+products[*].packages: Извлеки количество мест/упаковок по меткам «Cases», «Cartons», «Packages», «No. of packages». Если указан и тип тары — сохрани в одной строке (например, «1375 CASES»). Добавь значение в products[i].packages.
+products[*].net_weight: Возьми нетто («Net Weight», «NET»). Сохрани число и единицу («KG» и т.п.) в исходном формате (точки/запятые). Добавь значение в products[i].net_weight.
+products[*].net_weight_with_glaze: Если указано «Net Weight with Glazing» — извлеки это значение отдельно от обычного нетто и добавь его в products[i].net_weight_with_glaze. Если отсутствует — оставь пустым.
+products[*].net_weight_with_ice: Если указано «Net Weight with Ice» — извлеки это значение и добавь в products[i].net_weight_with_ice. Если отсутствует — оставь пустым.
+products[*].net_weight_with_glaze_and_pack: Извлеки показатель вида «Net Weight with Glazing and Primary [Packing]» (или аналогичную формулировку) как отдельное значение. Добавь его в products[i].net_weight_with_glaze_and_pack. Если отсутствует — оставь пустым.
+products[*].gross_weight: Возьми брутто («Gross Weight», «G.W.»). Сохрани число и единицу как в документе. Добавь значение в products[i].gross_weight.
+products[*].price_per_unit: Если в пакинг-листе указана цена за единицу (встречается не всегда), извлеки её с валютой и исходным форматированием и добавь в products[i].price_per_unit. Если цены нет — оставь пустым.
+products[*].total_price: Если в пакинг-листе указана итоговая стоимость по позиции, извлеки её с валютой и форматом и добавь в products[i].total_price. Если суммы нет — оставь пустым (не вычисляй).
+products[*].factory_number: Извлеки номер завода/предприятия производителя (например, «Establishment No», «Factory No», регистрационный номер цеха), если он указан для позиции. Добавь значение в products[i].factory_number.
+products[*].date_of_production: Извлеки дату производства по позиции («Date of production», «Production date», «Дата производства»). Если дат несколько (диапазон) — сохрани как в источнике одной строкой. Добавь значение в products[i].date_of_production.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Покупателю экспресс-почтой оригиналы
+документов, указанных в запросе Покупателя.
+
+p0_t1:
+6.3 Если задержка в получении оригинальных документов произошла по вине Продавца, Продавец обязан возместить покупателю убытки связанные с простоями контейнеров и сверхнормативным хранением груза в порту назначения. В случае направления в адрес Покупателя по электронной почте и/или экспресс-почтой копии и/или оригиналы документов, перечисленных в п. 6.1 Контракта, заполненные и/или оформленные и/или скрепленные ненадлежащим образом (т.е. не в соответствии с действующим законодательством РФ), Продавец обязан возместить Покупателю все понесенные, в связи с этим убытки, в случае их возникновения.
+
+p0_t2:
+7. Доставка и приемка товара
+
+p0_t3:
+7.1. Товар должен быть доставлен Продавцом и принят Покупателем:
+
+p0_t4:
+а) по количеству - согласно количеству мест и весу, указанному в Упаковочном листе;
+
+p0_t5:
+б) по качеству - согласно характеристикам товара, указанным в Спецификации.
+
+p0_t6:
+7.1.1. Товар может быть проинспектирован
+Покупателем или его представителем на фабрике
+Продавца перед отгрузкой Товара.
+
+p0_t7:
+7.2 Приемка товара по количеству и качеству осуществляется Покупателем в сроки, установленные в статье 9 Контакта (если Спецификацией не установлен иной порядок и срок приемки).
+
+p0_t8:
+8. Качество. Упаковка
+
+p0_t9:
+8.1. Товар и степень его заморозки должны соответствовать ветеринарным и санитарным требованиям Департамента Ветеринарии при Министерстве сельского хозяйства РФ, ГОСТам и техническим условиям (ТУ) Российской Федерации и ЕАЭС.
+
+p0_t10:
+8.2. Качество поставленного Товара должно подтверждаться следующими документами, выданными компетентными органами страны происхождения:
+
+p0_t11:
+- Сертификатом происхождения
+
+p0_t12:
+- Ветеринарным сертификатом,
+
+p0_t13:
+8.2.1 Весь Товар, поставляемый Продавцом, должен быть разрешен для свободной реализации на территории РФ согласно законодательству РФ.
+
+p0_t14:
+8.3. В случае, если поставленный Товар не будет соответствовать по качественным и/или количественным показателям условиям Контракта, несоответствующим Спецификациям и/или договоренностям о качестве, ассортименту и количестве Товара, Покупатель имеет право отказаться от принятия такого Товара на основании акта Торгово-промышленной палаты РФ, другого независимого эксперта или сюрвейера. Продавец имеет право отправить своего представителя для дополнительной оценки качества Товара и составления акта, в течение 14 (четырнадцати) дней
+
+p0_t15:
+compensate the Buyer for losses associated with
+container downtime and excess storage of cargo at the
+port of destination. In the event that copies and/or
+originals of the documents listed in paragraph 6.1 of the
+Contract are sent to the Buyer by e-mail and/or express
+mail, completed and/or executed and/or sealed
+improperly (i.e. not in accordance with the current
+legislation of the Russian Federation), the Seller shall
+compensate the Buyer for all losses incurred in
+connection therewith, if any.
+
+p0_t16:
+7. Goods Delivery and Acceptance
+
+p0_t17:
+7.1. The Goods must be delivered by the Seller and accepted by the Buyer:
+
+p0_t18:
+a) by quantity - according to the number of places and weight specified in the Packing List;
+
+p0_t19:
+b) by quality - according to the characteristics of the goods specified in the Specification.
+
+p0_t20:
+7.1.1. The Goods may be inspected by the Buyer or its representative at the Seller's factory before shipment of the Goods.
+
+p0_t21:
+7.2 Acceptance of the Goods by quantity and quality is carried out by the Buyer within the timeframes established in Article 9 of the Contract (unless the Specification establishes a different procedure and timeframe for acceptance).
+
+p0_t22:
+8. Quality. Package.
+
+p0_t23:
+8.1. The goods and its freezing should be produced in accordance with the veterinary and sanitary requirements of the Veterinary Department of the Ministry of Agriculture of the Russian Federation, GOST and technical requirements of the Russian Federation.
+
+p0_t24:
+8.2. The quality of the supplied goods should be confirmed by the following documents, given by the authorized organization of the producing country:
+
+p0_t25:
+- The certificate of origin
+
+p0_t26:
+- Veterinary certificate
+
+p0_t27:
+8.2.1 All the goods, delivered by the Seller should be allowed for the free sales on the territory of Russian Federation.
+
+p0_t28:
+8.3. If the delivered Goods do not meet the terms of the Contract in terms of quality and/or quantity, do not correspond to the Specifications and/or agreements on the quality, range and quantity of the Goods, the Buyer has the right to refuse to accept such Goods on the basis of an act of the Chamber of Commerce and Industry of the Russian Federation, another independent expert or surveyor. The Seller has the right to send its representative for an additional assessment of the quality of the Goods and to draw up an act within 14 (fourteen) days after receiving the Buyer's notification of the problem. In this case, the Seller is obliged, within 10 (ten) days from the date of receipt of the Buyer's notification and documentary evidence of the defects of the goods, to return the money for the Goods, and also accept the Goods back by paying all costs for the return
+
+p0_t29:
+4
+=== END RAW TOKENS ===

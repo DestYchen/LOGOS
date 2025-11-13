@@ -1,0 +1,133 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"packing_list_date": {"value": "", "token_refs": []}, "invoice_no": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "veterinary_seal": {"value": "", "token_refs": []}, "linear_seal": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: PACKING_LIST
+packing_list_date: Извлеки дату пакинг-листа из зоны заголовка/шапки («Packing List», «DATE»). Если дата разбита на день/месяц/год, собери в одну строку без нормализации формата. Добавь найденную дату в поле packing_list_date.
+invoice_no: Найди ссылку на инвойс по меткам «Invoice No», «P.Code or Invoice N°», «Commercial Invoice». Сохраняй номер точь-в-точь как в документе (включая символы «N°», дефисы и т.п.) и добавь его в поле invoice_no.
+producer: Если указан производитель («Producer», «Manufacturer», наименование завода/фабрики) — извлеки полное юр. наименование, при наличии адреса оставь в одной строке. Добавь значение в поле producer.
+buyer: Если в бланке есть «Buyer», «Customer», «Consignee» — извлеки полное наименование (и адрес, если есть) одной строкой. Добавь текст в поле buyer. Если поле отсутствует — оставь пустым.
+seller: Если в бланке есть «Seller», «Supplier», «Shipper» — извлеки полное наименование одной строкой. Добавь текст в поле seller. Если поле отсутствует — оставь пустым.
+veterinary_seal: Ищи явное упоминание ветеринарной пломбы («Veterinary seal», «Health seal»). Не путай с линейной пломбой «Seal No». Если номер ветпломбы указан — сохрани его как есть и добавь в поле veterinary_seal; если нет — оставь пустым.
+linear_seal: Извлеки номер(а) линейной пломбы по меткам «Seal No», «Seal Number». Если значений несколько (несколько контейнеров) — перечисли через «; ». Добавь значение(я) в поле linear_seal.
+country_of_origin: Если явно указана «Country of origin / Origin» — извлеки страну и добавь в поле country_of_origin. Если нет явного поля, оставь пустым (не выводи страну по косвенным признакам).
+
+invoice_date (candidates): 21.10.2025; 10.09.2025; 29.09.2025; 17.09.2025
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Date 21.10.2025
+
+p0_t1:
+**IMPORTER: LLC "Moreodor"**
+
+117292, Moscow, Profsoyuznaya street, 3, office 412
+Russian Federation INN 7727734159
+
+**EXPORTER: Noordzee Su Ürünleri İhracatı Sanayi ve Ticaret A.Ş.**
+
+Kocakışla Mah. Güllük Yolu No: 14 Güllük Milas- Muğla TURKEY
+
+p0_t2:
+PACKING LIST
+
+p0_t3:
+PACKING LIST
+
+<table><thead><tr><th>DESCRIPTION</th><th>HS CODE</th><th>Latin Name</th><th>BOXES/PCS</th><th>NET WEIGHT (KG)</th><th>NET WEIGHT WITH GLAZING (KG)</th><th>GROSS WEIGHT WITH PALLETS (KG)</th><th>GROSS WEIGHT WITHOUT PALLETS (KG)</th><th>PALLET QUANTITY</th></tr></thead><tbody><tr><td>FROZEN SEABREAM WHOLE ROUND (300 - 400 gr) IOF</td><td>030389550000</td><td>SPARUS AURATA</td><td>2400</td><td>12000,00</td><td>12071,20</td><td>13440,00</td><td>13000,00</td><td>20</td></tr><tr><td>FROZEN SEABREAM WHOLE ROUND (400 - 600 gr) IOF</td><td>030389550000</td><td>SPARUS AURATA</td><td>1500</td><td>7500,00</td><td>7555,50</td><td>8400,00</td><td>8136,00</td><td>12</td></tr><tr><td></td><td></td><td></td><td>3900</td><td>19500,00</td><td>19626,70</td><td>21840,00</td><td>21136,00</td><td>32</td></tr></tbody></table>
+
+p0_t4:
+DATE OF SHIPMENT:
+
+p0_t5:
+SHIPPED BY:
+
+p0_t6:
+INVOICE NUMBER:
+
+p0_t7:
+INVOICE DATE:
+
+p0_t8:
+DATE OF PRODUCTION:
+
+p0_t9:
+TOTAL PALLETS
+
+p0_t10:
+TOTAL GROSS WEIGHT WITH PALLET WEIGHT
+
+p0_t11:
+Product of Aquaculture
+
+p0_t12:
+21.10.2025
+
+p0_t13:
+68 KL 900 / 33 AIV 007
+
+p0_t14:
+20252115
+
+p0_t15:
+21.10.2025
+
+p0_t16:
+FROZEN SEABREAM WHOLE ROUND (300-400 qr) IQF 10.09.2025(400BXS;2000,00KG);29.09.2025(2000BXS;10000,00KG)
+
+p0_t17:
+FROZEN SEABREAM WHOLE ROUND (400 - 600 qr) IQF 17.09.2025(1500BXS;7500,00KG)
+
+p0_t18:
+32 EURO PALLETS (22 kg each; total pallets' weight is 704)
+
+p0_t19:
+21840,00 KG
+
+p0_t20:
+Turkey
+
+p0_t21:
+PRODUCER: Noordzee Su Ürünleri İhracat Sanayi ve Ticaret Anonim Sirketi Söke Subesi
+
+p0_t22:
+Söke OSB Mah. 1.Sokak No:35 Söke / Aydın / TURKEY TR 09-0572
+
+p0_t23:
+Approval Number: TR 09-0572
+=== END RAW TOKENS ===

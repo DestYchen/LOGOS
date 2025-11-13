@@ -1,0 +1,148 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: PRODUCTS
+
+=== SYSTEM ===
+You convert OCR tokens into structured JSON describing product rows.
+
+Input:
+
+A JSON template ("PRODUCT TEMPLATE") that lists every per-product field.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract product-related data.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Optional "TABLE CANDIDATES" block that contains raw HTML/delimited table tokens.
+
+Your task:
+
+Create product_1, product_2, ... for every real product row you find in the RAW TOKENS.
+For each product_N, copy the PRODUCT TEMPLATE exactly (same child fields) and fill only "value" and "token_refs".
+When you set a non-empty "value", add the token ids you used to "token_refs"; otherwise leave [].
+If a field is unknown, leave "value" as "".
+Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Output MUST be a single valid JSON object with one top-level key "products" containing product_1, product_2, ...
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== PRODUCT TEMPLATE ===
+{"name_product": {"value": "", "token_refs": []}, "latin_name": {"value": "", "token_refs": []}, "size_product": {"value": "", "token_refs": []}, "unit_box": {"value": "", "token_refs": []}, "packages": {"value": "", "token_refs": []}, "price_per_unit": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END PRODUCT TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+products: Блок «products» расширяемый: создай product_1, product_2, … по количеству товарных строк/позиций в инвойсе, соблюдая порядок в документе. Для каждого продукта заполняй все вложенные поля. Если часть атрибутов указана общим блоком (например, единая латинская номенклатура для нескольких строк), дублируй её значение в соответствующие product_i. В token_refs указывай ссылки на исходные токены/фрагменты, из которых собрано значение.
+products[*].name_product: Возьми коммерческое наименование товара из колонки «Description of goods»/«Description». Если описание многострочное, объедини строки с пробелами. Не включай латинское название (его помести в latin_name). Добавь текст в products[i].name_product.
+products[*].latin_name: Извлеки латинское (биологическое) название рядом с описанием, часто в скобках (напр., «SALMO SALAR»). Сохрани регистр, как в документе, и добавь текст в products[i].latin_name.
+products[*].size_product: Извлеки размер/градацию товара (например, «3-4 LB (1.3-1.8 KG)», «80/120» и т.п.). Если указаны и имперские, и метрические единицы, сохрани обе. Добавь текст в products[i].size_product.
+products[*].unit_box: Укажи ценовую/учётную единицу (например, «per carton», «per kg», «per case»). Если явно указано «Price per carton/kg/etc», используй эту единицу. Добавь значение в products[i].unit_box.
+products[*].packages: Извлеки количество мест/упаковок («Cases», «Cartons», «Packages», «Boxes»). Сохрани число так, как в документе (учитывай разделители). Добавь число в products[i].packages.
+products[*].price_per_unit: Извлеки цену за единицу (напр., «Price per carton 169,50»). Сохрани валюту, если указана, и формат числа как в документе (точка/запятая). Добавь значение в products[i].price_per_unit.
+products[*].total_price: Извлеки построчную сумму. Добавь сумму в products[i].total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+направить требование о возврате предоплаты в случае наличии у него сведений о том, что обязательства по поставке не будут выполнены. Продавец обязан вернуть предоплату за Товар в течение 10 (десять) дней с момента извещения.
+
+p0_t1:
+4.3. Все банковские расходы распределяются между Сторонами в следующем порядке:
+
+p0_t2:
+В банке Продавца оплачиваются Продавцом. В банке
+Покупателя оплачиваются Покупателем.
+
+p0_t3:
+5. Маркировка
+
+p0_t4:
+5.1. Внешняя маркировка должна быть произведена несмываемой краской на английском и русском языках. Маркировка Товара должна быть на русском языке и языке страны производителя Товара с соблюдением стандартов, установленных в РФ.
+
+p0_t5:
+5.2. Маркировка, которая должна быть нанесена на упаковке товара, согласуется сторонами и наноситься до фактической отгрузки товара в адрес Покупателя. Маркировка Товара должна содержать полное его описание, включая страну происхождения, наименование производителя, дату производства, дату истечения срока годности, вес нетто, температуру хранения и другие обязательные сведения указанные в технических регламентах РФ.
+
+p0_t6:
+5.3. Продавец несет ответственность за все убытки и/или ущерб, нанесенные товару вследствие неправильной или ненадлежащей упаковки.
+
+p0_t7:
+5.4. Упаковка Товара должна обеспечивать его полную сохранность в период транспортировки любым видом транспорта и долговременного хранения.
+
+p0_t8:
+5.5 В случае нарушения упаковки Товара Продавец обязан возместить все расходы Покупателя, связанные с этим нарушением.
+
+p0_t9:
+5.6 Вся нанесенная маркировка на товар предварительно должна быть согласована с покупателем по форме и содержанию по электронной почте.
+
+p0_t10:
+6. Извещение об отгрузке
+
+p0_t11:
+6.1. Продавец в течение 3 (трех) дней после отгрузки товара должен послать Покупателю по электронной почте копии следующих документов:
+
+p0_t12:
+1) Коммерческий инвойс;
+
+p0_t13:
+2) Упаковочный лист;
+
+p0_t14:
+3) Коносамент;
+
+p0_t15:
+4) Ветеринарный сертификат;
+
+p0_t16:
+5) Сертификат происхождения по форме А или Сертификат происхождения, в соответствии со спецификацией, являющейся неотъемлемой частью контракта;
+
+p0_t17:
+6) Страховой полис (если предусмотрено условиями поставки);
+
+p0_t18:
+7) Спецификация.
+
+p0_t19:
+6.2. Кроме этого, по запросу Покупателя Продавец обязан в течение 3 (трех) дней с даты получения запроса, но не позднее 20 (двадцати) дней после отгрузки товара в порту грузоотправителя отправить
+
+p0_t20:
+Seller shall return the advance payment for the Goods within 10 (ten) days from the date of notification.
+
+p0_t21:
+4.3. All bank expenses are distributed between the Parties in the following order:
+
+p0_t22:
+Paid by the Seller at the Seller's bank. Paid by the Buyer at the Buyer's bank.
+
+p0_t23:
+5. Marking
+
+p0_t24:
+5.1. External marking must be made with indelible paint in English and Russian. The marking of the Goods must be in Russian and the language of the country of the Goods manufacturer in compliance with the standards established in the Russian Federation.
+
+p0_t25:
+5.2. The marking that must be applied to the packaging of the Goods is agreed upon by the parties and applied before the actual shipment of the Goods to the Buyer. The marking of the Goods must contain its full description, including the country of origin, name of the manufacturer, production date, expiration date, net weight, storage temperature and other mandatory information specified in the technical regulations of the Russian Federation.
+
+p0_t26:
+5.3. The Seller is liable for all losses and/or damage caused to the goods due to incorrect or inadequate packaging.
+
+p0_t27:
+5.4. The packaging of the Goods must ensure its complete safety during transportation by any type of transport and long-term storage.
+
+p0_t28:
+5.5. In the event of damage to the packaging of the Goods, the Seller is obliged to reimburse all expenses of the Buyer associated with this violation.
+
+p0_t29:
+5.6 All markings applied to the goods must be agreed upon with the buyer in advance in form and content by e-mail.
+
+p0_t30:
+6. Shipment Notice
+
+p0_t31:
+6.1. The Seller must send the Buyer copies of the following documents by e-mail within 3 (three) days after shipment of the goods:
+=== END RAW TOKENS ===

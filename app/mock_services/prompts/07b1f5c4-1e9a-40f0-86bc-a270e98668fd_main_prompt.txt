@@ -1,0 +1,147 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"proforma_date": {"value": "", "token_refs": []}, "proforma_no": {"value": "", "token_refs": []}, "country_of_origin": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}, "additional_agreements": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "terms_of_payment": {"value": "", "token_refs": []}, "bank_details": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: PROFORMA
+proforma_date: Найди дату проформы по меткам «Date», «YMD/Date» или рядом с заголовком «PROFORMA INVOICE». Сохраняй точный формат из документа (не нормализуй) и добавь дату в поле proforma_date.
+proforma_no: Извлеки номер проформы по меткам «Proforma Invoice No», «No», «N°/№». Сохраняй строку целиком (буквы/цифры/символы) и добавь её в поле proforma_no.
+country_of_origin: Если явно указано «Country of origin»/«ORIGIN OF GOODS», извлеки страну (например, «CHILE») и добавь её в поле country_of_origin. Если поле отсутствует — оставь пустым.
+HS_code: Если указан «HS CODE»/«Tariff code», собери коды в точном виде (например, 0304.81). Если кодов несколько, перечисли через «; ». Если коды различаются по позициям, собери все уникальные и тоже перечисли через «; ». Добавь строку в поле HS_code.
+additional_agreements: Извлеки раздел с особыми условиями/оговорками («Additional agreements», «Notes», «Special terms», правовые/комплаенс-вставки). Сохрани полный текст одним блоком (без сокращений) и добавь его в поле additional_agreements.
+buyer: Определи покупателя по меткам «Buyer», «Customer», «Señores/Customer», «Consignee». Сохрани полное наименование (и адрес, если указан) одной строкой и добавь текст в поле buyer.
+seller: Определи продавца по меткам «Seller», «Supplier». Сохрани юридическое наименование (и адрес, если есть) одной строкой и добавь текст в поле seller.
+producer: Если указан «Producer/Manufacturer/Processing plant» (иногда вместе с «REG./Plant number»), извлеки юридическое наименование. При наличии регистрационного номера завода можешь включить его в ту же строку. Добавь текст в поле producer.
+incoterms: Извлеки условия поставки (ИНКОТЕРМС) — трёхбуквенный код (EXW/FOB/CFR/CIF/DAP и т.п.) и, если указан, пункт (порт/город), например «CFR SAINT-PETERSBURG, RUSSIA». Добавь строку в поле incoterms.
+terms_of_payment: Найди условия оплаты («Terms of payment», «Payment», «Forma de pago»). Сохрани формулировку полностью (например, «ADV. 20%, BALANCE C/COPY DOC.») и добавь её вв поле terms_of_payment.
+bank_details: Извлеки банковские реквизиты (банк, счёт/IBAN, SWIFT/BIC, бенефициар и адрес). Сохрани как многострочный блок в исходном виде и добавь его в поле bank_details.
+total_price: Возьми общий итог по документу («Total …», часто рядом с ИНКОТЕРМС и валютой, например «Total CFR 248.600,00»). Предпочитай явное печатное значение; если указана сумма прописью, не подменяй ею числовой итог. Добавь строку в поле total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+KOHTPAKT No. NORDMO25
+
+p0_t1:
+«19» May 2025 г.
+
+p0_t2:
+ООО «Мореодор», Российская Федерация, в лице Генерального директора Андрюнова В.В., действующего на основании устава, именуемая в дальнейшем «Покупатель», с одной стороны, и компания "Noordzee Su Ürünleri Ihr. San. ve Tic. A.Ş», Турция, в лице Управляющего директора Ahmet Tolga Vural, действующего на основании устава, именуемая в дальнейшем «Продавец», с другой стороны, заключили настоящий Контракт о нижеследующем:
+
+p0_t3:
+# 1. Предмет Контракта
+
+p0_t4:
+Продавец продаст, а Покупатель купит рыбу свежемороженую и(или) охлажденную и(или) морестродукты и(или) мясо свежемороженое и(или) охлажденное, а также иные продукты питания (далее – Товар), в ассортименте, количестве и по ценам, указанным в Спецификациях и Инвойсах к настоящему Контракту. Стороны вправе указать предварительные условия сделки (в т.ч. ассортимент, количество и цены Товара) в Проформах.
+
+p0_t5:
+2. Цена Товара и общая сумма Контракта
+
+p0_t6:
+2.1. Предварительные цены на Товар указываются в Проформах. Окончательные цены на Товары согласовываются в Спецификациях и/или Инвойсах к настоящему Контракту.
+
+p0_t7:
+2.2. Общая стоимость товаров, поставляемых по данному Контракту, составляет 10 000 000.00 (десять миллионов) долларов США.
+
+p0_t8:
+2.3. Контракт действует в течение 3 (трех) лет с даты его подписания (дата подписания соответствует дате составления Контракта).
+
+p0_t9:
+2.4. Обязательства Сторон возникшие до даты окончания действия Контракта подлежат обязательному исполнению в согласованных порядке и сроки.
+
+p0_t10:
+3. Условия поставки
+
+p0_t11:
+3.1. Условия поставки Товара по Контракту Стороны согласуют в Проформах, Спецификации и указывают в Инвойсе относительно каждой партии Товара. При этом все налоги, таможенные пошлины, сборы и другие расходы, связанные с исполнением настоящего Контракта и взимаемые в стране Производителя, оплачивает Продавец, а аналогичные расходы в стране Покупателя оплачивает Покупатель, за исключением оплаты простоев, хранения и прочих затрат, которые вызваны, не своевременным предоставлением документов Продавцом Покупателю или предоставление не верно оформленных документов.
+
+p0_t12:
+3.2. Продавец не выполнил свои обязательства по продаже и поставки товара. Покупателю если:
+
+p0_t13:
+CONTRACT No. NORDMO25
+
+p0_t14:
+19 May, 2025
+
+p0_t15:
+LLC "Moreodor", Russian Federation, on behalf of
+general director Andrianov V.V., hereinafter referred to
+as "the Buyer", acting on the basis of the charter on one
+part and "Noordzee Su Ürünleri Ihr. San. ve Tic. A.Ş.",
+
+Türkiye, represented by the Managing Director Ahmet
+Tolga Vural, acting on the basis of the charter,
+
+hereinafter referred to as "the Seller", on the other part,
+have concluded this Contract as provided herein below:
+
+p0_t16:
+1. Subject of the Contract
+
+p0_t17:
+The Seller shall sell and the Buyer shall buy fresh-frozen and/or chilled fish and/or seafood and/or fresh-frozen and/or chilled meat, as well as other food products (hereinafter referred to as the Goods), in the assortment, quantity and at the prices specified in the Specifications and Invoices to this Contract. The Parties shall have the right to specify the preliminary terms of the transaction (including the assortment, quantity and prices of the Goods) in the Proformas.
+
+p0_t18:
+2. Price for the Goods and Total Value of the Contract
+
+p0_t19:
+2.1. The preliminary prices for the Goods are indicated in the Proforma. The final prices of the Goods are agreed in the Specifications and/or Invoices to this Contract.
+
+p0_t20:
+2.2. Total value of the Goods supplied under the present contract shall be 10 000 000.00 (ten million) US dollars.
+
+p0_t21:
+2.3. The contract shall be valid for three (3) years from the date of its signature (the date of signature corresponds to the date of conclusion of the Contract).
+
+p0_t22:
+2.4. The obligations of the Parties arising before the end of the Contract shall be binding in accordance with agreed procedures and time limits.
+
+p0_t23:
+3. Terms of Delivery
+
+p0_t24:
+3.1. The terms of delivery of the Goods under the Contract shall be agreed by the Parties in the Proformas, Specifications and indicated in the Invoice for each consignment of the Goods. All taxes, customs duties, fees and other expenses related to the performance of this Contract and collected in the country of the Manufacturer, is paid by the Seller, and similar costs in the country of the Buyer pays the Buyer, except for payment of imposts, storage and other costs that are caused by the Seller not providing documents to the Buyer in a timely manner or providing documents that are not properly executed.
+
+p0_t25:
+3.2. The seller has not fulfilled its obligations to sell and deliver the goods to the buyer if:
+
+p0_t26:
+- Goods detained by border veterinary authorities due to incorrect documents and (or) sanctions against the sender (producer of the goods), and if the delivered
+
+p0_t28:
+1
+=== END RAW TOKENS ===

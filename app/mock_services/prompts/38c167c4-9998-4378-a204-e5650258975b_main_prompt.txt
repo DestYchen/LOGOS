@@ -1,0 +1,108 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "terms_of_payment": {"value": "", "token_refs": []}, "bank_details": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "proforma_no": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+invoice_no: Найди метку «Invoice No», «No.», «N°» или «№» рядом с заголовком «Commercial Invoice». Значение может содержать буквы, цифры и дефисы (например, N° 24636). Сохраняй точную строку как в документе и добавь её в поле invoice_no.
+invoice_date: Ищи «Date»/«Invoice date». Дата может быть одной строкой или разбита на D / M / Y. Собери полную дату и, если возможно, нормализуй в формат ГГГГ-ММ-ДД. Добавь найденную дату в поле invoice_date.
+buyer: Определи покупателя по меткам «Buyer», «Customer», «Consignee», «Bill to». Сохрани полное наименование и, если указано, адрес в единой строке, без сокращений. Добавь текст в поле buyer.
+seller: Определи продавца по меткам «Seller», «Supplier», «Shipper», «Exporter». Сохрани полное юридическое наименование и, если указано, адрес в единой строке. Добавь текст в поле seller.
+producer: Если в инвойсе указан «Producer»/«Manufacturer»/«Factory», извлеки юридическое наименование. Если перечислено несколько производителей — соедини значения через «; ». Добавь текст в поле producer.
+incoterms: Извлеки условия поставки (ИНКОТЕРМС) — трёхбуквенный код (например, EXW/FOB/CFR/CIF/DAP) и, если указано, пункт (например, «CFR ST. PETERSBURG - RUSSIA»). Сохраняй ровно так, как в документе, и добавь строку в поле incoterms.
+terms_of_payment: Найди условия оплаты («Terms of payment», «Payment»). Сохрани полную формулировку (напр., «ADV. 20%, BALANCE C/COPY DOC.») и добавь её в поле terms_of_payment.
+bank_details: Извлеки блок банковских реквизитов (банк, счёт/IBAN, SWIFT/BIC, бенефициар и адрес). Сохрани как один многострочный текст без нормализации и добавь его в поле bank_details.
+proforma_no: Если инвойс ссылается на проформу, найди «Proforma Invoice No.»/«Proforma No.»/«PI/P.I.». Извлекай только номер проформы, не путай с номером заказа («Order», «P.Code»). Добавь значение в поле proforma_no.
+container_no: Извлеки номер(а) контейнера/машины. Чаще всего формата 4 буквы + 7 цифр и, при наличии, суффикс (напр., «BMOU928899-1»). Если значений несколько — соедини через «; ». Добавь строку в поле container_no.
+HS_code: Найди «HS CODE»/«HS»/«Tariff code» и извлеки числовой код (напр., «0304.81»). Сохраняй формат кода как в документе и добавь его в поле HS_code.
+total_price: Найди итог по документу («Total», иногда вместе с ИНКОТЕРМС и валютой — напр., «Total CFR USD»). Предпочитай напечатанный итог; если он отсутствует, суммируй построчные суммы. Сохраняй валюту и разделители как в документе. Добавь строку в поле total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+Контракту, если он подписан уполномоченным Стороной лицом, скреплен печатью Стороны, отсканирован и отправлен в виде электронного документа с электронного адреса Стороны, указанного в Контракте и/или содержащей доменный адрес Сторон, равно как с электронного адреса, позволяющего достоверно установить, что данным адресом (эл. почтой) пользуется Сторона и/или ее представители на электронный адрес другой Стороны. Документы, исходящие от другой Стороны, признаются Сторонами действительными и оформленными надлежащим образом, прошедшими процедуру идентификации и аутентификации при входе в электронную почту, имеющими равную юридическую и доказательственную силу аналогичным по содержанию и смыслу документам на бумажном носителе, составленным в соответствии с требованиями, предъявляемыми к документам такого рода, и подписанным уполномоченным на то лицом.
+
+p0_t1:
+Эл. Почта Продавца alp.vural@noordzee.com.tr,
+доменное имя Продавца @noordzee.com.tr.
+
+p0_t2:
+Эл. Почта Покупателя – log@moreodor.ru, доменное имя Покупателя - @moreodor.ru.
+
+p0_t3:
+Дополнительно Стороны согласовали, что каждая из Сторон обязана в течение 180 (сто восемьдесят) дней с даты подписания Контракта направить другой Стороне оригинал заключенного Контракта.
+
+p0_t4:
+14.5. Стороны пришли к соглашению о том, что условия о качестве товара, его упаковке и маркировке, указанные в пунктах 5.1, 5.2, 8.1-8.2.1, 8.4-8.6 Контракта, являются существенными условиями. В случае однократного нарушения какого-либо из указанных условий Покупатель вправе расторгнуть Контракт в одностороннем внесудебном порядке путём направления уведомления Продавцу. В этом случае Контракт считается расторгнутым с момента получения указанного уведомления Продавец в отношении всех согласованных сторонами поставок (в том числе тех Товаров, которые находятся в пути), Продавец обязуется осуществить возврат уплаченных за некачественный товар денежных средств в течение 3 дней с момента получения уведомления, а также своими силами и за свой счет произвести возврат поставленного некачественного товара. Продавец обязуется самостоятельно оплатить расходы по транспортировке товара обратно.
+
+p0_t5:
+14.6. Стороны пришли к соглашению о том, что надлежащим подтверждением несоответствия качества Товара условиям настоящего Контракта будет являться акт (отчет об инспекции/заключение или иной документ), составленный экспертом Торгово-Промышленной Палаты РФ, экспертом IPC Homann Gmbh, ООО «ИПЦ Хорманн», ООО «ТопФрейм» или иным независимым экспертом. Результаты исследований эксперта, содержащиеся в акте, распространяются на всю партию Товара, в отношении которой проводится инспекция.
+
+p0_t6:
+well as from an electronic address that allows one to
+reliably establish that the given address (e-mail) is used
+by the Party and/or its representatives to the e-mail
+address of the other Party. Documents coming from the
+other Party are recognized by the Parties as valid and
+duly executed, having undergone the identification and
+authentication procedure when logging into e-mail,
+having equal legal and evidentiary force similar in
+content and meaning to documents on paper, drawn up
+in accordance with the requirements for documents of
+this kind, and signed by a person authorized to do so.
+
+Seller's e-mail is alp.vural@noordzee.com.tr, Seller's
+domain name is @noordzee.com.tr.
+
+p0_t7:
+E-mail Buyer's email - log@moreodor.ru, Buyer's
+domain name - @moreodor.ru.
+
+p0_t8:
+Additionally, the Parties have agreed that each Party is obliged to send the original of the concluded Contract to the other Party within 180 (one hundred eighty) days from the date of signing the Contract.
+
+p0_t9:
+14.5. The Parties have agreed that the conditions regarding the quality of the goods, their packaging and labeling specified in paragraphs 5.1, 5.2, 8.1-8.2.1, 8.4-8.6 of the Contract are material conditions. In the event of a single violation of any of the specified conditions, the Buyer has the right to terminate the Contract unilaterally and extrajudicially by sending a notice to the Seller. In this case, the Contract is considered terminated from the moment the Seller receives the said notice. In relation to all deliveries agreed upon by the parties (including those Goods that are in transit), the Seller undertakes to refund the money paid for the defective goods within 3 days from the date of receipt of the notice, and also, at its own expense and at its own expense, return the delivered defective goods. The Seller undertakes to independently pay the costs of transporting the goods back.
+
+p0_t10:
+14.6. The Parties have agreed that the proper confirmation of non-conformity of the quality of the Goods with the terms of this Contract will be a report (inspection report/conclusion or other document) drawn up by an expert of the Chamber of Commerce and Industry of the Russian Federation, an expert of IPC Hormann Gmbh, OOO IPC Hormann, OOO TopFrame or another independent expert. The results of the expert's research contained in the report shall apply to the entire batch of Goods in respect of which the inspection is carried out.
+
+p0_t11:
+14.7. If the supplied Goods are detained in Russian ports by the border service, Rospotrebnadzor, Rosselkhoznadzor, the Ministry of Internal Affairs or veterinary authorities of the Russian Federation and are not allowed to be imported into the territory of the Russian Federation, the Seller undertakes to pay directly to the carrier all costs for temporary storage and return of the Goods within 5 (five) working days from the date of the Buyer's presentation of the corresponding demand to the Seller.
+
+p0_t12:
+8
+=== END RAW TOKENS ===

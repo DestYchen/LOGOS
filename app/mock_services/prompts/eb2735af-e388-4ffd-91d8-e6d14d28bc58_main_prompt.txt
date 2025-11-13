@@ -1,0 +1,135 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "terms_of_payment": {"value": "", "token_refs": []}, "bank_details": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "proforma_no": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+invoice_no: Найди метку «Invoice No», «No.», «N°» или «№» рядом с заголовком «Commercial Invoice». Значение может содержать буквы, цифры и дефисы (например, N° 24636). Сохраняй точную строку как в документе и добавь её в поле invoice_no.
+invoice_date: Ищи «Date»/«Invoice date». Дата может быть одной строкой или разбита на D / M / Y. Собери полную дату и, если возможно, нормализуй в формат ГГГГ-ММ-ДД. Добавь найденную дату в поле invoice_date.
+buyer: Определи покупателя по меткам «Buyer», «Customer», «Consignee», «Bill to». Сохрани полное наименование и, если указано, адрес в единой строке, без сокращений. Добавь текст в поле buyer.
+seller: Определи продавца по меткам «Seller», «Supplier», «Shipper», «Exporter». Сохрани полное юридическое наименование и, если указано, адрес в единой строке. Добавь текст в поле seller.
+producer: Если в инвойсе указан «Producer»/«Manufacturer»/«Factory», извлеки юридическое наименование. Если перечислено несколько производителей — соедини значения через «; ». Добавь текст в поле producer.
+incoterms: Извлеки условия поставки (ИНКОТЕРМС) — трёхбуквенный код (например, EXW/FOB/CFR/CIF/DAP) и, если указано, пункт (например, «CFR ST. PETERSBURG - RUSSIA»). Сохраняй ровно так, как в документе, и добавь строку в поле incoterms.
+terms_of_payment: Найди условия оплаты («Terms of payment», «Payment»). Сохрани полную формулировку (напр., «ADV. 20%, BALANCE C/COPY DOC.») и добавь её в поле terms_of_payment.
+bank_details: Извлеки блок банковских реквизитов (банк, счёт/IBAN, SWIFT/BIC, бенефициар и адрес). Сохрани как один многострочный текст без нормализации и добавь его в поле bank_details.
+proforma_no: Если инвойс ссылается на проформу, найди «Proforma Invoice No.»/«Proforma No.»/«PI/P.I.». Извлекай только номер проформы, не путай с номером заказа («Order», «P.Code»). Добавь значение в поле proforma_no.
+container_no: Извлеки номер(а) контейнера/машины. Чаще всего формата 4 буквы + 7 цифр и, при наличии, суффикс (напр., «BMOU928899-1»). Если значений несколько — соедини через «; ». Добавь строку в поле container_no.
+HS_code: Найди «HS CODE»/«HS»/«Tariff code» и извлеки числовой код (напр., «0304.81»). Сохраняй формат кода как в документе и добавь его в поле HS_code.
+total_price: Найди итог по документу («Total», иногда вместе с ИНКОТЕРМС и валютой — напр., «Total CFR USD»). Предпочитай напечатанный итог; если он отсутствует, суммируй построчные суммы. Сохраняй валюту и разделители как в документе. Добавь строку в поле total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+после получения уведомления от Покупателя о возникновении проблемы. В этом случае Продавец обязан в течение 10 (десяти) дней с момента получения извещения Покупателя и документального подтверждения недостатков товара вернуть деньги за Товар, а также принять Товар обратно оплатив все расходы на возврат Товара либо его утилизации (в случае если реэкспорт товара невозможен) и возместить Покупателю все понесенные, в связи с этим обстоятельством расходы, путем перевода денежных средств на счет Покупателя.
+
+p0_t1:
+8.4. Если в ходе приемки у поставленного Товара обнаружены следующие недостатки – наличие кровоподтеков, заветренность продукции, товар поставлен в рваных коробках, поставленная рыбная продукция обладает язвами, продукция обладает запахом, несвойственным рыбному, но при этом Товар пригоден к употреблению, Покупатель вправе требовать уплаты штрафа в размере 20% (двадцать процентов) от стоимости партии Товара, поставленной с указанными недостатками. Для определения и подтверждения недостатков, порядка и условия выплаты штрафа Стороны руководствуются п. 8.3 Контракта.
+
+p0_t2:
+9. Претензии
+
+p0_t3:
+9.1 Претензии относительно количества поставленного Товара предъявляются в течение 10 (десять) дней с момента разгрузки контейнера на складе Покупателя.
+
+p0_t4:
+9.2. Претензии относительно качества поставленного товара предъявляются в течение 10 (десять) дней после истечения срока на приемки Товара относительно количества.
+
+p0_t5:
+9.3 Претензии относительно скрытых недостатков (которые невозможно установить путем осмотра, без внутритарной приемки и дефростации) могут быть предъявлены в течение всего срока годности Товара, при этом Покупатель обязан направить соответствующую претензию не позднее 10 дней с даты обнаружения скрытых недостатков.
+
+p0_t6:
+9.4. Претензия покупателя может быть удовлетворена одним из следующих способов:
+
+p0_t7:
+- Обмен Товара на аналогичный, либо иной Товар интересный для Покупателя.
+
+p0_t8:
+-Предоставление дополнительной скидки на Товар путем выставления Продавцом Кредит-ноты, являющейся основанием для снижения последующих платежей за поставляемый в будущем Товара в пользу Покупателя.
+
+p0_t9:
+- Возврат Товара Продавцу с полным возмещением его стоимости Покупателю. Стороны договорились, что в случае невозможности возврата Товара (реэкспорта) Продавец предоставляет Покупателю право на утилизацию Товара, при этом Продавец обязан возместить не только его стоимость, но и расходы на его утилизацию.
+
+p0_t10:
+10. Кредит-нота
+
+p0_t11:
+of the Goods or their disposal (if re-export of the goods
+is impossible) and reimburse the Buyer for all expenses
+incurred in connection with this circumstance by
+transferring funds to the Buyer's account.
+
+p0_t12:
+8.4. If during acceptance the following defects are found in the delivered Goods - the presence of bruises, weathered products, the goods were delivered in torn boxes, the delivered fish products have ulcers, the products have an odor that is not typical of fish, but the Goods are fit for consumption, the Buyer has the right to demand payment of a fine in the amount of 20% (twenty percent) of the cost of the batch of Goods delivered with the specified defects. To determine and confirm the defects, the procedure and conditions for payment of the penalty, the Parties are guided by clause 8.3 of the Contract.
+
+p0_t13:
+9. Claims
+
+p0_t14:
+9.1. The claim for the quantity of the delivered goods are made in 10 days since the arrival of the goods at the store of the buyer.
+
+p0_t15:
+9.2. The claim for the quality of the goods are made in 10 days since the arrival of the goods at the store of the buyer.
+
+p0_t16:
+9.3 Claims regarding hidden defects (which cannot be identified by inspection, without internal acceptance and defrosting) may be submitted throughout the entire shelf life of the Product, and the Buyer is obliged to send the corresponding claim no later than 10 days from the date of discovery of hidden defects.
+
+p0_t17:
+9.4. The Buyer's claim may be satisfied in one of the following ways:
+
+p0_t18:
+- Exchange of the Product for a similar or other Product of interest to the Buyer.
+
+p0_t19:
+- Providing an additional discount on the Product by issuing a Credit Note by the Seller, which is the basis for reducing subsequent payments for the Product supplied in the future in favor of the Buyer.
+
+p0_t20:
+- Return of the Product to the Seller with full compensation for its cost to the Buyer. The Parties have agreed that if it is impossible to return the Product (re-export), the Seller grants the Buyer the right to dispose of the Product, and the Seller is obliged to reimburse not only its cost, but also the costs of its disposal.
+
+p0_t21:
+10. Credit Note
+
+p0_t22:
+Any debt of the Parties arising from the breach of
+obligations under the Contract may be reimbursed by
+issuing Credit Notes, which serve as the basis for
+reducing subsequent payments under the Contract by
+the amount of the loss and/or the amount of
+fines/penalties recognized by the guilty Party. The
+Parties agree that by issuing a Credit Note they have the
+
+p0_t23:
+5
+=== END RAW TOKENS ===

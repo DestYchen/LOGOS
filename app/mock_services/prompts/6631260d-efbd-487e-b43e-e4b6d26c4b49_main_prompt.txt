@@ -1,0 +1,151 @@
+MODEL: openai/gpt-oss-20b
+BRANCH: MAIN
+
+=== SYSTEM ===
+You convert OCR tokens into a structured JSON object of fields.
+
+Input:
+
+A JSON template ("FIELDS TEMPLATE") that defines all output fields.
+Each field is an object with:
+"value": string (initially "").
+"token_refs": array of token ids (initially []).
+
+Optional "FIELD HINTS" that describe how to extract each field.
+
+A list of OCR tokens ("RAW TOKENS"), each given as:
+token_id:
+token_text
+
+Your task:
+
+Use ONLY the RAW TOKENS to fill "value" and "token_refs" in the FIELDS TEMPLATE.
+When you set a non-empty "value", add in "token_refs" the first token ids whose text you used (even if there are multiple mentions).
+If you cannot confidently find a value, leave "value" as "" and "token_refs" as [].
+Copy text EXACTLY as it appears in the tokens (no corrections, no reformatting).
+Do NOT invent or guess values.
+The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.
+Do NOT change the JSON structure: do not add, remove, or rename fields.
+Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.
+Return ONLY the completed JSON, with no explanations or extra text.
+
+=== USER ===
+-- part 1 (text) --
+=== FIELDS TEMPLATE ===
+{"invoice_no": {"value": "", "token_refs": []}, "invoice_date": {"value": "", "token_refs": []}, "producer": {"value": "", "token_refs": []}, "incoterms": {"value": "", "token_refs": []}, "terms_of_payment": {"value": "", "token_refs": []}, "bank_details": {"value": "", "token_refs": []}, "buyer": {"value": "", "token_refs": []}, "seller": {"value": "", "token_refs": []}, "proforma_no": {"value": "", "token_refs": []}, "container_no": {"value": "", "token_refs": []}, "HS_code": {"value": "", "token_refs": []}, "total_price": {"value": "", "token_refs": []}}
+=== END FIELDS TEMPLATE ===
+-- part 2 (text) --
+=== FIELD HINTS ===
+doc_type: INVOICE
+invoice_no: Найди метку «Invoice No», «No.», «N°» или «№» рядом с заголовком «Commercial Invoice». Значение может содержать буквы, цифры и дефисы (например, N° 24636). Сохраняй точную строку как в документе и добавь её в поле invoice_no.
+invoice_date: Ищи «Date»/«Invoice date». Дата может быть одной строкой или разбита на D / M / Y. Собери полную дату и, если возможно, нормализуй в формат ГГГГ-ММ-ДД. Добавь найденную дату в поле invoice_date.
+buyer: Определи покупателя по меткам «Buyer», «Customer», «Consignee», «Bill to». Сохрани полное наименование и, если указано, адрес в единой строке, без сокращений. Добавь текст в поле buyer.
+seller: Определи продавца по меткам «Seller», «Supplier», «Shipper», «Exporter». Сохрани полное юридическое наименование и, если указано, адрес в единой строке. Добавь текст в поле seller.
+producer: Если в инвойсе указан «Producer»/«Manufacturer»/«Factory», извлеки юридическое наименование. Если перечислено несколько производителей — соедини значения через «; ». Добавь текст в поле producer.
+incoterms: Извлеки условия поставки (ИНКОТЕРМС) — трёхбуквенный код (например, EXW/FOB/CFR/CIF/DAP) и, если указано, пункт (например, «CFR ST. PETERSBURG - RUSSIA»). Сохраняй ровно так, как в документе, и добавь строку в поле incoterms.
+terms_of_payment: Найди условия оплаты («Terms of payment», «Payment»). Сохрани полную формулировку (напр., «ADV. 20%, BALANCE C/COPY DOC.») и добавь её в поле terms_of_payment.
+bank_details: Извлеки блок банковских реквизитов (банк, счёт/IBAN, SWIFT/BIC, бенефициар и адрес). Сохрани как один многострочный текст без нормализации и добавь его в поле bank_details.
+proforma_no: Если инвойс ссылается на проформу, найди «Proforma Invoice No.»/«Proforma No.»/«PI/P.I.». Извлекай только номер проформы, не путай с номером заказа («Order», «P.Code»). Добавь значение в поле proforma_no.
+container_no: Извлеки номер(а) контейнера/машины. Чаще всего формата 4 буквы + 7 цифр и, при наличии, суффикс (напр., «BMOU928899-1»). Если значений несколько — соедини через «; ». Добавь строку в поле container_no.
+HS_code: Найди «HS CODE»/«HS»/«Tariff code» и извлеки числовой код (напр., «0304.81»). Сохраняй формат кода как в документе и добавь его в поле HS_code.
+total_price: Найди итог по документу («Total», иногда вместе с ИНКОТЕРМС и валютой — напр., «Total CFR USD»). Предпочитай напечатанный итог; если он отсутствует, суммируй построчные суммы. Сохраняй валюту и разделители как в документе. Добавь строку в поле total_price.
+=== END FIELD HINTS ===
+-- part 3 (text) --
+=== RAW TOKENS ===
+p0_t0:
+направить требование о возврате предоплаты в случае наличии у него сведений о том, что обязательства по поставке не будут выполнены. Продавец обязан вернуть предоплату за Товар в течение 10 (десять) дней с момента извещения.
+
+p0_t1:
+4.3. Все банковские расходы распределяются между Сторонами в следующем порядке:
+
+p0_t2:
+В банке Продавца оплачиваются Продавцом. В банке
+Покупателя оплачиваются Покупателем.
+
+p0_t3:
+5. Маркировка
+
+p0_t4:
+5.1. Внешняя маркировка должна быть произведена несмываемой краской на английском и русском языках. Маркировка Товара должна быть на русском языке и языке страны производителя Товара с соблюдением стандартов, установленных в РФ.
+
+p0_t5:
+5.2. Маркировка, которая должна быть нанесена на упаковке товара, согласуется сторонами и наноситься до фактической отгрузки товара в адрес Покупателя. Маркировка Товара должна содержать полное его описание, включая страну происхождения, наименование производителя, дату производства, дату истечения срока годности, вес нетто, температуру хранения и другие обязательные сведения указанные в технических регламентах РФ.
+
+p0_t6:
+5.3. Продавец несет ответственность за все убытки и/или ущерб, нанесенные товару вследствие неправильной или ненадлежащей упаковки.
+
+p0_t7:
+5.4. Упаковка Товара должна обеспечивать его полную сохранность в период транспортировки любым видом транспорта и долговременного хранения.
+
+p0_t8:
+5.5 В случае нарушения упаковки Товара Продавец обязан возместить все расходы Покупателя, связанные с этим нарушением.
+
+p0_t9:
+5.6 Вся нанесенная маркировка на товар предварительно должна быть согласована с покупателем по форме и содержанию по электронной почте.
+
+p0_t10:
+6. Извещение об отгрузке
+
+p0_t11:
+6.1. Продавец в течение 3 (трех) дней после отгрузки товара должен послать Покупателю по электронной почте копии следующих документов:
+
+p0_t12:
+1) Коммерческий инвойс;
+
+p0_t13:
+2) Упаковочный лист;
+
+p0_t14:
+3) Коносамент;
+
+p0_t15:
+4) Ветеринарный сертификат;
+
+p0_t16:
+5) Сертификат происхождения по форме А или Сертификат происхождения, в соответствии со спецификацией, являющейся неотъемлемой частью контракта;
+
+p0_t17:
+6) Страховой полис (если предусмотрено условиями поставки);
+
+p0_t18:
+7) Спецификация.
+
+p0_t19:
+6.2. Кроме этого, по запросу Покупателя Продавец обязан в течение 3 (трех) дней с даты получения запроса, но не позднее 20 (двадцати) дней после отгрузки товара в порту грузоотправителя отправить
+
+p0_t20:
+Seller shall return the advance payment for the Goods within 10 (ten) days from the date of notification.
+
+p0_t21:
+4.3. All bank expenses are distributed between the Parties in the following order:
+
+p0_t22:
+Paid by the Seller at the Seller's bank. Paid by the Buyer at the Buyer's bank.
+
+p0_t23:
+5. Marking
+
+p0_t24:
+5.1. External marking must be made with indelible paint in English and Russian. The marking of the Goods must be in Russian and the language of the country of the Goods manufacturer in compliance with the standards established in the Russian Federation.
+
+p0_t25:
+5.2. The marking that must be applied to the packaging of the Goods is agreed upon by the parties and applied before the actual shipment of the Goods to the Buyer. The marking of the Goods must contain its full description, including the country of origin, name of the manufacturer, production date, expiration date, net weight, storage temperature and other mandatory information specified in the technical regulations of the Russian Federation.
+
+p0_t26:
+5.3. The Seller is liable for all losses and/or damage caused to the goods due to incorrect or inadequate packaging.
+
+p0_t27:
+5.4. The packaging of the Goods must ensure its complete safety during transportation by any type of transport and long-term storage.
+
+p0_t28:
+5.5. In the event of damage to the packaging of the Goods, the Seller is obliged to reimburse all expenses of the Buyer associated with this violation.
+
+p0_t29:
+5.6 All markings applied to the goods must be agreed upon with the buyer in advance in form and content by e-mail.
+
+p0_t30:
+6. Shipment Notice
+
+p0_t31:
+6.1. The Seller must send the Buyer copies of the following documents by e-mail within 3 (three) days after shipment of the goods:
+=== END RAW TOKENS ===
