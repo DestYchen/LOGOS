@@ -602,6 +602,7 @@ CONTRACT_SCHEMA = DocumentSchema(
         "incoterms": make_field("incoterms", "Incoterms"),
         "terms_of_payment": make_field("terms_of_payment", "Terms of Payment"),
         "bank_details": make_field("bank_details", "Bank Details"),
+        "total_price": make_field("total_price", "Total Price"),
     },
 )
 

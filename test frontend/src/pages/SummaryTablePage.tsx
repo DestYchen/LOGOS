@@ -666,6 +666,18 @@ function SummaryTablePage() {
     documents.forEach((doc) => map.set(doc.id, doc));
     return map;
   }, [documents]);
+  const presentDocInfo = useMemo(() => {
+    const presentByActual = new Map<string, { docIds: string[]; filenames: string[] }>();
+    documents.forEach((doc) => {
+      const entry = presentByActual.get(doc.doc_type) ?? { docIds: [], filenames: [] };
+      entry.docIds.push(doc.id);
+      if (doc.filename) {
+        entry.filenames.push(doc.filename);
+      }
+      presentByActual.set(doc.doc_type, entry);
+    });
+    return presentByActual;
+  }, [documents]);
   const openEditor = useCallback(
     (docId: string, fieldKey: string) => {
       const doc = documentMap.get(docId);
@@ -719,6 +731,15 @@ function SummaryTablePage() {
     [hidePreview, openEditor],
   );
 
+  const presentDocTypes = useMemo(() => {
+    const set = new Set<string>();
+    presentDocInfo.forEach((_, actualType) => {
+      set.add(actualType);
+      set.add(toDisplayDocType(actualType));
+    });
+    return set;
+  }, [presentDocInfo]);
+
   const fieldMatrix = useMemo(() => {
     const matrix = batch?.report?.field_matrix;
     if (!matrix || typeof matrix !== "object") {
@@ -730,6 +751,18 @@ function SummaryTablePage() {
       .map((entry) => (typeof entry === "string" && entry.trim().length > 0 ? entry : null))
       .filter((entry): entry is string => entry !== null);
     if (docHeaders.length === 0) {
+      return null;
+    }
+    const filteredDocHeaders = docHeaders.filter((doc) => {
+      const displayDoc = toDisplayDocType(doc);
+      const actualDoc = toActualDocType(doc);
+      return (
+        presentDocTypes.has(doc) ||
+        presentDocTypes.has(displayDoc) ||
+        presentDocTypes.has(actualDoc)
+      );
+    });
+    if (filteredDocHeaders.length === 0) {
       return null;
     }
     const rowsRaw = Array.isArray(matrixData.rows) ? matrixData.rows : [];
@@ -747,7 +780,7 @@ function SummaryTablePage() {
         const statuses =
           statusesRaw && typeof statusesRaw === "object" ? (statusesRaw as Record<string, unknown>) : {};
         const cells: Record<string, FieldMatrixCell> = {};
-        docHeaders.forEach((doc) => {
+        filteredDocHeaders.forEach((doc) => {
           const value = normalizeText(data[doc]);
           const rawStatus = statuses[doc];
           cells[doc] = {
@@ -765,26 +798,16 @@ function SummaryTablePage() {
       return null;
     }
     return {
-      documents: docHeaders,
+      documents: filteredDocHeaders,
       rows,
     };
-  }, [batch]);
+  }, [batch, presentDocTypes]);
 
   const docPresence: DocPresenceItem[] = useMemo(() => {
     if (!batch) {
       return [];
     }
-    const presentByActual = new Map<string, { docIds: string[]; filenames: string[] }>();
-    documents.forEach((doc) => {
-      const entry = presentByActual.get(doc.doc_type) ?? { docIds: [], filenames: [] };
-      entry.docIds.push(doc.id);
-      if (doc.filename) {
-        entry.filenames.push(doc.filename);
-      }
-      presentByActual.set(doc.doc_type, entry);
-    });
-
-    const remaining = new Map(presentByActual);
+    const remaining = new Map(presentDocInfo);
     const rows: DocPresenceItem[] = [];
 
     EXPECTED_DOC_TYPES.forEach((item) => {
@@ -818,7 +841,7 @@ function SummaryTablePage() {
       });
 
     return rows;
-  }, [batch, documents]);
+  }, [batch, presentDocInfo]);
 
   const resolveDocField = useCallback(
     (displayDoc: string, fieldKey: string) => {
@@ -1082,7 +1105,7 @@ function SummaryTablePage() {
       : null;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">Сводка по пакету</h1>

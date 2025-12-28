@@ -36,3 +36,6 @@ coverage/
 # Secrets / env
 .env
 .env.*
+
+# Mock prompts
+app/mock_services/prompts/

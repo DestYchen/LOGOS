@@ -1,135 +1,205 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Tuple
+import logging
 
 from app.core.enums import DocumentType
 
-KEYWORDS_2 = {
-    DocumentType.INVOICE: [r"(?i)\binvoice\b"],
-    DocumentType.EXPORT_DECLARATION: [r"(?i)export\s+declaration", r"(?i)customs\s+declaration", r"(?:中华人民共和国海关出口货物报关单|中華人民共和國海關出口貨物報關單)"
-                                      r"(?:中华人民共和国\s*海[关關]\s*出[口]\s*货[物]\s*报[关關][单單])",r"(?:出[口]\s*货[物]\s*报[关關][单單])"],
-    DocumentType.PACKING_LIST: [r"(?i)packing\s+list"],
-    DocumentType.BILL_OF_LANDING: [r"(?i)bill\s+of\s+landing", r"(?i)\bB/L\b", r"(?i)\bsea[\s-]*way[\s-]*bill\b"],
-    DocumentType.PRICE_LIST_1: [r"(?i)price\s*list"],
-    DocumentType.PRICE_LIST_2: [r"(?i)price\s*list"],
-    DocumentType.QUALITY_CERTIFICATE: [r"(?i)quality\s+certificate"],
-    DocumentType.CERTIFICATE_OF_ORIGIN: [r"(?i)certificate\s+of\s+origin"],
-    DocumentType.VETERINARY_CERTIFICATE: [r"(?i)veterinary\s+certificate"],
-    DocumentType.PROFORMA: [
-        r"(?i)\bproforma(?:[\s-]+invoice)?\b",
-        r"(?i)????\s+????", r"(?i)????\s+???", r"(?i)????\s+??????", 
-        r"(?i)proforma\s+fatura",  
-        r"(?i)proforma\s+factura",  
-        r"(?:????|????|????|????)"  
-    ],
-    DocumentType.CONTRACT: [
-        r"(?i)\bcontract\b",
-        r"(?i)???????",
-        r"(?i)contract\s+agreement",
-    ],
-    DocumentType.FORM_A: [
-        r"(?i)\bform\s*-?\s*a\b",
-        r"(?i)?????\s*?",
-    ],
-    DocumentType.EAV: [
-        r"(?i)\bEAV\b",
-        r"(?i)???",
-    ],
-    DocumentType.CT_3: [
-        r"(?i)\bCT[-\s]?3\b",
-        r"(?i)??[-\s]?3\b",
-    ]
-}
+logger = logging.getLogger(__name__)
 
-KEYWORDS = {
-        DocumentType.INVOICE: [
+
+# Keyword patterns per document type.
+# We split them into per-token (single-word) and full-text (multi-word) checks.
+KEYWORDS: Dict[DocumentType, List[str]] = {
+    DocumentType.INVOICE: [
         r"(?i)\binvoice\b",
-        r"(?i)счёт\b", r"(?i)счет\b", r"(?i)инвойс\b", 
-        r"(?i)fatura\b",  
-        r"(?i)factura\b",  
-        r"(?:发票|發票)" 
+        r"(?i)инвойс\b",
+        r"(?i)сч[её]т[-\s]?фактура\b",
+        r"(?i)счет[-\s]?фактура\b",
+        r"(?i)fatura\b",
+        r"(?i)factura\b",
     ],
     DocumentType.EXPORT_DECLARATION: [
-        r"(?i)export\s+declaration", r"(?i)customs\s+declaration", 
-        r"(?:中华人民共和国海关出口货物报关单|中華人民共和國海關出口貨物報關單)",
-        r"(?:中华人民共和国\s*海[关關]\s*出[口]\s*货[物]\s*报[关關][单單])",
-        r"(?:出[口]\s*货[物]\s*报[关關][单單])",
-        r"(?i)экспортная\s+декларация", r"(?i)таможенная\s+декларация",  
-        r"(?i)ihracat\s+beyannamesi", r"(?i)gümrük\s+beyannamesi",  
-        r"(?i)declaración\s+de\s+exportación", r"(?i)declaración\s+aduanera"  
+        r"(?i)export\s+declaration",
+        r"(?i)customs\s+declaration",
+        r"(?:????????????????|????????????????)",
+        r"(?:???????\s*?[??]\s*?[?]\s*?[?]\s*?[??][??])",
+        r"(?:?[?]\s*?[?]\s*?[??][??])",
+        r"(?i)экспортная\s+декларация",
+        r"(?i)таможенная\s+декларация",
+        r"(?i)ihracat\s+beyannamesi",
+        r"(?i)gumruk\s+beyannamesi",
+        r"(?i)declaracion\s+de\s+exportacion",
+        r"(?i)declaracion\s+aduanera",
     ],
     DocumentType.PACKING_LIST: [
         r"(?i)packing\s+list",
-        r"(?i)упаковочный\s+лист", r"(?i)упаковочная\s+ведомость",  
-        r"(?i)paket\s+listesi", r"(?i)paketleme\s+listesi",  
-        r"(?i)lista\s+de\s+empaque", r"(?i)lista\s+de\s+embalaje",  
-        r"(?:装箱单|裝箱單|包装清单|包裝清單)"  
+        r"(?i)упаковочный\s+лист",
+        r"(?i)упаковочная\s+ведомость",
+        r"(?i)paket\s+listesi",
+        r"(?i)paketleme\s+listesi",
+        r"(?i)lista\s+de\s+empaque",
+        r"(?i)lista\s+de\s+embalaje",
+        r"(?:???|???|????|????)",
     ],
     DocumentType.BILL_OF_LANDING: [
-        r"(?i)bill\s+of\s+landing", r"(?i)\bB/L\b", r"(?i)\bsea[\s-]*way[\s-]*bill\b",
-        r"(?i)коносамент", r"(?i)бортовой\s+коносамент",  
-        r"(?i)konşimento", r"(?i)deniz\s+konşimentosu", 
-        r"(?i)conocimiento\s+de\s+embarque",  
-        r"(?:提单|提單|海运提单|海運提單)"  
+        r"(?i)bill\s+of\s+landing",
+        r"(?i)\bB/L\b",
+        r"(?i)\bsea[\s-]*way[\s-]*bill\b",
+        r"(?i)коносамент",
+        r"(?i)бортовой\s+коносамент",
+        r"(?i)konsimento",
+        r"(?i)deniz\s+konsimentosu",
+        r"(?i)conocimiento\s+de\s+embarque",
+        r"(?:??|??|????|????)",
     ],
     DocumentType.PRICE_LIST_1: [
         r"(?i)price\s*list",
-        r"(?i)прайс[\s-]*лист", r"(?i)прейскурант",  
-        r"(?i)fiyat\s+listesi",  
-        r"(?i)lista\s+de\s+precios", 
-        r"(?:价格表|價格表|价目表|價目表)"  
+        r"(?i)прайс[\s-]*лист",
+        r"(?i)прейскурант",
+        r"(?i)fiyat\s+listesi",
+        r"(?i)lista\s+de\s+precios",
+        r"(?:???|???|???|???)",
     ],
     DocumentType.PRICE_LIST_2: [
         r"(?i)price\s*list",
-        r"(?i)прайс[\s-]*лист", r"(?i)прейскурант", 
-        r"(?i)fiyat\s+listesi", 
-        r"(?i)lista\s+de\s+precios", 
-        r"(?:价格表|價格表|价目表|價目表)" 
+        r"(?i)прайс[\s-]*лист",
+        r"(?i)прейскурант",
+        r"(?i)fiyat\s+listesi",
+        r"(?i)lista\s+de\s+precios",
+        r"(?:???|???|???|???)",
     ],
     DocumentType.QUALITY_CERTIFICATE: [
         r"(?i)quality\s+certificate",
-        r"(?i)сертификат\s+качества", r"(?i)качественный\s+сертификат", 
-        r"(?i)kalite\s+sertifikası",  
-        r"(?i)certificado\s+de\s+calidad", 
-        r"(?:质量证书|質量證書|品质证明|品質證明)" 
+        r"(?i)сертификат\s+качества",
+        r"(?i)качественный\s+сертификат",
+        r"(?i)kalite\s+sertifikas?",
+        r"(?i)certificado\s+de\s+calidad",
+        r"(?:????|????|????|????)",
     ],
     DocumentType.CERTIFICATE_OF_ORIGIN: [
         r"(?i)certificate\s+of\s+origin",
-        r"(?i)сертификат\s+происхождения", r"(?i)сертификат\s+о\s+происхождении", 
-        r"(?i)menşei\s+sertifikası", r"(?i)orijin\s+sertifikası", 
-        r"(?i)certificado\s+de\s+origen",  
-        r"(?:原产地证书|原產地證書|产地证明|產地證明)"  
+        r"(?i)сертификат\s+происхождения",
+        r"(?i)сертификат\s+о\s+происхождении",
+        r"(?i)mensei\s+sertifikas?",
+        r"(?i)orijin\s+sertifikas?",
+        r"(?i)certificado\s+de\s+origen",
+        r"(?:?????|?????|????|????)",
     ],
     DocumentType.VETERINARY_CERTIFICATE: [
         r"(?i)veterinary\s+certificate",
-        r"(?i)ветеринарный\s+сертификат", r"(?i)ветеринарное\s+свидетельство", 
-        r"(?i)veteriner\s+sertifikası", 
-        r"(?i)certificado\s+veterinario", 
-        r"(?:兽医证书|獸醫證書|动物检疫证书|動物檢疫證書)"
+        r"(?i)ветеринарный\s+сертификат",
+        r"(?i)ветеринарное\s+свидетельство",
+        r"(?i)veteriner\s+sertifikas?",
+        r"(?i)certificado\s+veterinario",
+        r"(?:????|????|??????|??????)",
     ],
     DocumentType.PROFORMA: [
         r"(?i)\bproforma(?:[\s-]+invoice)?\b",
-        r"(?i)проформа\s+счёт", r"(?i)проформа\s+счет", r"(?i)проформа\s+инвойс", 
-        r"(?i)proforma\s+fatura",  
-        r"(?i)proforma\s+factura",  
-        r"(?:形式发票|形式發票|预开发票|預開發票)"  
-    ]
+        r"(?i)проформа\s+счёт",
+        r"(?i)проформа\s+счет",
+        r"(?i)проформа\s+инвойс",
+        r"(?i)proforma\s+fatura",
+        r"(?i)proforma\s+factura",
+        r"(?:????|????|????|????)",
+    ],
+    # Contract parts (content-based; filename not required).
+    DocumentType.CONTRACT_1: [
+        r"(?i)\bhereinafter\s+referred\s+to\s+as\s+the\s+buyer\b",
+        r"(?i)\bhereinafter\s+referred\s+to\s+as\s+the\s+seller\b",
+        r"(?i)\bименуем\w*\s+в\s+дальнейшем\s+покупател\w*\b",
+        r"(?i)\bименуем\w*\s+в\s+дальнейшем\s+продавц\w*\b",
+        r"(?i)\bhereinafter\b",
+        r"(?i)\bименуем\w*\b",
+        r"(?i)\bконтракт\b",
+        r"(?i)\bдоговор\b",
+        r"(?i)\bcontract\b",
+        r"(?i)contract\s+no",
+    ],
+    DocumentType.CONTRACT_2: [
+        r"(?i)\bpayment\s+shall\s+be\s+made\b",
+        r"(?i)\bpayment\b.{0,40}\bmade\b",
+        r"(?i)\bpayment\b.{0,40}\bmay\s+be\b",
+        r"(?i)\bpayment\b.{0,40}\badvance\b",
+        r"(?i)\bterm[s]?\s+of\s+payment\b",
+        r"(?i)\bусловия\s+платежа\b",
+        r"(?i)\bоплата\s+осуществляется\b",
+        r"(?i)\bоплата\b.{0,40}\bосуществляется\b",
+        r"(?i)\bоплата\b.{0,40}\bпредоплат",
+    ],
+    DocumentType.CONTRACT_3: [
+        r"(?i)\blegal\s+addresses\s+of\s+the\s+parties\b",
+        r"(?i)\bюридические\s+адреса\s+сторон\b",
+    ],
 }
 
-def classify_document(tokens: Iterable[Dict[str, str]]) -> DocumentType:
+def _sanitize_keywords(raw: Dict[DocumentType, List[str]]) -> Dict[DocumentType, List[str]]:
+    sanitized: Dict[DocumentType, List[str]] = {}
+    for doc_type, patterns in raw.items():
+        clean: List[str] = []
+        for pattern in patterns:
+            try:
+                re.compile(pattern)
+                clean.append(pattern)
+            except re.error:
+                logger.warning("Skipping invalid regex pattern for %s: %s", doc_type, pattern)
+        sanitized[doc_type] = clean
+    return sanitized
+
+# Validate patterns once to avoid runtime regex errors.
+SANITIZED_KEYWORDS = _sanitize_keywords(KEYWORDS)
+
+
+def _split_patterns(patterns: List[str]) -> Tuple[List[str], List[str]]:
+    """Split patterns into single-token and full-text buckets."""
+    single_word = []
+    multi_word = []
+    for pattern in patterns:
+        if r"\s" in pattern:
+            multi_word.append(pattern)
+        else:
+            single_word.append(pattern)
+    return single_word, multi_word
+
+
+def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = None) -> DocumentType:
     scores: Counter[DocumentType] = Counter()
-    for token in tokens:
-        text = token.get("text", "").lower()
-        if not text:
-            continue
-        for doc_type, patterns in KEYWORDS.items():
-            if any(re.search(pattern, text) for pattern in patterns):
-                scores[doc_type] += 1
+
+    token_texts = [token.get("text", "").lower() for token in tokens if token.get("text", "")]
+    full_text = " ".join(token_texts)
+
+    per_token_patterns: Dict[DocumentType, List[str]] = {}
+    full_text_patterns: Dict[DocumentType, List[str]] = {}
+    for doc_type, patterns in SANITIZED_KEYWORDS.items():
+        single, multi = _split_patterns(patterns)
+        per_token_patterns[doc_type] = single
+        full_text_patterns[doc_type] = multi
+
+    for text in token_texts:
+        for doc_type, patterns in per_token_patterns.items():
+            for pattern in patterns:
+                try:
+                    if re.search(pattern, text):
+                        scores[doc_type] += 1
+                        break
+                except re.error:
+                    logger.warning("Invalid regex pattern skipped at runtime for %s: %s", doc_type, pattern)
+
+    for doc_type, patterns in full_text_patterns.items():
+        for pattern in patterns:
+            try:
+                if re.search(pattern, full_text):
+                    scores[doc_type] += 1
+                    break
+            except re.error:
+                logger.warning("Invalid regex pattern skipped at runtime for %s: %s", doc_type, pattern)
+
     if not scores:
         return DocumentType.UNKNOWN
-    return scores.most_common(1)[0][0]
+    doc_type = scores.most_common(1)[0][0]
+    return doc_type
 
 
 def flatten_tokens(ocr_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -140,6 +210,3 @@ def flatten_tokens(ocr_payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     for page in ocr_payload.get("pages", []):
         tokens.extend(page.get("tokens", []))
     return tokens
-
-
-

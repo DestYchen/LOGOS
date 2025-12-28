@@ -3,9 +3,10 @@
 import asyncio
 import json
 import logging
+import shutil
 import uuid
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, List
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from celery.app.base import Celery
 
@@ -13,9 +14,11 @@ from app.core.config import get_settings
 from app.core.database import get_session
 from app.core.enums import BatchStatus, DocumentStatus, DocumentType
 from app.core.schema import get_schema
-from app.core.storage import batch_dir
+from app.core.storage import batch_dir, unique_filename
 from app.models import Batch, Document, FilledField
+from sqlalchemy import select
 from app.services import (
+    blocklist,
     classification,
     confidence,
     json_filler,
@@ -41,6 +44,17 @@ class ProcessingResult:
 
 
 CANCELLATION_STATUSES = {BatchStatus.CANCEL_REQUESTED, BatchStatus.CANCELLED}
+
+_CONTRACT_PART_TYPES = {
+    DocumentType.CONTRACT_1,
+    DocumentType.CONTRACT_2,
+    DocumentType.CONTRACT_3,
+}
+_CONTRACT_PART_ORDER = [
+    DocumentType.CONTRACT_1,
+    DocumentType.CONTRACT_2,
+    DocumentType.CONTRACT_3,
+]
 
 
 @dataclass
@@ -156,6 +170,141 @@ def _plain_text_tokens(raw_text: str) -> List[Dict[str, Any]]:
     ]
 
 
+def _build_document_text(tokens: List[Dict[str, Any]], extraction: Optional[text_extractor.TextExtractionResult]) -> str:
+    parts: List[str] = []
+    tokens_text = " ".join(token.get("text", "") for token in tokens).strip()
+    if tokens_text:
+        parts.append(tokens_text)
+    if extraction and extraction.text not in parts:
+        parts.append(extraction.text)
+    return "\n\n".join(parts)
+
+
+def _is_contract_part(document: Document) -> bool:
+    return document.doc_type in _CONTRACT_PART_TYPES
+
+
+def _load_contract_tokens(paths, document: Document) -> List[Dict[str, Any]]:
+    if not document.ocr_path:
+        return []
+    ocr_file = paths.base / document.ocr_path
+    if not ocr_file.exists():
+        return []
+    try:
+        with ocr_file.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except Exception:
+        return []
+    return classification.flatten_tokens(payload)
+
+
+def _build_contract_text(paths, document: Document, tokens: List[Dict[str, Any]]) -> str:
+    raw_file = paths.raw / document.filename
+    extraction = text_extractor.extract_text(raw_file, document.mime)
+    tokens_text = " ".join(token.get("text", "") for token in tokens).strip()
+    parts: List[str] = []
+    if tokens_text:
+        parts.append(tokens_text)
+    if extraction and extraction.text not in parts:
+        parts.append(extraction.text)
+    return "\n\n".join(parts)
+
+
+def _cleanup_document_assets(paths, document: Document) -> None:
+    raw_file = paths.raw / document.filename
+    try:
+        raw_file.unlink(missing_ok=True)
+    except Exception:
+        logger.debug("Failed to remove raw file for %s", document.id, exc_info=True)
+
+    try:
+        shutil.rmtree(paths.derived / str(document.id), ignore_errors=True)
+    except Exception:
+        logger.debug("Failed to remove derived files for %s", document.id, exc_info=True)
+
+    try:
+        shutil.rmtree(paths.preview / str(document.id), ignore_errors=True)
+    except Exception:
+        logger.debug("Failed to remove previews for %s", document.id, exc_info=True)
+
+
+async def _drop_blocklisted_document(session, batch: Batch, paths, document: Document) -> None:
+    _cleanup_document_assets(paths, document)
+    if document in batch.documents:
+        batch.documents.remove(document)
+    await session.delete(document)
+    await session.flush()
+
+
+async def _merge_contract_parts(session, batch: Batch, paths) -> None:
+    parts = [doc for doc in batch.documents if _is_contract_part(doc)]
+    if not parts:
+        return
+
+    parts_by_type: Dict[DocumentType, List[Document]] = {}
+    for doc in parts:
+        parts_by_type.setdefault(doc.doc_type, []).append(doc)
+
+    if any(len(parts_by_type.get(doc_type, [])) != 1 for doc_type in _CONTRACT_PART_ORDER):
+        logger.info("Contract parts incomplete or duplicated for batch %s; skipping merge", batch.id)
+        return
+
+    if any(parts_by_type[doc_type][0].status != DocumentStatus.TEXT_READY for doc_type in _CONTRACT_PART_ORDER):
+        logger.info("Contract parts not ready for batch %s; skipping merge", batch.id)
+        return
+
+    ordered_parts = [parts_by_type[doc_type][0] for doc_type in _CONTRACT_PART_ORDER]
+    combined_tokens: List[Dict[str, Any]] = []
+    combined_texts: List[str] = []
+    page_offset = 0
+
+    for document in ordered_parts:
+        tokens = _load_contract_tokens(paths, document)
+        part_text = _build_contract_text(paths, document, tokens)
+        if part_text:
+            combined_texts.append(part_text)
+        if tokens:
+            max_page = max(int(token.get("page", 1)) for token in tokens)
+            for token in tokens:
+                new_token = dict(token)
+                new_token["page"] = int(token.get("page", 1)) + page_offset
+                combined_tokens.append(new_token)
+            page_offset += max_page
+
+    merged_text = "\n\n".join(text for text in combined_texts if text.strip())
+    merged_filename = unique_filename(paths.raw, "contract_merged.txt")
+    merged_raw = paths.raw / merged_filename
+    merged_raw.write_text(merged_text, encoding="utf-8")
+
+    merged_doc = Document(
+        batch_id=batch.id,
+        filename=merged_filename,
+        mime="text/plain",
+        doc_type=DocumentType.CONTRACT,
+        status=DocumentStatus.TEXT_READY,
+        pages=page_offset,
+    )
+    batch.documents.append(merged_doc)
+    session.add(merged_doc)
+    await session.flush()
+
+    derived = paths.derived_for(str(merged_doc.id))
+    ocr_file = derived / "ocr.json"
+    with ocr_file.open("w", encoding="utf-8") as handle:
+        json.dump({"doc_id": str(merged_doc.id), "tokens": combined_tokens}, handle, indent=2)
+    merged_doc.ocr_path = str(ocr_file.relative_to(paths.base))
+
+    # TODO: add preview aggregation if needed for merged contract.
+
+    for document in ordered_parts:
+        _cleanup_document_assets(paths, document)
+        if document in batch.documents:
+            batch.documents.remove(document)
+        await session.delete(document)
+
+    await session.flush()
+
+
 async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
     auto_validate = False
     try:
@@ -170,21 +319,28 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
             batch_paths.ensure()
 
             ocr_results: List[ProcessingResult] = []
-            for document in batch.documents:
+            for document in list(batch.documents):
                 if batch.status in CANCELLATION_STATUSES:
                     break
-                result = await _run_ocr_step(session, batch_id, document)
-                ocr_results.append(result)
+                result = await _run_ocr_step(session, batch_id, batch, document)
+                if result is not None:
+                    ocr_results.append(result)
 
             await session.flush()
             if await _is_cancelled(batch_id, batch.status):
                 return
 
+            await _merge_contract_parts(session, batch, batch_paths)
+            if await _is_cancelled(batch_id, batch.status):
+                return
+
             filler_results: List[ProcessingResult] = []
-            for document in batch.documents:
+            for document in list(batch.documents):
                 if batch.status in CANCELLATION_STATUSES:
                     break
                 if document.status == DocumentStatus.TEXT_READY:
+                    if document.doc_type in _CONTRACT_PART_TYPES:
+                        continue
                     result = await _run_filler_step(session, batch_id, document)
                     filler_results.append(result)
 
@@ -243,7 +399,7 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
             logger.exception("Automatic validation failed for batch %s", batch_id)
 
 
-async def _run_ocr_step(session, batch_id: uuid.UUID, document: Document) -> ProcessingResult:
+async def _run_ocr_step(session, batch_id: uuid.UUID, batch: Batch, document: Document) -> ProcessingResult | None:
     paths = batch_dir(str(batch_id))
     raw_file = paths.raw / document.filename
     if not raw_file.exists():
@@ -284,13 +440,11 @@ async def _run_ocr_step(session, batch_id: uuid.UUID, document: Document) -> Pro
     if not tokens and extraction is not None:
         tokens = _plain_text_tokens(extraction.text)
 
-    document.ocr_path = str(ocr_file.relative_to(paths.base))
     # Derive page count from tokens (max page index), fallback to 1 if any tokens
     try:
         max_page = max(int(t.get('page', 1)) for t in tokens) if tokens else 0
     except Exception:
         max_page = 1 if tokens else 0
-    document.pages = max_page
 
     if not tokens:
         logger.warning('No OCR tokens extracted for %s', document.filename)
@@ -302,7 +456,16 @@ async def _run_ocr_step(session, batch_id: uuid.UUID, document: Document) -> Pro
             message=f"Документ {document.filename} не обработан: OCR не дал токенов.",
         )
 
-    doc_type = classification.classify_document(tokens)
+    doc_text = _build_document_text(tokens, extraction)
+    if blocklist.should_drop(doc_text):
+        logger.info("Dropping document %s due to blocklist match", document.filename)
+        await _drop_blocklisted_document(session, batch, paths, document)
+        return None
+
+    document.ocr_path = str(ocr_file.relative_to(paths.base))
+    document.pages = max_page
+
+    doc_type = classification.classify_document(tokens, file_name=document.filename)
     if doc_type == DocumentType.UNKNOWN:
         logger.info('Document %s classification is UNKNOWN; skipping', document.filename)
         document.status = DocumentStatus.FAILED
@@ -432,8 +595,14 @@ async def _run_filler_step(session, batch_id: uuid.UUID, document: Document) -> 
     return ProcessingResult(document=document, success=True, message=None)
 
 async def _store_fields(session, document: Document, fields: Dict[str, Dict[str, Any]]) -> None:
+    # Avoid lazy-loading in async context; fetch explicitly.
+    result = await session.execute(
+        select(FilledField).where(FilledField.doc_id == document.id)
+    )
+    existing = result.scalars().all()
+
     existing_versions: Dict[str, int] = {}
-    for field in document.fields:
+    for field in existing:
         if field.field_key in fields and field.latest:
             field.latest = False
         existing_versions[field.field_key] = max(existing_versions.get(field.field_key, 0), field.version)

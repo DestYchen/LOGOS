@@ -9,9 +9,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.enums import BatchStatus
+from app.core.enums import BatchStatus, DocumentType
 from app.core.storage import batch_dir
 from app.models import Batch, Document, FilledField, Validation
+
+_INTERNAL_DOC_TYPES = {
+    DocumentType.CONTRACT_1,
+    DocumentType.CONTRACT_2,
+    DocumentType.CONTRACT_3,
+}
 
 
 async def load_batch_with_fields(session: AsyncSession, batch_id: uuid.UUID) -> Batch:
@@ -107,6 +113,8 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
     documents_payload: List[Dict[str, Any]] = []
     doc_fields_index: Dict[uuid.UUID, Dict[str, Dict[str, Any]]] = {}
     for document in batch.documents:
+        if document.doc_type in _INTERNAL_DOC_TYPES:
+            continue
         fields_payload = {
             field.field_key: {
                 "value": field.value,
@@ -153,6 +161,8 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
     # Matched products across documents (for diagnostics/UI)
     product_buckets: Dict[tuple, List[Dict[str, Any]]] = {}
     for document in batch.documents:
+        if document.doc_type in _INTERNAL_DOC_TYPES:
+            continue
         fields_payload = doc_fields_index.get(document.id, {})
         rows = _collect_products_for_doc(fields_payload)
         for prod_id, sub in rows.items():

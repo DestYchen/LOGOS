@@ -50,6 +50,13 @@ router = APIRouter(prefix="/web", tags=["web"])
 
 settings = get_settings()
 
+_INTERNAL_DOC_TYPES = {
+    DocumentType.CONTRACT_1,
+    DocumentType.CONTRACT_2,
+    DocumentType.CONTRACT_3,
+}
+
+
 
 
 FRONTEND_ROOT = Path(__file__).resolve().parents[3] / "test frontend"
@@ -188,7 +195,7 @@ async def handle_upload(
 
 async def list_doc_types() -> Dict[str, Any]:
 
-    return {"doc_types": [doc_type.value for doc_type in DocumentType]}
+    return {"doc_types": [doc_type.value for doc_type in DocumentType if doc_type not in _INTERNAL_DOC_TYPES]}
 
 
 
@@ -285,6 +292,8 @@ async def get_batch_details(
 
 
     for document in batch.documents:
+        if document.doc_type in _INTERNAL_DOC_TYPES:
+            continue
 
         filled_json: Optional[str] = None
 
@@ -445,7 +454,7 @@ async def get_batch_details(
 
             "documents_count": len(documents_payload),
 
-            "doc_types": [doc_type.value for doc_type in DocumentType],
+            "doc_types": [doc_type.value for doc_type in DocumentType if doc_type not in _INTERNAL_DOC_TYPES],
 
             "pending_total": pending_total,
 

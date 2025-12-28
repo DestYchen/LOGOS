@@ -1,0 +1,15 @@
+# One regex per line. Lines starting with # are ignored.
+# Patterns are case-insensitive by default.
+#
+# Example:
+# confidential
+# \bdo not process\b
+(?i)\bthe\W+marking\W+shall\W+be\W+made\W+by\W+indelible\W+paint\W+in\W+english\W+and\W+russian\b
+(?i)\bthe\W+seller\W+shall\W+send\W+to\W+the\W+buyer\W+copies\W+of\W+the\W+following\W+documents\W+within\W+10\W+days\W+after\W+shipment\W+of\W+the\W+goods\b
+(?i)\bthe\W+goods\W+shall\W+be\W+delivered\W+by\W+the\W+seller\W+and\W+accepted\W+by\W+the\W+buyer\W+according\W+to\W+the\W+quantity\W+and\W+quality\W+specified\W+in\W+the\W+packing\W+list\b
+(?i)\bthe\W+quality\W+of\W+the\W+supplied\W+goods\W+shall\W+be\W+confirmed\W+by\W+the\W+veterinary\W+certificate\W+and\W+certificate\W+of\W+origin\b
+(?i)\bthe\W+claim\W+for\W+the\W+quantity\W+of\W+the\W+delivered\W+goods\W+shall\W+be\W+made\W+within\W+10\W+days\W+since\W+the\W+arrival\W+of\W+the\W+goods\b
+(?i)\bneither\W+of\W+the\W+parties\W+shall\W+be\W+liable\W+for\W+partial\W+or\W+complete\W+non\W*fulfillment\W+of\W+its\W+obligations\W+due\W+to\W+force\W+majeure\W+circumstances\b
+(?i)\ball\W+disputes\W+arising\W+out\W+of\W+the\W+present\W+contract\W+shall\W+be\W+settled\W+by\W+the\W+international\W+commercial\W+arbitration\W+court\b
+(?i)\beach\W+party\W+is\W+entitled\W+to\W+terminate\W+the\W+present\W+contract\W+by\W+written\W+notice\b
+(?i)\bin\W+case\W+the\W+seller\W+fails\W+to\W+fulfill\W+his\W+obligations\W+under\W+this\W+contract\b

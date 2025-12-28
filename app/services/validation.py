@@ -754,6 +754,38 @@ FIELD_MATRIX_FIELDS: List[Tuple[str, List[str]]] = [
     ("HS_code", ["HS_code", "commodity_code"]),
 ]
 
+DOCUMENT_NUMBER_FIELDS: Dict[str, List[str]] = {
+    "CONTRACT": ["contract_no"],
+    "PROFORMA": ["proforma_no"],
+    "INVOICE": ["invoice_no"],
+    "BILL_OF_LANDING": ["bill_of_landing_number"],
+    "EXPORT_DECLARATION": ["export_declaration_no"],
+    "CERTIFICATE_OF_ORIGIN": ["certificate_of_origin_no"],
+    "VETERINARY_CERTIFICATE": ["veterinary_certificate_no"],
+    "FORM_A": ["form_a_no"],
+    "EAV": ["eav_no"],
+    "CT-3": ["ct3_no"],
+}
+
+DOCUMENT_DATE_FIELDS: Dict[str, List[str]] = {
+    "CONTRACT": ["contract_date"],
+    "PROFORMA": ["proforma_date"],
+    "INVOICE": ["invoice_date"],
+    "BILL_OF_LANDING": ["bill_of_landing_date"],
+    "CMR": ["cmr_date"],
+    "PACKING_LIST": ["packing_list_date"],
+    "PRICE_LIST_1": ["price_list_1_date"],
+    "PRICE_LIST_2": ["price_list_2_date"],
+    "QUALITY_CERTIFICATE": ["quality_certificate_date"],
+    "VETERINARY_CERTIFICATE": ["veterinary_certificate_date"],
+    "EXPORT_DECLARATION": ["export_declaration_date"],
+    "SPECIFICATION": ["specification_date"],
+    "CERTIFICATE_OF_ORIGIN": ["certificate_of_origin_date"],
+    "FORM_A": ["form_a_date"],
+    "EAV": ["eav_date"],
+    "CT-3": ["ct3_date"],
+}
+
 FIELD_COMPARISON_RULES: Dict[str, List[FieldComparisonRule]] = defaultdict(list)
 
 
@@ -944,6 +976,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
         description="Общая стоимость в инвойсе должна совпадать с другими документами",
         anchor=_ref("INVOICE", "total_price", "Total price"),
         targets=[
+            _ref("CONTRACT", "total_price"),
             _ref("PROFORMA", "total_price"),
             _ref("SPECIFICATION", "total_price"),
             _ref("EXPORT_DECLARATION", "total_price"),
@@ -969,6 +1002,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
         description="Условия доставки из инвойса должны совпадать с другими документами",
         anchor=_ref("INVOICE", "incoterms", "Incoterms"),
         targets=[
+            _ref("CONTRACT", "incoterms"),
             _ref("PROFORMA", "incoterms"),
             _ref("PRICE_LIST_1", "incoterms"),
             _ref("PRICE_LIST_2", "incoterms"),
@@ -983,6 +1017,7 @@ ANCHORED_EQUALITY_RULES: List[AnchoredEqualityRule] = [
         description="Условия оплаты из инвойса должны совпадать с другими документами",
         anchor=_ref("INVOICE", "terms_of_payment", "Terms of payment"),
         targets=[
+            _ref("CONTRACT", "terms_of_payment"),
             _ref("PROFORMA", "terms_of_payment"),
             _ref("SPECIFICATION", "terms_of_payment"),
         ],
@@ -1660,7 +1695,30 @@ def _build_field_matrix_snapshot(
             return new
         return current
 
+    def _get_mapped_value(doc_type: str, mapping: Dict[str, List[str]]) -> str:
+        aliases = mapping.get(doc_type) or []
+        if not aliases:
+            return ""
+        value, _ = _get_field_value(doc_type, aliases)
+        return value or ""
+
     rows: List[Dict[str, Any]] = []
+
+    for label, mapping in (
+        ("номер документа", DOCUMENT_NUMBER_FIELDS),
+        ("дата документа", DOCUMENT_DATE_FIELDS),
+    ):
+        row: Dict[str, Any] = {"FieldKey": label}
+        statuses: Dict[str, Optional[str]] = {doc: None for doc in FIELD_MATRIX_DOC_TYPES}
+        for display_doc in FIELD_MATRIX_DOC_TYPES:
+            actual_doc_type = FIELD_MATRIX_DOC_TYPE_MAP.get(display_doc, display_doc)
+            value = ""
+            if actual_doc_type:
+                value = _get_mapped_value(actual_doc_type, mapping)
+            row[display_doc] = value
+        row["statuses"] = statuses
+        rows.append(row)
+
     for field_key, aliases in FIELD_MATRIX_FIELDS:
         row: Dict[str, Any] = {"FieldKey": field_key}
         statuses: Dict[str, Optional[str]] = {doc: None for doc in FIELD_MATRIX_DOC_TYPES}

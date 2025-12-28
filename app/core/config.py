@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     celery_broker_url: str = Field(default="redis://localhost:6379/1")
     celery_result_backend: str = Field(default="redis://localhost:6379/2")
     base_dir: Path = Field(default=Path("/srv/supplyhub"))
+    blocked_doc_patterns_path: Path = Field(
+        default=Path(__file__).resolve().parents[1] / "blocklist.txt",
+        description="Path to regex patterns that drop documents from processing.",
+    )
+    blocked_doc_patterns_case_sensitive: bool = Field(
+        default=False,
+        description="Treat blocklist regex patterns as case-sensitive.",
+    )
     ocr_endpoint: HttpUrl | None = Field(
         default=None,
         description="External OCR endpoint. Leave unset to use built-in dots.ocr runtime.",

@@ -491,7 +491,7 @@ const renderOverlay = (overlay: OverlayRenderItem) => (
 
         className={cn(
 
-          "group relative aspect-[3/4] max-h-[640px] overflow-hidden rounded-3xl border bg-background shadow-lg transition-colors lg:max-h-[calc(100vh-120px)]",
+          "group relative aspect-[3/4] max-h-[640px] overflow-hidden rounded-3xl border bg-background shadow-lg transition-colors lg:max-h-none",
 
           highlightCoversDocument ? "border-4 border-primary/70" : "",
 
@@ -1598,9 +1598,9 @@ const goToDocument = (index: number) => {
 
   return (
 
-    <div className="space-y-8">
+    <div className="space-y-6">
 
-      <header className="space-y-2">
+      <header className="space-y-1">
 
         <h1 className="text-2xl font-semibold">Документ — исправление ошибок</h1>
 
@@ -1668,7 +1668,7 @@ const goToDocument = (index: number) => {
 
 
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(420px,38vw)]">
 
         <div className="space-y-6">
 
