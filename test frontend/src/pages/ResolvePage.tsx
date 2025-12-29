@@ -1598,8 +1598,6 @@ const goToDocument = (index: number) => {
 
   const totalDocs = documents.length;
 
-  const isLastDocument = totalDocs > 0 && activeIndex === totalDocs - 1;
-
   const canSubmit = batch.pending_total === 0 && !batch.awaiting_processing;
 
 
@@ -1608,20 +1606,23 @@ const goToDocument = (index: number) => {
 
     <div className="space-y-6">
 
-      <header className="space-y-1">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold">Документ — исправление ошибок</h1>
 
-        <h1 className="text-2xl font-semibold">Документ — исправление ошибок</h1>
+          <p className="text-muted-foreground">Пакет {formatPacketTimestamp(batch.created_at)} · Статус пакета:</p>
 
-        <p className="text-muted-foreground">Пакет {formatPacketTimestamp(batch.created_at)} · Статус пакета:</p>
+          <div className="mt-1">
+            <StatusPill status={mapBatchStatus(batch.status)} />
+          </div>
 
-        <div className="mt-1">
-
-          <StatusPill status={mapBatchStatus(batch.status)} />
-
+          <p className="text-sm text-muted-foreground">Создан {formatDateTime(batch.created_at)} · Документов: {totalDocs}</p>
         </div>
-
-        <p className="text-sm text-muted-foreground">Создан {formatDateTime(batch.created_at)} · Документов: {totalDocs}</p>
-
+        <div className="flex">
+          <Button variant="secondary" onClick={() => navigate(`/table/${batch.id}`)}>
+            Вернуться к таблице
+          </Button>
+        </div>
       </header>
 
 
@@ -2322,25 +2323,6 @@ const goToDocument = (index: number) => {
         />
 
       </div>
-
-      {isLastDocument && (
-        <Card className="rounded-3xl border bg-background">
-          <CardHeader>
-            <CardTitle className="text-lg">Финальный этап</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm text-muted-foreground">
-            <p>Убедитесь, что все обязательные поля заполнены и подтверждены.</p>
-          </CardContent>
-          <CardFooter>
-            <Button
-              variant="secondary"
-              onClick={() => navigate(`/table/${batch.id}`)}
-            >
-              Вернуться к таблице
-            </Button>
-          </CardFooter>
-        </Card>
-      )}
 
     </div>
 

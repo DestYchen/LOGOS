@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -34,11 +35,18 @@ type ValidationEntry = {
   refs: ValidationRef[];
 };
 
-type SelectedCell = {
+type MatrixPopoverState = {
+  doc: DocumentPayload;
+  field: FieldState;
+  anchor: { top: number; left: number };
+  value: string;
+  confidence: number | null;
+  mode: "hover" | "edit";
+};
+
+type MatrixPreviewTarget = {
   docId: string;
   fieldKey: string;
-  value: string | null;
-  confidence: number | null;
 };
 
 type DocPresenceItem = {
@@ -87,6 +95,25 @@ type PreviewSlice = {
 };
 
 type RawBBox = [number, number, number, number];
+
+type MatrixPreviewHighlight = {
+  fieldKey?: string;
+  bbox?: RawBBox | null;
+  page?: number | null;
+};
+
+type MatrixPreviewOverlay = {
+  fieldKey: string;
+  bbox: RawBBox;
+  page?: number | null;
+};
+
+type MatrixPreviewRenderItem = {
+  key: string;
+  style: CSSProperties;
+  color: string;
+  thickness: number;
+};
 
 const EMPTY_DOC_ID = "00000000-0000-0000-0000-000000000000";
 const PREVIEW_CALIBRATION = DOCUMENT_PREVIEW_CALIBRATION;
@@ -450,6 +477,200 @@ function createPreviewSlice(image: HTMLImageElement, bbox: RawBBox): PreviewSlic
   return { url, width: outputWidth, height: outputHeight };
 }
 
+function MatrixDocumentPreview({
+  previews,
+  highlight,
+  boxes,
+  showBoxes,
+  onToggleBoxes,
+}: {
+  previews: string[];
+  highlight: MatrixPreviewHighlight | null;
+  boxes: MatrixPreviewOverlay[];
+  showBoxes: boolean;
+  onToggleBoxes?: () => void;
+}) {
+  const [origin, setOrigin] = useState({ x: 50, y: 50 });
+  const [dims, setDims] = useState({ naturalWidth: 0, naturalHeight: 0, width: 0, height: 0 });
+  const [isHovered, setIsHovered] = useState(false);
+  const [isControlHovered, setIsControlHovered] = useState(false);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+
+  const previewCount = previews.length;
+  const imageIndex =
+    highlight?.page && highlight.page > 0 && previewCount > 0
+      ? Math.min(highlight.page - 1, previewCount - 1)
+      : 0;
+  const currentPage = previewCount > 0 ? imageIndex + 1 : 1;
+  const src = previews[imageIndex] ?? previews[0];
+
+  const updateSizes = useCallback(() => {
+    if (!imgRef.current) return;
+    const { naturalWidth, naturalHeight, clientWidth, clientHeight } = imgRef.current;
+    setDims({ naturalWidth, naturalHeight, width: clientWidth, height: clientHeight });
+  }, []);
+
+  const onMouseMove = (event: ReactMouseEvent<HTMLDivElement>) => {
+    if (isControlHovered) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = ((event.clientX - bounds.left) / bounds.width) * 100;
+    const y = ((event.clientY - bounds.top) / bounds.height) * 100;
+    setOrigin({ x, y });
+  };
+
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined" || !imgRef.current) return;
+    const observer = new ResizeObserver(() => updateSizes());
+    observer.observe(imgRef.current);
+    return () => observer.disconnect();
+  }, [updateSizes, src]);
+
+  const createOverlay = useCallback(
+    (
+      fieldKey: string,
+      bbox?: RawBBox | null,
+      color = "hsl(var(--primary) / 0.45)",
+      thickness = 3,
+    ): MatrixPreviewRenderItem | null => {
+      if (!bbox || bbox.length !== 4 || dims.naturalWidth === 0 || dims.naturalHeight === 0) return null;
+      const padding = 6;
+      const [x1, y1, x2, y2] = bbox;
+      const baseScaleX = dims.width / dims.naturalWidth;
+      const baseScaleY = dims.height / dims.naturalHeight;
+      const adjustedScaleX = baseScaleX * PREVIEW_CALIBRATION.scaleX;
+      const adjustedScaleY = baseScaleY * PREVIEW_CALIBRATION.scaleY;
+      const width = Math.max((x2 - x1) * adjustedScaleX, 1.5);
+      const height = Math.max((y2 - y1) * adjustedScaleY, 1.5);
+      const left = x1 * adjustedScaleX + PREVIEW_CALIBRATION.offsetX;
+      const top = y1 * adjustedScaleY + PREVIEW_CALIBRATION.offsetY;
+      return {
+        key: fieldKey,
+        style: {
+          left: `${left - padding}px`,
+          top: `${top - padding}px`,
+          width: `${width + padding * 2}px`,
+          height: `${height + padding * 2}px`,
+        },
+        color,
+        thickness,
+      };
+    },
+    [dims],
+  );
+
+  const baseOverlays = useMemo(() => {
+    if (!boxes.length) return [] as MatrixPreviewRenderItem[];
+    return boxes
+      .filter((box) => (box.page && box.page > 0 ? box.page : 1) === currentPage)
+      .map((box) => createOverlay(box.fieldKey, box.bbox))
+      .filter((item): item is MatrixPreviewRenderItem => Boolean(item));
+  }, [boxes, currentPage, createOverlay]);
+
+  const highlightOverlay = useMemo(() => {
+    if (!highlight) return null;
+    const pageNumber = highlight.page && highlight.page > 0 ? highlight.page : 1;
+    if (pageNumber !== currentPage) return null;
+    return createOverlay(highlight.fieldKey ?? "highlight", highlight.bbox ?? null, "hsl(var(--primary))", 4);
+  }, [highlight, currentPage, createOverlay]);
+
+  const overlaysToRender = useMemo(() => {
+    const items: MatrixPreviewRenderItem[] = [];
+    if (showBoxes) {
+      items.push(...baseOverlays.filter((item) => item.key !== highlightOverlay?.key));
+    }
+    if (highlightOverlay) {
+      items.push(highlightOverlay);
+    }
+    return items;
+  }, [showBoxes, baseOverlays, highlightOverlay]);
+
+  const zoomScale = isHovered ? 3 : 1;
+  const transformOriginValue = `${origin.x}% ${origin.y}%`;
+  const sharedTransformStyle = {
+    transformOrigin: transformOriginValue,
+    transform: `scale(${zoomScale})`,
+  };
+
+  const highlightCoversDocument = Boolean(highlight) && (!highlight?.bbox || highlight.bbox.length !== 4);
+
+  const renderOverlay = (overlay: MatrixPreviewRenderItem) => (
+    <div
+      key={overlay.key}
+      className="pointer-events-none absolute"
+      style={{
+        ...overlay.style,
+        border: `${overlay.thickness}px solid ${overlay.color}`,
+        boxShadow: "0 0 10px rgba(0,0,0,0.18)",
+        borderRadius: "14px",
+      }}
+    />
+  );
+
+  return (
+    <div
+      className={cn(
+        "group relative aspect-[3/4] w-full overflow-hidden rounded-3xl border bg-background shadow-lg transition-colors",
+        highlightCoversDocument ? "border-4 border-primary/70" : "",
+      )}
+      onMouseMove={onMouseMove}
+      onMouseEnter={() => {
+        if (!isControlHovered) {
+          setIsHovered(true);
+        }
+      }}
+      onMouseLeave={() => {
+        setIsHovered(false);
+        setIsControlHovered(false);
+      }}
+    >
+      {src ? (
+        <>
+          <img
+            ref={imgRef}
+            src={src}
+            alt=" "
+            onLoad={updateSizes}
+            style={sharedTransformStyle}
+            className="h-full w-full object-contain transition-transform duration-200 ease-out"
+          />
+          <div className="pointer-events-none absolute inset-0" style={sharedTransformStyle}>
+            {overlaysToRender.map(renderOverlay)}
+          </div>
+          {onToggleBoxes ? (
+            <div className="pointer-events-none absolute inset-0">
+              <div
+                className="pointer-events-auto absolute right-3 top-3 flex gap-2"
+                onMouseEnter={(event) => {
+                  event.stopPropagation();
+                  setIsControlHovered(true);
+                  setIsHovered(false);
+                }}
+                onMouseLeave={(event) => {
+                  event.stopPropagation();
+                  setIsControlHovered(false);
+                  setIsHovered(false);
+                }}
+              >
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  aria-label={showBoxes ? "Скрыть контуры" : "Показать контуры"}
+                  onClick={onToggleBoxes}
+                  className="shadow-sm"
+                >
+                  {showBoxes ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <div className="flex h-full items-center justify-center text-sm text-muted-foreground">Нет превью</div>
+      )}
+    </div>
+  );
+}
+
 function productColumnLabel(key: string): string {
   const match = key.match(/(\d+)/);
   if (match) {
@@ -527,13 +748,12 @@ function SummaryTablePage() {
   const [error, setError] = useState<Error | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
-  const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
+  const [matrixPopover, setMatrixPopover] = useState<MatrixPopoverState | null>(null);
   const [saving, setSaving] = useState(false);
-  const [hoverPreview, setHoverPreview] = useState<{
-    doc: DocumentPayload;
-    field: FieldState;
-    anchor: { top: number; left: number };
-  } | null>(null);
+  const [previewEnabled, setPreviewEnabled] = useState(false);
+  const [previewHover, setPreviewHover] = useState<MatrixPreviewTarget | null>(null);
+  const [previewSelected, setPreviewSelected] = useState<MatrixPreviewTarget | null>(null);
+  const [showPreviewBoxes, setShowPreviewBoxes] = useState(true);
   const [previewSlices, setPreviewSlices] = useState<Record<string, PreviewSlice>>({});
   const [previewSlicePending, setPreviewSlicePending] = useState<Record<string, boolean>>({});
   const previewImageCache = useRef(new Map<string, Promise<HTMLImageElement>>());
@@ -678,57 +898,69 @@ function SummaryTablePage() {
     });
     return presentByActual;
   }, [documents]);
-  const openEditor = useCallback(
-    (docId: string, fieldKey: string) => {
-      const doc = documentMap.get(docId);
-      if (!doc) return;
-      const field = doc.fields.find((item) => item.field_key === fieldKey);
+  const buildPopoverState = useCallback(
+    (
+      doc: DocumentPayload,
+      field: FieldState,
+      anchor: { top: number; left: number },
+      mode: "hover" | "edit",
+    ): MatrixPopoverState => {
       const confidence =
-        field && field.confidence !== null && field.confidence !== undefined ? Number(field.confidence) : null;
-      setSelectedCell({
-        docId,
-        fieldKey,
-        value: field?.value ?? null,
+        field.confidence !== null && field.confidence !== undefined ? Number(field.confidence) : null;
+      return {
+        doc,
+        field,
+        anchor,
+        value: field.value ?? "",
         confidence,
-      });
-      if (field) {
-        ensurePreviewSlice(doc, field);
-      }
+        mode,
+      };
     },
-    [documentMap, ensurePreviewSlice],
+    [],
   );
 
-  const hidePreview = useCallback(() => setHoverPreview(null), []);
+  const getCellAnchor = useCallback((event: ReactMouseEvent<HTMLTableCellElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      top: rect.top,
+      left: rect.left + rect.width / 2,
+    };
+  }, []);
+
+  const hidePreview = useCallback(() => {
+    setPreviewHover(null);
+    setMatrixPopover((prev) => (prev?.mode === "hover" ? null : prev));
+  }, []);
 
   const handleCellHover = useCallback(
     (event: ReactMouseEvent<HTMLTableCellElement>, doc: DocumentPayload, field: FieldState) => {
       if (typeof window === "undefined") {
         return;
       }
+      setPreviewHover({ docId: doc.id, fieldKey: field.field_key });
+      if (matrixPopover?.mode === "edit") {
+        return;
+      }
       ensurePreviewSlice(doc, field);
       const anchorLeft = event.clientX;
       const anchorTop = event.clientY;
-      setHoverPreview({
-        doc,
-        field,
-        anchor: {
-          top: anchorTop,
-          left: anchorLeft,
-        },
-      });
+      setMatrixPopover(buildPopoverState(doc, field, { top: anchorTop, left: anchorLeft }, "hover"));
     },
-    [ensurePreviewSlice],
+    [buildPopoverState, ensurePreviewSlice, matrixPopover],
   );
 
   const handleCellClick = useCallback(
-    (field: FieldState, fallbackDocId?: string) => {
-      hidePreview();
-      const targetDocId = field.doc_id ?? fallbackDocId;
-      if (targetDocId) {
-        openEditor(targetDocId, field.field_key);
-      }
+    (event: ReactMouseEvent<HTMLTableCellElement>, doc: DocumentPayload, field: FieldState) => {
+      const anchor =
+        matrixPopover?.mode === "hover" &&
+        matrixPopover.doc.id === doc.id &&
+        matrixPopover.field.field_key === field.field_key
+          ? matrixPopover.anchor
+          : getCellAnchor(event);
+      setMatrixPopover(buildPopoverState(doc, field, anchor, "edit"));
+      setPreviewSelected({ docId: doc.id, fieldKey: field.field_key });
     },
-    [hidePreview, openEditor],
+    [buildPopoverState, getCellAnchor, matrixPopover],
   );
 
   const presentDocTypes = useMemo(() => {
@@ -993,15 +1225,15 @@ function SummaryTablePage() {
   }, [batch]);
 
   const handleSave = async () => {
-    if (!selectedCell) return;
-    const { docId, fieldKey, value } = selectedCell;
+    if (!matrixPopover || matrixPopover.mode !== "edit") return;
+    const { doc, field, value } = matrixPopover;
     try {
       setSaving(true);
-      const normalized = value?.trim() ? value.trim() : null;
-      await updateField(docId, fieldKey, normalized);
-      await confirmField(docId, fieldKey);
+      const normalized = value.trim() ? value.trim() : null;
+      await updateField(doc.id, field.field_key, normalized);
+      await confirmField(doc.id, field.field_key);
       await fetchBatch();
-      setSelectedCell(null);
+      setMatrixPopover(null);
       setMessage("Поле сохранено и подтверждено");
     } catch (err) {
       setActionError((err as Error).message);
@@ -1010,27 +1242,52 @@ function SummaryTablePage() {
     }
   };
 
-  const selectedDocId = selectedCell?.docId;
-  const selectedFieldKey = selectedCell?.fieldKey;
-  const selectedDoc = selectedDocId ? documentMap.get(selectedDocId) : null;
-  const selectedFieldState =
-    selectedDoc && selectedFieldKey ? selectedDoc.fields.find((item) => item.field_key === selectedFieldKey) : null;
   useEffect(() => {
-    if (hoverPreview) {
-      ensurePreviewSlice(hoverPreview.doc, hoverPreview.field);
+    if (matrixPopover) {
+      ensurePreviewSlice(matrixPopover.doc, matrixPopover.field);
     }
-  }, [hoverPreview, ensurePreviewSlice]);
-  useEffect(() => {
-    if (selectedDoc && selectedFieldState) {
-      ensurePreviewSlice(selectedDoc, selectedFieldState);
-    }
-  }, [selectedDoc, selectedFieldState, ensurePreviewSlice]);
-  const selectedPreviewSnapshot =
-    selectedDoc && selectedFieldState ? buildFieldPreviewSnapshot(selectedDoc, selectedFieldState) : null;
-  const selectedPreviewPending =
-    selectedPreviewSnapshot && selectedPreviewSnapshot.sliceKey
-      ? Boolean(previewSlicePending[selectedPreviewSnapshot.sliceKey])
+  }, [matrixPopover, ensurePreviewSlice]);
+  const popoverPreviewSnapshot = matrixPopover
+    ? buildFieldPreviewSnapshot(matrixPopover.doc, matrixPopover.field)
+    : null;
+  const popoverPreviewPending =
+    popoverPreviewSnapshot && popoverPreviewSnapshot.sliceKey
+      ? Boolean(previewSlicePending[popoverPreviewSnapshot.sliceKey])
       : false;
+
+  const previewTarget = previewHover ?? previewSelected;
+  const previewDoc = previewTarget ? documentMap.get(previewTarget.docId) : null;
+  const previewField =
+    previewDoc && previewTarget ? previewDoc.fields.find((item) => item.field_key === previewTarget.fieldKey) : null;
+
+  const previewHighlight: MatrixPreviewHighlight | null = previewField
+    ? {
+        fieldKey: previewField.field_key,
+        bbox: ensureBBox(previewField.bbox),
+        page: previewField.page ?? null,
+      }
+    : null;
+
+  const previewBoxes = useMemo(() => {
+    if (!previewDoc) {
+      return [];
+    }
+    const unique = new Map<string, MatrixPreviewOverlay>();
+    previewDoc.fields.forEach((field) => {
+      const bbox = ensureBBox(field.bbox);
+      if (!bbox) {
+        return;
+      }
+      const page = field.page ?? null;
+      const key = `${page ?? "?"}|${bbox.join(",")}`;
+      if (!unique.has(key)) {
+        unique.set(key, { fieldKey: field.field_key, bbox, page });
+      }
+    });
+    return Array.from(unique.values());
+  }, [previewDoc]);
+
+  const previewDocLabel = previewDoc ? DOC_TYPE_LABELS[toDisplayDocType(previewDoc.doc_type)] ?? previewDoc.doc_type : null;
 
   if (!batchId) {
     return <Alert variant="destructive">Не указан идентификатор пакета.</Alert>;
@@ -1052,32 +1309,72 @@ function SummaryTablePage() {
     return <Alert variant="info">Данные отчёта недоступны.</Alert>;
   }
 
-  const hoverPreviewPortal =
-    hoverPreview && typeof document !== "undefined"
+  const isPopoverEditing = matrixPopover?.mode === "edit";
+  const matrixPopoverPortal =
+    matrixPopover && typeof document !== "undefined"
       ? (() => {
-          const { previewUrl, frameStyle, imageStyle, confidenceValue, sliceKey } = buildFieldPreviewSnapshot(
-            hoverPreview.doc,
-            hoverPreview.field,
-          );
-          const isPreparing = sliceKey ? Boolean(previewSlicePending[sliceKey]) : false;
+          const snapshot: FieldPreviewSnapshot =
+            popoverPreviewSnapshot ?? {
+              previewUrl: null,
+              frameStyle: { width: 560, height: 360 },
+              imageStyle: { width: "100%", height: "100%", objectFit: "contain" },
+              confidenceValue: null,
+              sliceKey: null,
+              sliceReady: false,
+            };
+          const { previewUrl, frameStyle, imageStyle, confidenceValue } = snapshot;
+          const value = matrixPopover.value ?? "";
+          const showTextarea = value.length > 80;
           return createPortal(
             <div
-              className="pointer-events-none fixed z-50"
+              className={cn("fixed z-50", isPopoverEditing ? "pointer-events-auto" : "pointer-events-none")}
               style={{
-                top: hoverPreview.anchor.top - 12,
-                left: hoverPreview.anchor.left,
+                top: matrixPopover.anchor.top - 12,
+                left: matrixPopover.anchor.left,
                 transform: "translate(-50%, -100%)",
               }}
             >
-              <Card className="w-[360px] overflow-hidden border bg-background shadow-2xl">
-                <CardHeader className="py-3">
-                  <CardTitle className="text-sm font-semibold">{hoverPreview.field.field_key}</CardTitle>
-                  <p className="text-xs text-muted-foreground">{hoverPreview.doc.filename}</p>
+              <Card className="w-[380px] overflow-hidden border bg-background shadow-2xl">
+                <CardHeader className="flex items-start justify-between gap-3 py-3">
+                  <div>
+                    <CardTitle className="text-sm font-semibold">{matrixPopover.field.field_key}</CardTitle>
+                    <p className="text-xs text-muted-foreground">{matrixPopover.doc.filename}</p>
+                  </div>
+                  {isPopoverEditing ? (
+                    <Button variant="ghost" size="sm" onClick={() => setMatrixPopover(null)} disabled={saving}>
+                      Закрыть
+                    </Button>
+                  ) : null}
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div>
                     <p className="text-xs text-muted-foreground">Значение</p>
-                    <p className="text-sm font-medium break-words">{hoverPreview.field.value ?? "-"}</p>
+                    {isPopoverEditing ? (
+                      showTextarea ? (
+                        <Textarea
+                          rows={5}
+                          value={value}
+                          onChange={(event) =>
+                            setMatrixPopover((prev) =>
+                              prev && prev.mode === "edit" ? { ...prev, value: event.target.value } : prev,
+                            )
+                          }
+                          disabled={saving}
+                        />
+                      ) : (
+                        <Input
+                          value={value}
+                          onChange={(event) =>
+                            setMatrixPopover((prev) =>
+                              prev && prev.mode === "edit" ? { ...prev, value: event.target.value } : prev,
+                            )
+                          }
+                          disabled={saving}
+                        />
+                      )
+                    ) : (
+                      <p className="text-sm font-medium break-words">{value.trim() ? value : "-"}</p>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground">Уверенность: {confidenceValue ?? "-"}</p>
                   {previewUrl ? (
@@ -1086,7 +1383,7 @@ function SummaryTablePage() {
                     </div>
                   ) : (
                     <div className="flex h-28 items-center justify-center rounded-lg border bg-muted/30 text-xs text-muted-foreground">
-                      {isPreparing ? (
+                      {popoverPreviewPending ? (
                         <span className="flex items-center gap-2">
                           <Spinner className="h-3.5 w-3.5" />
                           Готовим превью...
@@ -1096,6 +1393,16 @@ function SummaryTablePage() {
                       )}
                     </div>
                   )}
+                  {isPopoverEditing ? (
+                    <div className="flex flex-wrap items-center justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setMatrixPopover(null)} disabled={saving}>
+                        Отмена
+                      </Button>
+                      <Button size="sm" onClick={() => void handleSave()} disabled={saving}>
+                        Сохранить
+                      </Button>
+                    </div>
+                  ) : null}
                 </CardContent>
               </Card>
             </div>,
@@ -1127,7 +1434,7 @@ function SummaryTablePage() {
         </div>
       </header>
 
-        {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
+      {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
       {message ? <Alert variant="success">{message}</Alert> : null}
 
       <Card className="rounded-3xl border bg-background">
@@ -1173,8 +1480,18 @@ function SummaryTablePage() {
       </Card>
 
       <Card className="rounded-3xl border bg-background">
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>Матрица полей</CardTitle>
+          {fieldMatrix ? (
+            <Button
+              variant={previewEnabled ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setPreviewEnabled((prev) => !prev)}
+              aria-pressed={previewEnabled}
+            >
+              Предпросмотр документа
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-4">
           {!fieldMatrix ? (
@@ -1188,46 +1505,80 @@ function SummaryTablePage() {
                   </span>
                 ))}
               </div>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Поле</TableHead>
-                      {fieldMatrix.documents.map((doc) => (
-                        <TableHead key={doc}>{doc}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {fieldMatrix.rows.map((row) => (
-                      <TableRow key={row.fieldKey}>
-                        <TableCell className="font-medium">{row.fieldKey}</TableCell>
-                        {fieldMatrix.documents.map((doc) => {
-                          const cell = row.cells[doc];
-                          const { docEntry, fieldState } = resolveDocField(doc, row.fieldKey);
-                          const isInteractive = Boolean(docEntry && fieldState);
-                          return (
-                            <TableCell
-                              key={`${row.fieldKey}-${doc}`}
-                              className={cn(
-                                "align-top text-sm",
-                                matrixStatusClass(cell?.status),
-                                isInteractive && "cursor-pointer"
-                              )}
-                              onMouseEnter={(event) =>
-                                fieldState && docEntry && handleCellHover(event, docEntry, fieldState)
-                              }
-                              onMouseLeave={hidePreview}
-                              onClick={() => fieldState && docEntry && handleCellClick(fieldState, docEntry.id)}
-                            >
-                              <span className="whitespace-pre-wrap break-words">{cell?.value ?? "-"}</span>
-                            </TableCell>
-                          );
-                        })}
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+              <div className={cn("flex flex-col gap-6", previewEnabled ? "lg:flex-row" : "")}>
+                <div className="min-w-0 flex-1">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Поле</TableHead>
+                          {fieldMatrix.documents.map((doc) => (
+                            <TableHead key={doc}>{doc}</TableHead>
+                          ))}
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {fieldMatrix.rows.map((row) => (
+                          <TableRow key={row.fieldKey}>
+                            <TableCell className="font-medium">{row.fieldKey}</TableCell>
+                            {fieldMatrix.documents.map((doc) => {
+                              const cell = row.cells[doc];
+                              const { docEntry, fieldState } = resolveDocField(doc, row.fieldKey);
+                              const isInteractive = Boolean(docEntry && fieldState);
+                              return (
+                                <TableCell
+                                  key={`${row.fieldKey}-${doc}`}
+                                  className={cn(
+                                    "align-top text-sm",
+                                    matrixStatusClass(cell?.status),
+                                    isInteractive && "cursor-pointer"
+                                  )}
+                                  onMouseEnter={(event) =>
+                                    fieldState && docEntry && handleCellHover(event, docEntry, fieldState)
+                                  }
+                                  onMouseLeave={hidePreview}
+                                  onClick={(event) =>
+                                    fieldState && docEntry && handleCellClick(event, docEntry, fieldState)
+                                  }
+                                >
+                                  <span className="whitespace-pre-wrap break-words">{cell?.value ?? "-"}</span>
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+                {previewEnabled ? (
+                  <div className="lg:w-[360px] lg:shrink-0">
+                    <div className="lg:sticky lg:top-6 space-y-3">
+                      {previewDoc ? (
+                        <>
+                          <div className="space-y-1">
+                            <div className="text-sm font-semibold break-words">{previewDoc.filename}</div>
+                            <div className="text-xs text-muted-foreground">
+                              {previewDocLabel ?? "Документ"}
+                              {previewField ? ` · поле: ${previewField.field_key}` : ""}
+                            </div>
+                          </div>
+                          <MatrixDocumentPreview
+                            previews={previewDoc.previews}
+                            highlight={previewHighlight}
+                            boxes={previewBoxes}
+                            showBoxes={showPreviewBoxes}
+                            onToggleBoxes={() => setShowPreviewBoxes((prev) => !prev)}
+                          />
+                        </>
+                      ) : (
+                        <div className="rounded-2xl border bg-muted/20 p-4 text-sm text-muted-foreground">
+                          Наведите на поле в таблице, чтобы открыть предпросмотр документа.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </>
           )}
@@ -1287,72 +1638,7 @@ function SummaryTablePage() {
         </div>
       )}
 
-      {selectedCell ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border bg-background p-6 shadow-xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-semibold">Редактирование поля</h2>
-                <p className="text-sm text-muted-foreground">
-                  Поле: {selectedCell.fieldKey} · уверенность: {" "}
-                  {selectedCell.confidence !== null ? selectedCell.confidence.toFixed(2) : "-"}
-                </p>
-              </div>
-              <Button variant="ghost" onClick={() => setSelectedCell(null)} disabled={saving}>
-                Закрыть
-              </Button>
-            </div>
-            <div className="mt-4 space-y-4">
-              {(selectedCell.value ?? "").length > 80 ? (
-                <Textarea
-                  rows={6}
-                  value={selectedCell.value ?? ""}
-                  onChange={(event) =>
-                    setSelectedCell((prev) => (prev ? { ...prev, value: event.target.value } : prev))
-                  }
-                />
-              ) : (
-                <Input
-                  value={selectedCell.value ?? ""}
-                  onChange={(event) =>
-                    setSelectedCell((prev) => (prev ? { ...prev, value: event.target.value } : prev))
-                  }
-                />
-              )}
-              {selectedDoc && selectedFieldState ? (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Документ: {selectedDoc.filename}</p>
-                  {selectedPreviewSnapshot?.previewUrl ? (
-                    <div className="relative overflow-hidden rounded-lg border bg-muted/30" style={selectedPreviewSnapshot.frameStyle}>
-                      <img src={selectedPreviewSnapshot.previewUrl} alt="" style={selectedPreviewSnapshot.imageStyle} />
-                    </div>
-                  ) : (
-                    <div className="flex h-28 items-center justify-center rounded-lg border bg-muted/30 text-xs text-muted-foreground">
-                      {selectedPreviewPending ? (
-                        <span className="flex items-center gap-2">
-                          <Spinner className="h-4 w-4" />
-                          Готовим превью...
-                        </span>
-                      ) : (
-                        "Нет превью"
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : null}
-            </div>
-            <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
-              <Button variant="ghost" onClick={() => setSelectedCell(null)} disabled={saving}>
-                Отмена
-              </Button>
-              <Button onClick={() => void handleSave()} disabled={saving}>
-                Сохранить
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-      {hoverPreviewPortal}
+      {matrixPopoverPortal}
     </div>
   );
 }
