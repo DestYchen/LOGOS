@@ -1,6 +1,6 @@
 
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 
 import { Check, ChevronDown, ChevronRight, Eye, EyeOff, Pencil, SlidersHorizontal, X } from "lucide-react";
 
@@ -103,15 +103,13 @@ const HIDDEN_FIELD_KEYS = new Set(["producs", "products"]);
 
 
 
-const DEFAULT_VIEWER_HEIGHT = 640;
 
 
 
 const MISSING_PLACEHOLDER = "-";
 
-
-
-
+const STICKY_VIEWER_GAP = 24;
+const STICKY_VIEWER_BOTTOM_GAP = 0;
 
 const REFRESH_DELAY_MS = 2000;
 
@@ -491,7 +489,7 @@ const renderOverlay = (overlay: OverlayRenderItem) => (
 
         className={cn(
 
-          "group relative aspect-[3/4] max-h-[640px] overflow-hidden rounded-3xl border bg-background shadow-lg transition-colors lg:max-h-none",
+          "group relative aspect-[3/4] max-h-[640px] overflow-hidden rounded-3xl border bg-background shadow-lg transition-colors lg:aspect-auto lg:h-[calc(100vh-32px)] lg:max-h-[calc(100vh-32px)]",
 
           highlightCoversDocument ? "border-4 border-primary/70" : "",
 
@@ -863,13 +861,11 @@ function ResolvePage() {
 
   const [editingFieldKey, setEditingFieldKey] = useState<string | null>(null);
 
-  const viewerPlaceholderRef = useRef<HTMLDivElement | null>(null);
+  const fieldsColumnRef = useRef<HTMLDivElement | null>(null);
 
-  const viewerContainerRef = useRef<HTMLDivElement | null>(null);
+  const viewerStickyRef = useRef<HTMLDivElement | null>(null);
 
-  const [viewerPosition, setViewerPosition] = useState<{ top: number; left: number; width: number } | null>(null);
-
-  const [viewerHeight, setViewerHeight] = useState<number>(0);
+  const [viewerStyle, setViewerStyle] = useState<CSSProperties>({});
 
 
 
@@ -1001,107 +997,119 @@ function ResolvePage() {
 
   }, [currentDoc]);
 
-
-
-  const updateViewerPosition = useCallback(() => {
-
-    const placeholder = viewerPlaceholderRef.current;
-
-    if (!placeholder) return;
-
-    const rect = placeholder.getBoundingClientRect();
-
-    const viewportHeight = window.innerHeight || document.documentElement?.clientHeight || DEFAULT_VIEWER_HEIGHT;
-
-    const viewerRectHeight = viewerHeight || DEFAULT_VIEWER_HEIGHT;
-
-    const minTop = 16;
-
-    const maxTop = Math.max(viewportHeight - viewerRectHeight - 16, minTop);
-
-    const safeTop = Math.min(Math.max(rect.top, minTop), maxTop);
-
-    setViewerPosition({ top: safeTop, left: rect.left, width: rect.width });
-
-  }, [viewerHeight]);
-
-
-
-  useLayoutEffect(() => {
-
-    updateViewerPosition();
-
-  }, [updateViewerPosition, activeIndex, currentDoc?.id, viewerHeight, actionError, message]);
-
-
-
-  useEffect(() => {
-
-    const handleResize = () => {
-
-      updateViewerPosition();
-
-    };
-
-    const handleScroll = () => {
-
-      updateViewerPosition();
-
-    };
-
-    window.addEventListener("resize", handleResize);
-
-    window.addEventListener("scroll", handleScroll, { passive: true });
-
-    return () => {
-
-      window.removeEventListener("resize", handleResize);
-
-      window.removeEventListener("scroll", handleScroll);
-
-    };
-
-  }, [updateViewerPosition]);
-
-
-
-  useEffect(() => {
-
-    const container = viewerContainerRef.current;
-
-    if (!container) return;
-
-    const setHeight = () => {
-
-      setViewerHeight(container.getBoundingClientRect().height);
-
-    };
-
-    setHeight();
-
-    if (typeof ResizeObserver === "undefined") {
-
-      return;
-
+  const getScrollContainer = useCallback((): HTMLElement | Window => {
+    const fields = fieldsColumnRef.current;
+    if (!fields) {
+      return window;
     }
-
-    const observer = new ResizeObserver((entries) => {
-
-      for (const entry of entries) {
-
-        setViewerHeight(entry.contentRect.height);
-
+    const main = fields.closest("main");
+    if (main && main.scrollHeight > main.clientHeight) {
+      return main;
+    }
+    let current = fields.parentElement;
+    while (current) {
+      const style = window.getComputedStyle(current);
+      if (/(auto|scroll)/.test(style.overflowY) && current.scrollHeight > current.clientHeight) {
+        return current;
       }
+      current = current.parentElement;
+    }
+    return window;
+  }, []);
 
+  const updateStickyViewer = useCallback(() => {
+    const fields = fieldsColumnRef.current;
+    const viewer = viewerStickyRef.current;
+    if (!fields || !viewer) return;
+    const scrollParent = getScrollContainer();
+    const isWindowScroll = scrollParent === window;
+    const scrollElement = isWindowScroll ? null : (scrollParent as HTMLElement);
+    const scrollTop = isWindowScroll ? window.scrollY : scrollElement?.scrollTop ?? 0;
+    const scrollRectTop = isWindowScroll ? 0 : scrollElement?.getBoundingClientRect().top ?? 0;
+    const fieldsRect = fields.getBoundingClientRect();
+    const parentTop = fieldsRect.top - scrollRectTop + scrollTop;
+    const parentHeight = fields.offsetHeight;
+    const viewerHeight = viewer.offsetHeight;
+    const minTop = parentTop;
+    const maxTop = Math.max(parentTop, parentTop + parentHeight - viewerHeight - STICKY_VIEWER_BOTTOM_GAP);
+    const targetTop = Math.min(Math.max(scrollTop + STICKY_VIEWER_GAP, minTop), maxTop);
+    const topInParent = Math.max(0, targetTop - parentTop);
+    const debug =
+      typeof window !== "undefined" &&
+      Boolean((window as Window & { __RESOLVE_STICKY_DEBUG__?: boolean }).__RESOLVE_STICKY_DEBUG__);
+    if (debug) {
+      console.log("[resolve][sticky]", {
+        scrollParent: isWindowScroll ? "window" : scrollElement?.tagName.toLowerCase() ?? "unknown",
+        scrollTop,
+        parentTop,
+        parentHeight,
+        viewerHeight,
+        topInParent,
+        minTop,
+        maxTop,
+      });
+    }
+    setViewerStyle((prev) => {
+      const topValue = `${topInParent}px`;
+      if (prev.top === topValue) {
+        return prev;
+      }
+      return { ...prev, top: topValue };
     });
+  }, [getScrollContainer]);
 
-    observer.observe(container);
+  useEffect(() => {
+    const scrollParent = getScrollContainer();
+    const target = scrollParent === window ? window : scrollParent;
+    const main = fieldsColumnRef.current?.closest("main") ?? null;
+    let rafId: number | null = null;
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        updateStickyViewer();
+      });
+    };
+    target.addEventListener("scroll", onScroll, { passive: true });
+    if (target !== window) {
+      window.addEventListener("scroll", onScroll, { passive: true });
+    }
+    if (main && main !== target) {
+      main.addEventListener("scroll", onScroll, { passive: true });
+    }
+    window.addEventListener("resize", onScroll);
+    updateStickyViewer();
+    return () => {
+      target.removeEventListener("scroll", onScroll);
+      if (target !== window) {
+        window.removeEventListener("scroll", onScroll);
+      }
+      if (main && main !== target) {
+        main.removeEventListener("scroll", onScroll);
+      }
+      window.removeEventListener("resize", onScroll);
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [getScrollContainer, updateStickyViewer]);
 
+  useEffect(() => {
+    const fields = fieldsColumnRef.current;
+    const viewer = viewerStickyRef.current;
+    if (!fields || !viewer || typeof ResizeObserver === "undefined") {
+      updateStickyViewer();
+      return;
+    }
+    const observer = new ResizeObserver(() => updateStickyViewer());
+    observer.observe(fields);
+    observer.observe(viewer);
     return () => observer.disconnect();
+  }, [updateStickyViewer, currentDoc?.id, showResolvedFields]);
 
-  }, [viewerPosition, currentDoc?.id]);
-
-
+  useEffect(() => {
+    updateStickyViewer();
+  }, [updateStickyViewer, currentDoc?.id, actionError, message, showResolvedFields]);
 
   useEffect(() => {
 
@@ -1668,9 +1676,9 @@ const goToDocument = (index: number) => {
 
 
 
-      <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(420px,38vw)]">
+      <div className="grid items-stretch gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(420px,38vw)]">
 
-        <div className="space-y-6">
+        <div className="space-y-6" ref={fieldsColumnRef}>
 
           <Card className="rounded-3xl border bg-background">
 
@@ -2250,10 +2258,6 @@ const goToDocument = (index: number) => {
 
             <CardFooter className="flex flex-wrap items-center justify-end gap-3">
 
-              <Button variant="outline" onClick={() => navigate(`/table/${batch.id}`)}>
-                Вернуться к таблице
-              </Button>
-
               {activeIndex < totalDocs - 1 ? (
 
                 <Button
@@ -2285,16 +2289,17 @@ const goToDocument = (index: number) => {
 
 
         </div>
-
-        <div
-
-          className="hidden lg:block"
-
-          ref={viewerPlaceholderRef}
-
-          style={{ minHeight: viewerHeight || DEFAULT_VIEWER_HEIGHT }}
-
-        />
+        <div className="relative hidden lg:block lg:self-stretch">
+          <div ref={viewerStickyRef} className="absolute left-0 right-0" style={viewerStyle}>
+            <DocumentViewer
+              previews={currentDoc.previews}
+              highlight={highlightedField}
+              boxes={overlayBoxes}
+              showBoxes={showBoxes}
+              onToggleBoxes={handleToggleBoxes}
+            />
+          </div>
+        </div>
 
       </div>
 
@@ -2336,48 +2341,6 @@ const goToDocument = (index: number) => {
           </CardFooter>
         </Card>
       )}
-
-      {viewerPosition ? (
-
-        <div
-
-          ref={viewerContainerRef}
-
-          className="hidden lg:block"
-
-          style={{
-
-            position: "fixed",
-
-            top: viewerPosition.top,
-
-            left: viewerPosition.left,
-
-            width: viewerPosition.width,
-
-            zIndex: 30,
-
-          }}
-
-        >
-
-          <DocumentViewer
-
-            previews={currentDoc.previews}
-
-            highlight={highlightedField}
-
-            boxes={overlayBoxes}
-
-            showBoxes={showBoxes}
-
-            onToggleBoxes={handleToggleBoxes}
-
-          />
-
-        </div>
-
-      ) : null}
 
     </div>
 
