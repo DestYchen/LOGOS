@@ -220,6 +220,8 @@ const TARGET_PREVIEW_HEIGHT = 360;
 const PREVIEW_MAGNIFICATION = 6;
 const MIN_FRAME_SIZE = 1;
 const PREVIEW_PADDING = 6;
+const MATRIX_STICKY_GAP = 24;
+const MATRIX_STICKY_BOTTOM_GAP = 0;
 
 function toActualDocType(docType: string): string {
   return FIELD_MATRIX_DOC_TYPE_MAP[docType] ?? docType;
@@ -754,6 +756,9 @@ function SummaryTablePage() {
   const [previewHover, setPreviewHover] = useState<MatrixPreviewTarget | null>(null);
   const [previewSelected, setPreviewSelected] = useState<MatrixPreviewTarget | null>(null);
   const [showPreviewBoxes, setShowPreviewBoxes] = useState(true);
+  const matrixBodyRef = useRef<HTMLDivElement | null>(null);
+  const previewStickyRef = useRef<HTMLDivElement | null>(null);
+  const [previewStyle, setPreviewStyle] = useState<CSSProperties>({ top: "0px" });
   const [previewSlices, setPreviewSlices] = useState<Record<string, PreviewSlice>>({});
   const [previewSlicePending, setPreviewSlicePending] = useState<Record<string, boolean>>({});
   const previewImageCache = useRef(new Map<string, Promise<HTMLImageElement>>());
@@ -1289,6 +1294,111 @@ function SummaryTablePage() {
 
   const previewDocLabel = previewDoc ? DOC_TYPE_LABELS[toDisplayDocType(previewDoc.doc_type)] ?? previewDoc.doc_type : null;
 
+  const getMatrixScrollContainer = useCallback((): HTMLElement | Window => {
+    const body = matrixBodyRef.current;
+    if (!body || typeof window === "undefined") {
+      return window;
+    }
+    const main = body.closest("main");
+    if (main && main.scrollHeight > main.clientHeight) {
+      return main;
+    }
+    let current = body.parentElement;
+    while (current) {
+      const style = window.getComputedStyle(current);
+      if (/(auto|scroll)/.test(style.overflowY) && current.scrollHeight > current.clientHeight) {
+        return current;
+      }
+      current = current.parentElement;
+    }
+    return window;
+  }, []);
+
+  const updateMatrixSticky = useCallback(() => {
+    if (!previewEnabled) {
+      return;
+    }
+    const body = matrixBodyRef.current;
+    const viewer = previewStickyRef.current;
+    if (!body || !viewer) {
+      return;
+    }
+    const scrollParent = getMatrixScrollContainer();
+    const isWindowScroll = scrollParent === window;
+    const scrollElement = isWindowScroll ? null : (scrollParent as HTMLElement);
+    const scrollTop = isWindowScroll ? window.scrollY : scrollElement?.scrollTop ?? 0;
+    const scrollRectTop = isWindowScroll ? 0 : scrollElement?.getBoundingClientRect().top ?? 0;
+    const parentRect = body.getBoundingClientRect();
+    const parentTop = parentRect.top - scrollRectTop + scrollTop;
+    const parentHeight = body.offsetHeight;
+    const viewerHeight = viewer.offsetHeight;
+    const minTop = parentTop;
+    const maxTop = Math.max(parentTop, parentTop + parentHeight - viewerHeight - MATRIX_STICKY_BOTTOM_GAP);
+    const targetTop = Math.min(Math.max(scrollTop + MATRIX_STICKY_GAP, minTop), maxTop);
+    const topInParent = Math.max(0, targetTop - parentTop);
+    setPreviewStyle((prev) => {
+      const topValue = `${topInParent}px`;
+      if (prev.top === topValue) {
+        return prev;
+      }
+      return { ...prev, top: topValue };
+    });
+  }, [getMatrixScrollContainer, previewEnabled]);
+
+  useEffect(() => {
+    if (!previewEnabled) {
+      return;
+    }
+    const scrollParent = getMatrixScrollContainer();
+    const target = scrollParent === window ? window : scrollParent;
+    const main = matrixBodyRef.current?.closest("main") ?? null;
+    let rafId: number | null = null;
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = window.requestAnimationFrame(() => {
+        rafId = null;
+        updateMatrixSticky();
+      });
+    };
+    target.addEventListener("scroll", onScroll, { passive: true });
+    if (target !== window) {
+      window.addEventListener("scroll", onScroll, { passive: true });
+    }
+    if (main && main !== target) {
+      main.addEventListener("scroll", onScroll, { passive: true });
+    }
+    window.addEventListener("resize", onScroll);
+    updateMatrixSticky();
+    return () => {
+      target.removeEventListener("scroll", onScroll);
+      if (target !== window) {
+        window.removeEventListener("scroll", onScroll);
+      }
+      if (main && main !== target) {
+        main.removeEventListener("scroll", onScroll);
+      }
+      window.removeEventListener("resize", onScroll);
+      if (rafId !== null) {
+        window.cancelAnimationFrame(rafId);
+      }
+    };
+  }, [getMatrixScrollContainer, updateMatrixSticky, previewEnabled]);
+
+  useEffect(() => {
+    if (!previewEnabled) {
+      return;
+    }
+    const body = matrixBodyRef.current;
+    const viewer = previewStickyRef.current;
+    if (!body || !viewer || typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const observer = new ResizeObserver(() => updateMatrixSticky());
+    observer.observe(body);
+    observer.observe(viewer);
+    return () => observer.disconnect();
+  }, [previewEnabled, updateMatrixSticky]);
+
   if (!batchId) {
     return <Alert variant="destructive">Не указан идентификатор пакета.</Alert>;
   }
@@ -1335,16 +1445,9 @@ function SummaryTablePage() {
               }}
             >
               <Card className="w-[380px] overflow-hidden border bg-background shadow-2xl">
-                <CardHeader className="flex items-start justify-between gap-3 py-3">
-                  <div>
-                    <CardTitle className="text-sm font-semibold">{matrixPopover.field.field_key}</CardTitle>
-                    <p className="text-xs text-muted-foreground">{matrixPopover.doc.filename}</p>
-                  </div>
-                  {isPopoverEditing ? (
-                    <Button variant="ghost" size="sm" onClick={() => setMatrixPopover(null)} disabled={saving}>
-                      Закрыть
-                    </Button>
-                  ) : null}
+                <CardHeader className="py-3">
+                  <CardTitle className="text-sm font-semibold">{matrixPopover.field.field_key}</CardTitle>
+                  <p className="text-xs text-muted-foreground">{matrixPopover.doc.filename}</p>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div>
@@ -1505,7 +1608,10 @@ function SummaryTablePage() {
                   </span>
                 ))}
               </div>
-              <div className={cn("flex flex-col gap-6", previewEnabled ? "lg:flex-row" : "")}>
+              <div
+                ref={matrixBodyRef}
+                className={cn("flex flex-col gap-6", previewEnabled ? "lg:flex-row" : "")}
+              >
                 <div className="min-w-0 flex-1">
                   <div className="overflow-x-auto">
                     <Table>
@@ -1552,8 +1658,8 @@ function SummaryTablePage() {
                   </div>
                 </div>
                 {previewEnabled ? (
-                  <div className="lg:w-[360px] lg:shrink-0">
-                    <div className="lg:sticky lg:top-6 space-y-3">
+                  <div className="relative lg:w-[360px] lg:shrink-0 lg:self-stretch">
+                    <div ref={previewStickyRef} className="space-y-3 lg:absolute left-0 right-0" style={previewStyle}>
                       {previewDoc ? (
                         <>
                           <div className="space-y-1">
