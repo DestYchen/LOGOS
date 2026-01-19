@@ -1,0 +1,21 @@
+{
+  "doc_type": "CMR",
+  "cmr_date": "Find the CMR date by label \"Date/Дата\" in the header. If multiple dates (loading/issue), use the main document date. Add to cmr_date.",
+  "exporter": "Take the sender from the \"Sender / Consignor\" block (box 1). Keep the full legal name (and address if shown) in one line and add to exporter.",
+  "importer": "Take the consignee from the \"Consignee\" block (box 2). Keep the full name (and address if shown) in one line and add to importer.",
+  "incoterms": "Extract Incoterms (three-letter code and place if shown, e.g., \"CFR SAINT-PETERSBURG\"). In CMR this is often in remarks/instructions to carrier. Add to incoterms.",
+  "invoice_no": "If the CMR references invoices (fields \"Documents attached\", \"Remarks\" or \"Marks and numbers\"), extract invoice number(s). If multiple, join with \"; \". Add to invoice_no.",
+  "veterinary_certificate_no": "Find the veterinary certificate number by labels \"Veterinary certificate No.\", \"Vet. cert.\", \"Health certificate\". Usually in attached documents/remarks. If multiple, join with \"; \". Add to veterinary_certificate_no.",
+  "destination": "Extract destination from \"Place designated for delivery\" (not the place of taking over). Include city and country as printed. Add to destination.",
+  "container_no": "If shipment is in a container, find \"Container No.\" in \"Marks and numbers\"/\"Documents attached\". Format is 4 letters + 7 digits (e.g., BMOU9288991). If multiple, join with \"; \". Add to container_no. If no container (truck/pallet shipment), leave empty.",
+  "country_of_origin": "If the CMR explicitly shows \"Country of origin / Origin\", extract the country and add to country_of_origin. If no explicit field, leave empty (do not infer).",
+  "products": "The \"products\" block is expandable: create product_1, product_2, ... for each goods position/description in the CMR, keeping order. Fill all available fields for each position. If an attribute is given once for the whole cargo (e.g., one Latin species), duplicate it in the relevant product_i. In token_refs include references to source fragments from the form/table.",
+  "products[*].name_product": "Take the commercial name from \"Description of goods\". If multi-line, join into one line. Add to products[i].name_product.",
+  "products[*].latin_name": "If a Latin species name is shown in parentheses (e.g., \"SALMO SALAR\"), extract it and add to products[i].latin_name. If none, leave empty.",
+  "products[*].size_product": "If size/grade/pack is shown (e.g., \"3-4 LB (1.3-1.8 KG)\", \"80/120\"), extract as one line and add to products[i].size_product. If not shown, leave empty.",
+  "products[*].unit_box": "Record unit/pack type if explicitly shown (\"CASE\", \"CARTON\", \"per kg\", \"per case\", etc.). If none, leave empty. Add to products[i].unit_box.",
+  "products[*].packages": "Extract number of packages by \"Number of packages\" (Cases/Cartons/Packages). Keep number and type in one line if present (\"1375 CASES\"). Add to products[i].packages.",
+  "products[*].net_weight": "If the CMR shows net weight (rare), extract in original format with unit (usually KG). If no explicit net weight, leave empty. Add to products[i].net_weight.",
+  "products[*].gross_weight": "Take gross weight per item/cargo from \"Gross weight (kg)\". Keep number and unit as printed. Add to products[i].gross_weight.",
+  "products[*].gross_weight_with_pallets": "If \"Gross weight with pallets\" (or similar) is given, extract it. If both with and without pallets are present, put the with-pallets value here. If no such field, leave empty. Add to products[i].gross_weight_with_pallets."
+}

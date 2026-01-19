@@ -1,0 +1,18 @@
+{
+  "doc_type": "QUALITY_CERTIFICATE",
+  "quality_certificate_date": "Find the certificate date in the header near the place of issue (example: \"Puerto Montt, July 13th. 2025\"). Keep the exact format from the document and add to quality_certificate_date.",
+  "producer": "Take the legal producer name from \"Name and Address of processing Plant\" (example: \"GRANJA MARINA TORNAGALEONES S A ...\"). Keep only the name (address can be omitted) and add to producer.",
+  "container_no": "Extract container number(s) from \"Container and Seals Number\"; format is usually 4 letters + 7 digits (example: \"BMOU 9288991\"). If multiple, join with \"; \". Add to container_no.",
+  "vessel": "Find \"Name of Vessel\" and extract the vessel name and, if shown, the voyage number in one line (example: \"MSC TAKORADI VIII - NX528R\"). Add to vessel.",
+  "veterinary_seal": "Extract only explicit veterinary/health seal numbers. Do not confuse with linear \"Seal\". If the document only shows \"SEAL: ...\" without a veterinary label, treat it as a linear seal and leave veterinary_seal empty. Add the value if found.",
+  "linear_seal": "Take linear seal number(s) from \"Container and Seals Number / SEAL: ...\" (example: \"FX34197306; A0036355\"). If multiple, join with \"; \". Add to linear_seal.",
+  "products": "The \"products\" block is expandable: create product_1, product_2, ... for each goods position/table row in the document and keep order. For each product_i fill all available fields. If an attribute is given once in a shared block (e.g., one Latin species for all lines), duplicate it in the relevant product_i. In token_refs include references to the source fragments (cells/rows) used.",
+  "products[*].name_product": "Take the commercial name from \"Description of Goods\" (example: \"FROZEN ATLANTIC SALMON FILLETS\"). Join line breaks into one line and add to products[i].name_product.",
+  "products[*].latin_name": "If a scientific (Latin) name is shown in \"Species and Scientific name\", extract it (example: \"SALMO SALAR\") and add to products[i].latin_name. If none, leave empty.",
+  "products[*].size_product": "If size/grade/pack is present in the goods description, extract it as one line and add to products[i].size_product. If not shown in the certificate, leave empty.",
+  "products[*].unit_box": "If a unit/pack type is shown (e.g., \"Kind of Packing: CASES\"), keep the wording (\"CASES\", \"BOXES\", etc.) and add to products[i].unit_box. If no explicit unit, leave empty.",
+  "products[*].packages": "Extract the number of packages from \"Number of Packages\" (example: \"1375\"). If a packing type is shown (\"Kind of Packing: CASES\"), you may keep \"1375 CASES\" as one line. Add to products[i].packages.",
+  "products[*].gross_weight": "If gross weight per item is shown in the certificate, extract the number with unit in the original format and add to products[i].gross_weight. If only overall gross weight appears in notes/totals, use the explicit table value; if none, leave empty.",
+  "products[*].net_weight": "Extract net weight per item. If a \"Total Net Weight\" is shown and per-item net weights are in the table, use the table values for products[i].net_weight and do not duplicate the total. Add the value. (Example of total: \"Total Net Weight: 20.625,00\".)",
+  "products[*].date_of_production": "Take production date(s) from \"Production Date\". If multiple dates (table rows), list them with \"; \" in one line and add to products[i].date_of_production. Do not confuse with \"Expiry Date\"."
+}

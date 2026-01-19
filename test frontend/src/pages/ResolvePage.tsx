@@ -101,6 +101,31 @@ const CALIBRATION: CalibrationState = { ...DOCUMENT_PREVIEW_CALIBRATION };
 
 const HIDDEN_FIELD_KEYS = new Set(["producs", "products"]);
 
+const FIELD_LABELS_RU: Record<string, string> = {
+  proforma_date: "Дата проформы",
+  proforma_no: "Номер проформы",
+  invoice_date: "Дата инвойса",
+  invoice_no: "Номер инвойса",
+  country_of_origin: "Страна происхождения",
+  producer: "Производитель",
+  buyer: "Покупатель",
+  seller: "Продавец",
+  exporter: "Экспортер",
+  importer: "Импортер",
+  incoterms: "Инкотермс",
+  terms_of_payment: "Условия оплаты",
+  bank_details: "Банковские реквизиты",
+  total_price: "Сумма",
+  destination: "Пункт назначения",
+  vessel: "Судно",
+  container_no: "Номер контейнера",
+  veterinary_seal: "Ветеринарная пломба",
+  linear_seal: "Линейная пломба",
+  veterinary_certificate_no: "Номер ветеринарного сертификата",
+  veterinary_certificate_date: "Дата ветеринарного сертификата",
+  HS_code: "Код ТНВЭД",
+};
+
 
 
 
@@ -1811,7 +1836,7 @@ const goToDocument = (index: number) => {
 
                           <div>
 
-                            <p className="text-sm font-medium">{field.field_key}</p>
+                            <p className="text-sm font-medium">{FIELD_LABELS_RU[field.field_key] ?? field.field_key}</p>
 
                             <p className="text-xs text-muted-foreground">Введите значение вручную для этого поля</p>
 
@@ -1917,7 +1942,7 @@ const goToDocument = (index: number) => {
 
                           <div>
 
-                            <p className="text-sm font-medium">{field.field_key}</p>
+                            <p className="text-sm font-medium">{FIELD_LABELS_RU[field.field_key] ?? field.field_key}</p>
 
                             <p className="text-xs text-muted-foreground">
 
@@ -2059,7 +2084,7 @@ const goToDocument = (index: number) => {
 
                               <div className="min-w-0">
 
-                                <p className="font-medium leading-snug">{field.field_key}</p>
+                                <p className="font-medium leading-snug">{FIELD_LABELS_RU[field.field_key] ?? field.field_key}</p>
 
                                 {!isEditing ? (
 

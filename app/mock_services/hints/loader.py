@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from app.core.enums import DocumentType
 
@@ -27,6 +27,7 @@ _BASE_DIR = Path(__file__).resolve().parent
 
 # Simple in-process cache of flattened hint text per doc type
 _CACHE: Dict[DocumentType, str] = {}
+_CACHE_BY_DIR: Dict[Path, Dict[DocumentType, str]] = {}
 
 
 def _flatten(obj: Any) -> List[str]:
@@ -72,33 +73,39 @@ def _flatten(obj: Any) -> List[str]:
     return [s] if s else []
 
 
-def get_hints_text(doc_type: DocumentType) -> str:
+def get_hints_text(doc_type: DocumentType, base_dir: Optional[Path] = None) -> str:
     """Return flattened plain-text hints for the given document type.
 
     If no hint file exists or it cannot be parsed, returns an empty string.
     """
-    if doc_type in _CACHE:
-        return _CACHE[doc_type]
+    if base_dir is None:
+        base_dir = _BASE_DIR
+        cache = _CACHE
+    else:
+        base_dir = Path(base_dir)
+        cache = _CACHE_BY_DIR.setdefault(base_dir, {})
+
+    if doc_type in cache:
+        return cache[doc_type]
 
     fname = _DOC_MAPPING.get(doc_type)
     if not fname:
-        _CACHE[doc_type] = ""
+        cache[doc_type] = ""
         return ""
 
-    path = _BASE_DIR / fname
+    path = base_dir / fname
     if not path.exists():
-        _CACHE[doc_type] = ""
+        cache[doc_type] = ""
         return ""
 
     try:
         raw = path.read_text(encoding="utf-8-sig")
         data = json.loads(raw)
     except Exception:
-        _CACHE[doc_type] = ""
+        cache[doc_type] = ""
         return ""
 
     lines = _flatten(data)
     text = "\n".join(line for line in lines if line)
-    _CACHE[doc_type] = text
+    cache[doc_type] = text
     return text
-

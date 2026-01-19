@@ -4,10 +4,12 @@ import re
 from collections import Counter
 from typing import Any, Dict, Iterable, List, Tuple
 import logging
+import os
 
 from app.core.enums import DocumentType
 
 logger = logging.getLogger(__name__)
+_CLASSIFICATION_DEBUG = os.getenv("SUPPLYHUB_CLASSIFICATION_DEBUG", "").lower() in {"1", "true", "yes", "on"}
 
 
 # Keyword patterns per document type.
@@ -46,6 +48,7 @@ KEYWORDS: Dict[DocumentType, List[str]] = {
     ],
     DocumentType.BILL_OF_LANDING: [
         r"(?i)bill\s+of\s+landing",
+        r"(?i)bill\s+of\s+lading",
         r"(?i)\bB/L\b",
         r"(?i)\bsea[\s-]*way[\s-]*bill\b",
         r"(?i)коносамент",
@@ -109,13 +112,14 @@ KEYWORDS: Dict[DocumentType, List[str]] = {
     DocumentType.CONTRACT_1: [
         r"(?i)\bhereinafter\s+referred\s+to\s+as\s+the\s+buyer\b",
         r"(?i)\bhereinafter\s+referred\s+to\s+as\s+the\s+seller\b",
+        r"(?i)\bsubject\s+of\s+the\s+contract\b",
+        r"(?i)\bprice\s+and\s+total\s+value\s+of\s+the\s+contract\b",
+        r"(?i)\bterms\s+of\s+delivery\b",
         r"(?i)\bименуем\w*\s+в\s+дальнейшем\s+покупател\w*\b",
         r"(?i)\bименуем\w*\s+в\s+дальнейшем\s+продавц\w*\b",
-        r"(?i)\bhereinafter\b",
         r"(?i)\bименуем\w*\b",
         r"(?i)\bконтракт\b",
         r"(?i)\bдоговор\b",
-        r"(?i)\bcontract\b",
         r"(?i)contract\s+no",
     ],
     DocumentType.CONTRACT_2: [
@@ -166,6 +170,7 @@ def _split_patterns(patterns: List[str]) -> Tuple[List[str], List[str]]:
 
 def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = None) -> DocumentType:
     scores: Counter[DocumentType] = Counter()
+    matched_patterns: Dict[DocumentType, List[str]] = {}
 
     token_texts = [token.get("text", "").lower() for token in tokens if token.get("text", "")]
     full_text = " ".join(token_texts)
@@ -183,6 +188,10 @@ def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = 
                 try:
                     if re.search(pattern, text):
                         scores[doc_type] += 1
+                        if _CLASSIFICATION_DEBUG:
+                            seen = matched_patterns.setdefault(doc_type, [])
+                            if pattern not in seen:
+                                seen.append(pattern)
                         break
                 except re.error:
                     logger.warning("Invalid regex pattern skipped at runtime for %s: %s", doc_type, pattern)
@@ -192,13 +201,36 @@ def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = 
             try:
                 if re.search(pattern, full_text):
                     scores[doc_type] += 1
+                    if _CLASSIFICATION_DEBUG:
+                        seen = matched_patterns.setdefault(doc_type, [])
+                        if pattern not in seen:
+                            seen.append(pattern)
                     break
             except re.error:
                 logger.warning("Invalid regex pattern skipped at runtime for %s: %s", doc_type, pattern)
 
     if not scores:
+        if file_name:
+            logger.info("Classification: file=%s doc_type=UNKNOWN (no matches)", file_name)
         return DocumentType.UNKNOWN
+
     doc_type = scores.most_common(1)[0][0]
+    file_label = file_name or "<unknown>"
+    logger.info("Classification: file=%s doc_type=%s", file_label, doc_type.value)
+
+    if _CLASSIFICATION_DEBUG:
+        top_scores = scores.most_common(5)
+        score_text = ", ".join(f"{dt.value}={count}" for dt, count in top_scores)
+        logger.info("Classification scores: file=%s %s", file_label, score_text)
+        if matched_patterns:
+            match_parts: List[str] = []
+            for dt, _ in top_scores:
+                patterns = matched_patterns.get(dt, [])
+                if patterns:
+                    match_parts.append(f"{dt.value}:[{'; '.join(patterns)}]")
+            if match_parts:
+                logger.info("Classification matches: file=%s %s", file_label, " | ".join(match_parts))
+
     return doc_type
 
 

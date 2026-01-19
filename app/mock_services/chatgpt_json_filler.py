@@ -6,6 +6,7 @@ import logging
 import re
 from copy import deepcopy
 from typing import Any, Dict, Iterator, Optional, Tuple, List
+from urllib import request as urlrequest
 
 from fastapi import FastAPI
 from openai import OpenAI
@@ -30,6 +31,12 @@ LLM_API_KEY: str = ""  # intentionally left empty by default
 LLM_MODEL_MAIN: str = "openai/gpt-oss-20b"
 LLM_MODEL_PRODUCTS: str = LLM_MODEL_MAIN
 
+# Reasoning effort (used for responses API). Default to low for speed.
+LLM_REASONING_EFFORT: str = os.getenv("JSON_FILLER_REASONING_EFFORT", "low")
+
+# English hints directory (scaffold 14).
+HINTS_EN_DIR: Path = Path(__file__).resolve().parent / "hints_en"
+
 # System prompts tuned to the new token-only format.
 PROMPT_MAIN = (
     "You convert OCR tokens into a structured JSON object of fields.\n\n"
@@ -51,7 +58,11 @@ PROMPT_MAIN = (
     "The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.\n"
     "Do NOT change the JSON structure: do not add, remove, or rename fields.\n"
     "Output MUST be a single valid JSON object with the same structure as the FIELDS TEMPLATE.\n"
-    "Return ONLY the completed JSON, with no explanations or extra text."
+    "Return ONLY the completed JSON, with no explanations or extra text.\n\n"
+    "Critical rules (must follow):\n"
+    "- Copy values EXACTLY from RAW TOKENS (same capitalization, punctuation, number/date formatting, and spacing). Do NOT normalize.\n"
+    "- Do NOT add helper words (e.g., 'per', 'each', 'unit', currency) unless they appear in the source text.\n"
+    "- If you found the value but cannot confidently pick token ids, still fill \"value\" and leave \"token_refs\" as [].\n"
 )
 
 PROMPT_PRODUCTS = (
@@ -74,7 +85,16 @@ PROMPT_PRODUCTS = (
     "Copy text EXACTLY as it appears in the tokens/tables. Do NOT invent data.\n"
     "The value can be, but is not guaranteed to be a FULL section. There can be multiple values in one section (one token id) or a value can be spread out between different sections. Basically your goal is to accurately fill the value, following the hints, and only then you should start to care about token_refs, to find the one that best corresponds to this value.\n"
     "Output MUST be a single valid JSON object with one top-level key \"products\" containing product_1, product_2, ...\n"
-    "Return ONLY the completed JSON, with no explanations or extra text."
+    "Return ONLY the completed JSON, with no explanations or extra text.\n\n"
+    "Critical rules (must follow):\n"
+    "- Copy values EXACTLY from RAW TOKENS and/or TABLE CANDIDATES (same capitalization, punctuation, number/date formatting, and spacing). Do NOT normalize.\n"
+    "- Do NOT add helper words (e.g., 'per', 'each', 'unit', currency) unless they appear in the source text. Hints may contain normalized examples; ignore those if they don't literally occur.\n"
+    "- If you found the value but cannot confidently pick token ids, still fill \"value\" and leave \"token_refs\" as [].\n\n"
+    "Special note for products[*].unit_box:\n"
+    "- unit_box is the literal unit string shown on the document (examples: 'ctn', 'bag', 'KG', 'USD / Kg', 'USD PER CARTON').\n"
+    "- NEVER output 'per ...' unless the document literally contains 'per ...' for that unit.\n"
+    "- Do NOT add extra punctuation like a leading '/' (e.g. '/ctn') unless it literally appears in the source.\n"
+    "- Preserve the original casing exactly ('ctn' != 'CTN').\n"
 )
 
 
@@ -202,6 +222,75 @@ def _strip_markdown_fence(text: str) -> str:
     while lines and lines[-1].strip().startswith("```"):
         lines = lines[:-1]
     return "\n".join(lines).strip()
+
+
+def _supports_responses_reasoning(model: str) -> bool:
+    return (model or "").startswith("openai/gpt-oss")
+
+
+def _content_part_to_text(part: Any) -> str:
+    if isinstance(part, dict):
+        if part.get("type") == "text":
+            return str(part.get("text") or "")
+        if part.get("type") == "image_url":
+            return str(part.get("image_url") or "")
+        return str(part)
+    return str(part)
+
+
+def _messages_to_input_text(messages: list) -> str:
+    chunks: List[str] = []
+    for msg in messages:
+        role = str(msg.get("role") or "").upper()
+        content = msg.get("content")
+        if isinstance(content, list):
+            text = "\n".join(_content_part_to_text(p) for p in content if p is not None)
+        else:
+            text = str(content or "")
+        chunks.append(f"{role}:\n{text}")
+    return "\n\n".join(chunks).strip()
+
+
+def _extract_responses_text(data: Any) -> str:
+    if isinstance(data, dict):
+        output_text = data.get("output_text")
+        if isinstance(output_text, str) and output_text:
+            return output_text.strip()
+        output = data.get("output")
+        if isinstance(output, list) and output:
+            # First, prefer assistant message output_text blocks.
+            for item in output:
+                if not isinstance(item, dict):
+                    continue
+                if item.get("type") != "message":
+                    continue
+                content = item.get("content")
+                if not isinstance(content, list):
+                    continue
+                for part in content:
+                    if not isinstance(part, dict):
+                        continue
+                    text = part.get("text")
+                    if not isinstance(text, str) or not text.strip():
+                        continue
+                    if part.get("type") in ("output_text", "text"):
+                        return text.strip()
+            # Fallback: any non-reasoning text block.
+            for item in output:
+                if not isinstance(item, dict):
+                    continue
+                content = item.get("content")
+                if not isinstance(content, list):
+                    continue
+                for part in content:
+                    if not isinstance(part, dict):
+                        continue
+                    if part.get("type") == "reasoning_text":
+                        continue
+                    text = part.get("text")
+                    if isinstance(text, str) and text.strip():
+                        return text.strip()
+    return ""
 
 
 def _is_json_fragment(fragment: str) -> bool:
@@ -754,11 +843,48 @@ def _dump_messages(doc_id: str, branch: str, model: str, messages: list) -> None
         logger.warning("Failed to dump prompt (doc_id=%s, branch=%s)", doc_id, branch, exc_info=True)
 
 
+def _llm_responses(messages: list, model: str, timeout: int = 300) -> str:
+    payload: Dict[str, Any] = {
+        "model": model,
+        "input": _messages_to_input_text(messages),
+        "temperature": 0,
+    }
+    if LLM_REASONING_EFFORT:
+        payload["reasoning"] = {"effort": LLM_REASONING_EFFORT}
+
+    url = LLM_BASE_URL.rstrip("/") + "/responses"
+    headers = {"Content-Type": "application/json"}
+    if LLM_API_KEY:
+        headers["Authorization"] = f"Bearer {LLM_API_KEY}"
+
+    req = urlrequest.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+    with urlrequest.urlopen(req, timeout=timeout) as resp:
+        raw = resp.read().decode("utf-8", errors="replace")
+
+    try:
+        data = json.loads(raw)
+    except Exception as exc:  # noqa: BLE001
+        raise RuntimeError(f"Invalid JSON response: {raw[:200]}") from exc
+
+    if isinstance(data, dict) and data.get("error"):
+        raise RuntimeError(data["error"])
+
+    content = _extract_responses_text(data)
+    return content
+
+
 def _llm_chat(messages: list, model: str, timeout: int = 300) -> str:
     """
     Single-shot chat completion call; returns the message content (str).
     """
     assert client is not None, "LLM client not initialized"
+    if _supports_responses_reasoning(model):
+        return _llm_responses(messages=messages, model=model, timeout=timeout)
     resp = client.chat.completions.create(
         model=model,
         messages=messages,
@@ -1071,7 +1197,7 @@ async def fill(request: FillerRequest) -> FillerResponse:
     # Optional, non-forcing hints (multi-match lists)
     hints = _collect_hints(request.doc_text or "")
     # Load curated doc-type hints (plain text)
-    curated_hints_text = get_hints_text(request.doc_type)
+    curated_hints_text = get_hints_text(request.doc_type, base_dir=HINTS_EN_DIR) or get_hints_text(request.doc_type)
     main_hints_text, product_hints_text = _split_curated_hints(curated_hints_text)
 
     # Build and run MAIN call
@@ -1123,8 +1249,11 @@ async def fill(request: FillerRequest) -> FillerResponse:
     products_repaired = False
     if has_products and product_template is not None:
         table_like = _find_table_like_tokens(request.tokens)
+        products_tokens = request.tokens
+        if table_like:
+            products_tokens = []
         msgs_products = _build_messages_products(
-            tokens=request.tokens,
+            tokens=products_tokens,
             product_template=product_template,
             table_like_tokens=table_like,
             curated_hints_text=product_hints_text,

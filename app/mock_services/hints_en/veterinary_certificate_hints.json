@@ -1,0 +1,21 @@
+{
+  "doc_type": "VETERINARY_CERTIFICATE",
+  "veterinary_certificate_no": "Take the certificate number from item 1.5 \"Certificate / Certificate No\" or from the footer \"Certificate Number ...\". Keep the string exactly as on the form and add it to veterinary_certificate_no.",
+  "veterinary_certificate_date": "Find place and date of issue in the line \"PLACE AND DATE OF ISSUE\" (bottom of document, e.g., \"TALCAHUANO 02/07/2025\"). Keep the format as in the source and add the date to veterinary_certificate_date.",
+  "producer": "Extract the establishment name from item 3.1 \"Name (No) and address of establishment...\" (producer/plant; often includes Establishment No). Keep the full legal name in one line and add it to producer.",
+  "buyer": "Take the consignee from item 1.2 \"Name and address of consignee\". Keep the name (and address if shown) in one line and add to buyer.",
+  "exporter": "Take the consignor/exporter from item 1.1 \"Name and address of consignor\". Keep the name (and address if shown) in one line and add to exporter.",
+  "vessel": "In item 1.3 \"Means of transport\" extract the vessel name without the container number (e.g., \"MSC TAKORADI VIII NX528R\"). Keep in one line and add to vessel.",
+  "container_no": "In item 1.3 find container number(s) in format 4 letters + 7 digits (e.g., \"BMOU9288991\"). If multiple, join with \"; \". Add to container_no.",
+  "veterinary_seal": "From item 2.6 \"Number of seal\" extract the veterinary/health seal number(s) if provided as a general block. If multiple, join with \"; \". Add to veterinary_seal.",
+  "country_of_origin": "Determine the country of origin from item 1.6 (competent authority/country) or origin wording in the template; record the country only (e.g., \"CHILE\"). Add to country_of_origin.",
+  "products": "The \"products\" block is expandable: create product_1, product_2, ... for each line/batch in sections 2.1-2.8. Keep order. If an attribute is given once for the whole batch (e.g., one seal or one Latin species), duplicate it in the relevant product_i. In token_refs include references to the source fragments used.",
+  "products[*].name_product": "Item 2.1 \"Name of the product\". Extract the commercial name (e.g., \"ATLANTIC SALMON ... FILLETS\" without the Latin species) and add to products[i].name_product.",
+  "products[*].latin_name": "Item 2.1: if a Latin species name appears in parentheses (e.g., \"SALMO SALAR\"), extract it and add to products[i].latin_name. If none, leave empty.",
+  "products[*].packages": "Item 2.4 \"Number of packages\". Extract the count. If multiple values (by batches), join with \"; \" in one line. Add to products[i].packages.",
+  "products[*].net_weight": "Item 2.5 \"Net weight (kg)\". Extract net weight in the original format (dot/comma). If multiple values, join with \"; \". Add to products[i].net_weight.",
+  "products[*].factory_number": "Item 2.7 \"Identification marks\". Extract the establishment registration number (e.g., \"10751\"). If multiple, join with \"; \". Add to products[i].factory_number.",
+  "products[*].date_of_production": "Item 2.2 \"Date of production\". If multiple dates, join with \"; \" in one line. Add to products[i].date_of_production.",
+  "products[*].seal_number": "Item 2.6 \"Number of seal\". Extract the seal number(s) for the item. If one number applies to the whole batch, also duplicate it to document-level veterinary_seal. If multiple values, join with \"; \". Add to products[i].seal_number.",
+  "products[*].unit_box": "This field corresponds to item 2.3 \"Type of package\". Extract the package type (e.g., \"CARDBOARD BOXES\"). Keep the wording as on the form and add to products[i].unit_box."
+}

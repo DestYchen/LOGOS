@@ -1,0 +1,23 @@
+{
+  "doc_type": "INVOICE",
+  "invoice_no": "Find label \"Invoice No\", \"No.\", or \"N\" near the \"Commercial Invoice\" header. The value may contain letters, digits, and hyphens (e.g., \"N 24636\"). Keep the exact string as in the document and put it in invoice_no.",
+  "invoice_date": "Look for \"Date\"/\"Invoice date\". The date can be on one line or split into D / M / Y. Assemble the full date and, if possible, normalize to YYYY-MM-DD. Add the date to invoice_date.",
+  "buyer": "Identify the buyer by labels \"Buyer\", \"Customer\", \"Consignee\", \"Bill to\". Keep the full name and, if shown, the address in a single line without abbreviations. Add the text to buyer.",
+  "seller": "Identify the seller by labels \"Seller\", \"Supplier\", \"Shipper\", \"Exporter\". Keep the full legal name and, if shown, the address in a single line. Add the text to seller.",
+  "producer": "If the invoice shows \"Producer\"/\"Manufacturer\"/\"Factory\", extract the legal name. If multiple producers are listed, join them with \"; \". Add the text to producer.",
+  "incoterms": "Extract delivery terms (Incoterms) - a three-letter code (e.g., EXW/FOB/CFR/CIF/DAP) and, if shown, the place (e.g., \"CFR ST. PETERSBURG - RUSSIA\"). Keep exactly as in the document and add to incoterms.",
+  "terms_of_payment": "Find payment terms (\"Terms of payment\", \"Payment\"). Keep the full wording (e.g., \"ADV. 20%, BALANCE C/COPY DOC.\") and add it to terms_of_payment.",
+  "bank_details": "Extract the bank details block (bank, account/IBAN, SWIFT/BIC, beneficiary and address). Keep it as one multiline text without normalization and add it to bank_details.",
+  "proforma_no": "If the invoice references a proforma, find \"Proforma Invoice No.\"/\"Proforma No.\"/\"PI/P.I.\". Extract only the proforma number, do not confuse with the order number (\"Order\", \"P.Code\"). Add the value to proforma_no.",
+  "container_no": "Extract container/truck number(s). Typically 4 letters + 7 digits and, if present, a suffix (e.g., \"BMOU928899-1\"). If multiple values, join with \"; \". Add the string to container_no.",
+  "HS_code": "Find \"HS CODE\"/\"HS\"/\"Tariff code\" and extract the numeric code (e.g., \"0304.81\"). Keep the code format as in the document and add it to HS_code.",
+  "total_price": "Find the document total (\"Total\", sometimes with Incoterms and currency, e.g., \"Total CFR USD\"). Prefer the printed total; if it is missing, sum the line totals. Keep currency and separators as in the document. Add the string to total_price.",
+  "products": "The \"products\" block is expandable: create product_1, product_2, ... for each line item in the invoice, keeping the document order. For each product, fill all nested fields. If some attributes are given in a shared block (e.g., one Latin species for multiple lines), duplicate them in the relevant product_i. In token_refs, include references to the source tokens/fragments used.",
+  "products[*].name_product": "Take the commercial name from the \"Description of goods\"/\"Description\" column. If the description is multi-line, join lines with spaces. Do not include the Latin name (put it in latin_name). Add the text to products[i].name_product.",
+  "products[*].latin_name": "Extract the Latin (biological) name near the description, often in parentheses (e.g., \"SALMO SALAR\"). Keep the case as in the document and add the text to products[i].latin_name.",
+  "products[*].size_product": "Extract the size/grade (e.g., \"3-4 LB (1.3-1.8 KG)\", \"80/120\"). If both imperial and metric units are shown, keep both. Add the text to products[i].size_product.",
+  "products[*].unit_box": "Specify the pricing/accounting unit (e.g., \"per carton\", \"per kg\", \"per case\"). If \"Price per carton/kg/etc\" is explicit, use that unit. Add the value to products[i].unit_box.",
+  "products[*].packages": "Extract the number of packages (\"Cases\", \"Cartons\", \"Packages\", \"Boxes\"). Keep the number as in the document (including separators). Add the number to products[i].packages.",
+  "products[*].price_per_unit": "Extract unit price (e.g., \"Price per carton 169,50\"). Keep currency if shown and the number format as in the document (dot/comma). Add the value to products[i].price_per_unit.",
+  "products[*].total_price": "Extract the line total and add it to products[i].total_price."
+}

@@ -110,6 +110,7 @@ export type DocumentPayload = {
 export type ReportSection = {
   available: boolean;
   field_matrix?: Record<string, unknown> | null;
+  field_matrix_diff?: Record<string, unknown> | null;
   documents: ReportDocumentEntry[];
   validations: ReportValidationEntry[];
   product_comparisons: Record<string, unknown>[];

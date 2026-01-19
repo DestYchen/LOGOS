@@ -65,6 +65,19 @@ def _extract_document_matrix(report: Dict[str, Any]) -> Optional[Dict[str, Any]]
     return None
 
 
+def _extract_document_matrix_diff(report: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    for item in report.get("validations", []):
+        if item.get("rule_id") == "document_matrix_diff":
+            refs = item.get("refs") or []
+            if refs and isinstance(refs[0], dict):
+                matrix = refs[0]
+                documents = matrix.get("documents")
+                rows = matrix.get("rows")
+                if isinstance(documents, list) and isinstance(rows, list):
+                    return matrix
+    return None
+
+
 def _summarize_severity(rows: List[Dict[str, Any]]) -> Dict[str, int]:
     counts: Dict[str, int] = {}
     for row in rows:
@@ -76,7 +89,7 @@ def _summarize_severity(rows: List[Dict[str, Any]]) -> Dict[str, int]:
 def _validation_rows(report: Dict[str, Any]) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for item in report.get("validations", []):
-        if item.get("rule_id") == "document_matrix":
+        if item.get("rule_id") in ("document_matrix", "document_matrix_diff"):
             continue
         refs = item.get("refs") or []
         formatted_refs = _format_references(refs)
@@ -112,6 +125,10 @@ def build_report_tables(report: Dict[str, Any]) -> Tuple[
 ]:
     matrix = _extract_document_matrix(report)
     return matrix, _document_rows(report), _validation_rows(report)
+
+
+def extract_document_matrix_diff(report: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    return _extract_document_matrix_diff(report)
 
 
 def _write_table(sheet, headers: List[str], rows: List[List[Any]]) -> None:
@@ -168,7 +185,11 @@ def export_report_excel(report: Dict[str, Any]) -> io.BytesIO:
     ]
     _write_table(ws_docs, doc_headers, doc_values)
 
-    raw_validations = [item for item in report.get("validations", []) if item.get("rule_id") != "document_matrix"]
+    raw_validations = [
+        item
+        for item in report.get("validations", [])
+        if item.get("rule_id") not in ("document_matrix", "document_matrix_diff")
+    ]
     ws_validations = wb.create_sheet("Validations")
     ws_validations.append(["Message", "Reference"])
     for item in raw_validations:

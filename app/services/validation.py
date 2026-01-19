@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 
+import difflib
 import operator
 import re
 import uuid
@@ -1760,6 +1761,144 @@ def _build_field_matrix_snapshot(
     return {"documents": FIELD_MATRIX_DOC_TYPES, "rows": rows}
 
 
+DIFF_REDACTED_OPEN = "{redacted}"
+DIFF_REDACTED_CLOSE = "{/redacted}"
+
+
+def _diff_against_anchor(anchor_value: str, other_value: str) -> str:
+    if anchor_value == other_value:
+        return other_value
+    if not anchor_value:
+        return other_value
+    if not other_value:
+        return ""
+    matcher = difflib.SequenceMatcher(a=anchor_value, b=other_value)
+    parts: List[str] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            if i1 != i2:
+                parts.append(anchor_value[i1:i2])
+        elif tag == "insert":
+            segment = other_value[j1:j2]
+            if segment:
+                parts.append(f"{DIFF_REDACTED_OPEN}{segment}{DIFF_REDACTED_CLOSE}")
+        elif tag == "replace":
+            other_segment = other_value[j1:j2]
+            anchor_segment = anchor_value[i1:i2]
+            if other_segment:
+                parts.append(f"{DIFF_REDACTED_OPEN}{other_segment}{DIFF_REDACTED_CLOSE}")
+            if anchor_segment:
+                parts.append(anchor_segment)
+        elif tag == "delete":
+            anchor_segment = anchor_value[i1:i2]
+            if anchor_segment:
+                parts.append(f"{DIFF_REDACTED_OPEN}{anchor_segment}{DIFF_REDACTED_CLOSE}")
+    return "".join(parts)
+
+
+def _build_field_matrix_diff_snapshot(
+    documents: List[Document], fields_by_doc: Dict[uuid.UUID, Dict[str, FilledField]]
+) -> Dict[str, Any]:
+    doc_type_lookup: Dict[str, List[Dict[str, FilledField]]] = {}
+    for document in documents:
+        doc_type_value = getattr(document.doc_type, "value", str(document.doc_type))
+        doc_fields = fields_by_doc.get(document.id, {})
+        doc_type_lookup.setdefault(doc_type_value, []).append(doc_fields)
+
+    def _get_field_value(doc_type: str, aliases: List[str]) -> Tuple[str, bool]:
+        found = False
+        value = ""
+        for field_set in doc_type_lookup.get(doc_type, []):
+            for alias in aliases:
+                field = field_set.get(alias)
+                if field and isinstance(field, FilledField):
+                    value = field.value or ""
+                    found = True
+                    if value:
+                        return value, True
+            if found:
+                return value, True
+        return "", False
+
+    def _get_mapped_value(doc_type: str, mapping: Dict[str, List[str]]) -> str:
+        aliases = mapping.get(doc_type) or []
+        if not aliases:
+            return ""
+        value, _ = _get_field_value(doc_type, aliases)
+        return value or ""
+
+    def _merge_status(current: Optional[str], new: Optional[str]) -> Optional[str]:
+        if new is None:
+            return current
+        priority = {"anchor": 4, "mismatch": 3, "missing": 2, "match": 1, None: 0}
+        if priority.get(new, 0) >= priority.get(current, 0):
+            return new
+        return current
+
+    rows: List[Dict[str, Any]] = []
+
+    for label, mapping in (
+        ("номер документа", DOCUMENT_NUMBER_FIELDS),
+        ("дата документа", DOCUMENT_DATE_FIELDS),
+    ):
+        row: Dict[str, Any] = {"FieldKey": label}
+        statuses: Dict[str, Optional[str]] = {doc: None for doc in FIELD_MATRIX_DOC_TYPES}
+        for display_doc in FIELD_MATRIX_DOC_TYPES:
+            actual_doc_type = FIELD_MATRIX_DOC_TYPE_MAP.get(display_doc, display_doc)
+            value = ""
+            if actual_doc_type:
+                value = _get_mapped_value(actual_doc_type, mapping)
+            row[display_doc] = value
+        row["statuses"] = statuses
+        rows.append(row)
+
+    for field_key, aliases in FIELD_MATRIX_FIELDS:
+        row = {"FieldKey": field_key}
+        statuses: Dict[str, Optional[str]] = {doc: None for doc in FIELD_MATRIX_DOC_TYPES}
+        value_cache: Dict[str, Tuple[str, bool]] = {}
+        actual_to_display: Dict[str, str] = {}
+
+        for display_doc in FIELD_MATRIX_DOC_TYPES:
+            actual_doc_type = FIELD_MATRIX_DOC_TYPE_MAP.get(display_doc, display_doc)
+            value = ""
+            present = False
+            if actual_doc_type:
+                value, present = _get_field_value(actual_doc_type, aliases)
+                value_cache[actual_doc_type] = (value, present)
+                actual_to_display[actual_doc_type] = display_doc
+            row[display_doc] = value or ""
+
+        for rule in FIELD_COMPARISON_RULES.get(field_key, []):
+            anchor_value, anchor_present = value_cache.get(rule.anchor_doc, ("", False))
+            anchor_display = actual_to_display.get(rule.anchor_doc)
+            if anchor_display:
+                statuses[anchor_display] = _merge_status(statuses[anchor_display], "anchor")
+                row[anchor_display] = anchor_value or ""
+            for target_doc in rule.target_docs:
+                target_value, target_present = value_cache.get(target_doc, ("", False))
+                target_display = actual_to_display.get(target_doc)
+                if not target_display:
+                    continue
+                if not target_present or target_value == "":
+                    status = "missing"
+                    row[target_display] = ""
+                elif anchor_present and target_value == anchor_value:
+                    status = "match"
+                    row[target_display] = target_value
+                elif not anchor_present:
+                    status = "missing"
+                    row[target_display] = target_value
+                else:
+                    status = "mismatch"
+                    row[target_display] = _diff_against_anchor(anchor_value, target_value)
+                statuses[target_display] = _merge_status(statuses[target_display], status)
+
+        row["statuses"] = statuses
+        rows.append(row)
+
+    return {"documents": FIELD_MATRIX_DOC_TYPES, "rows": rows}
+
+
 async def fetch_latest_fields(session: AsyncSession, batch_id: uuid.UUID) -> Dict[uuid.UUID, Dict[str, FilledField]]:
     stmt = (
         select(FilledField)
@@ -1899,6 +2038,15 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
             severity=ValidationSeverity.OK,
             message="Document field matrix snapshot",
             refs=[field_matrix],
+        )
+    )
+    field_matrix_diff = _build_field_matrix_diff_snapshot(documents, fields_by_doc)
+    validations.append(
+        ValidationMessage(
+            rule_id="document_matrix_diff",
+            severity=ValidationSeverity.OK,
+            message="Document field matrix diff snapshot",
+            refs=[field_matrix_diff],
         )
     )
 

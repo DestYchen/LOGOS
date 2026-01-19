@@ -392,6 +392,7 @@ async def get_batch_details(
     report_json: Optional[str] = None
 
     report_field_matrix: Optional[Dict[str, Any]] = None
+    report_field_matrix_diff: Optional[Dict[str, Any]] = None
     report_documents: List[Dict[str, Any]] = []
 
     report_validations: List[Dict[str, Any]] = []
@@ -409,6 +410,7 @@ async def get_batch_details(
         report_json = json.dumps(report_payload, indent=2, ensure_ascii=False)
 
         report_field_matrix, report_documents, report_validations = reports.build_report_tables(report_payload)
+        report_field_matrix_diff = reports.extract_document_matrix_diff(report_payload)
 
         report_available = True
 
@@ -469,6 +471,7 @@ async def get_batch_details(
                 "available": report_available,
 
                 "field_matrix": report_field_matrix,
+                "field_matrix_diff": report_field_matrix_diff,
 
                 "documents": report_documents,
 

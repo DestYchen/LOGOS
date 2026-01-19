@@ -1,0 +1,20 @@
+{
+  "doc_type": "BILL_OF_LANDING",
+  "bill_of_landing_number": "Look for header label \"BILL OF LADING No.\" or \"SEA WAYBILL No.\"/\"B/L No.\". Keep the number exactly as printed (letters/digits/spaces) and add it to bill_of_landing_number.",
+  "bill_of_landing_date": "Find the issue date by labels \"PLACE AND DATE OF ISSUE\", \"ISSUE DATE\", sometimes \"SHIPPED ON BOARD DATE\". If multiple dates exist, prefer \"ISSUE DATE/PLACE AND DATE OF ISSUE\". Add the date to bill_of_landing_date.",
+  "exporter": "Take the value from the \"SHIPPER\" block. Keep the full name (and address if present) as one line without abbreviations. Add to exporter.",
+  "importer": "Take the value from the \"CONSIGNEE\" block. Keep the full name (and address if present) as one line. Add to importer.",
+  "destination": "Extract destination by labels \"PORT OF DISCHARGE\" or \"PLACE OF DELIVERY\". If both are present, prefer \"PORT OF DISCHARGE\". Add to destination.",
+  "vessel": "Find the \"VESSEL AND VOYAGE NO.\" line (may include vessel name and voyage number, e.g., \"MSC ISABELLA - GT538W\"). Keep the full line and add to vessel.",
+  "container_no": "Extract container number(s) in format 4 letters + 7 digits (e.g., BMOU9288991). If multiple containers are listed, join with \"; \". Add to container_no.",
+  "linear_seal": "Extract linear seal number(s) by labels \"Seal Number\"/\"SEAL NO.\" near the container. If multiple, join with \"; \". Add to linear_seal.",
+  "veterinary_seal": "Look for explicit veterinary seal labels (\"Veterinary seal\", \"Health seal\"). Do not confuse with \"Seal Number\" (linear seal) or \"VET.CERT.\" (vet certificate number). If no explicit vet seal is shown, leave empty. Add the value to veterinary_seal.",
+  "packages": "Extract number of packages by labels \"No. of packages\", \"Case(s)\", \"Carton(s)\", \"Packages\". If \"Total Items\" is shown, use the package count for the cargo, not the number of containers. Add to packages.",
+  "net_weight": "Extract net weight by \"N.W.\" or \"NET WEIGHT\". Keep the number with unit as in the document (e.g., \"22,687.500 KGS\") and add to net_weight.",
+  "gross_weight": "Extract gross weight by \"GROSS WEIGHT\"/\"GROSS CARGO WEIGHT\". If variants exist (e.g., with or without pallets), choose the general \"Gross weight\" without qualifiers. Add to gross_weight.",
+  "country_of_origin": "If \"Country of origin\" is explicitly shown, extract the country and add to country_of_origin. If no explicit label, leave empty (do not infer from shipper or loading port).",
+  "name_product": "Take the commercial name from \"Description of Packages and Goods\" (e.g., \"FROZEN ATLANTIC SALMON FILLETS\"). Keep text without the Latin species name (put that in latin_name). Add to name_product.",
+  "latin_name": "If a Latin species name appears in parentheses (e.g., \"SALMO SALAR\", \"OCTOPUS VULGARIS\"), extract it and add to latin_name. If not, leave empty.",
+  "commodity_code": "If \"HS CODE\"/\"Tariff code\" is shown, extract the numeric code (e.g., \"0304.81\") exactly as in the document and add to commodity_code. If no code, leave empty.",
+  "size_product": "If size/grade is present in the description (e.g., \"3-4 LB\", \"80/120\"), extract and add to size_product. If not shown, leave empty."
+}

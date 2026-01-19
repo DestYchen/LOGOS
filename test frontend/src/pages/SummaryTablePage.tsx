@@ -1,5 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -133,6 +133,31 @@ const PRODUCT_FIELD_LABELS: Record<string, string> = {
   currency: "Валюта",
 };
 
+const FIELD_LABELS_RU: Record<string, string> = {
+  proforma_date: "Дата проформы",
+  proforma_no: "Номер проформы",
+  invoice_date: "Дата инвойса",
+  invoice_no: "Номер инвойса",
+  country_of_origin: "Страна происхождения",
+  producer: "Производитель",
+  buyer: "Покупатель",
+  seller: "Продавец",
+  exporter: "Экспортер",
+  importer: "Импортер",
+  incoterms: "Инкотермс",
+  terms_of_payment: "Условия оплаты",
+  bank_details: "Банковские реквизиты",
+  total_price: "Сумма",
+  destination: "Пункт назначения",
+  vessel: "Судно",
+  container_no: "Номер контейнера",
+  veterinary_seal: "Ветеринарная пломба",
+  linear_seal: "Линейная пломба",
+  veterinary_certificate_no: "Номер ветеринарного сертификата",
+  veterinary_certificate_date: "Дата ветеринарного сертификата",
+  HS_code: "Код ТНВЭД",
+};
+
 
 const MATRIX_STATUS_CLASSES: Record<string, string> = {
   anchor: "bg-sky-100",
@@ -222,6 +247,8 @@ const MIN_FRAME_SIZE = 1;
 const PREVIEW_PADDING = 6;
 const MATRIX_STICKY_GAP = 24;
 const MATRIX_STICKY_BOTTOM_GAP = 0;
+const DIFF_TAG_OPEN = "{redacted}";
+const DIFF_TAG_CLOSE = "{/redacted}";
 
 function toActualDocType(docType: string): string {
   return FIELD_MATRIX_DOC_TYPE_MAP[docType] ?? docType;
@@ -320,6 +347,34 @@ function ensureBBox(input: unknown): RawBBox | null {
     }
   }
   return null;
+}
+
+function splitDiffSegments(value: string): Array<{ text: string; isDiff: boolean }> {
+  const segments: Array<{ text: string; isDiff: boolean }> = [];
+  let remaining = value;
+  while (remaining.length > 0) {
+    const openIndex = remaining.indexOf(DIFF_TAG_OPEN);
+    if (openIndex === -1) {
+      segments.push({ text: remaining, isDiff: false });
+      break;
+    }
+    if (openIndex > 0) {
+      segments.push({ text: remaining.slice(0, openIndex), isDiff: false });
+    }
+    remaining = remaining.slice(openIndex + DIFF_TAG_OPEN.length);
+    const closeIndex = remaining.indexOf(DIFF_TAG_CLOSE);
+    if (closeIndex === -1) {
+      if (remaining.length > 0) {
+        segments.push({ text: remaining, isDiff: true });
+      }
+      break;
+    }
+    if (closeIndex > 0) {
+      segments.push({ text: remaining.slice(0, closeIndex), isDiff: true });
+    }
+    remaining = remaining.slice(closeIndex + DIFF_TAG_CLOSE.length);
+  }
+  return segments.filter((segment) => segment.text.length > 0);
 }
 
 function resolvePreviewSource(doc: DocumentPayload, field: FieldState) {
@@ -752,11 +807,14 @@ function SummaryTablePage() {
   const [message, setMessage] = useState<string | null>(null);
   const [matrixPopover, setMatrixPopover] = useState<MatrixPopoverState | null>(null);
   const [saving, setSaving] = useState(false);
+  const [diffMode, setDiffMode] = useState(false);
   const [previewEnabled, setPreviewEnabled] = useState(false);
   const [previewHover, setPreviewHover] = useState<MatrixPreviewTarget | null>(null);
   const [previewSelected, setPreviewSelected] = useState<MatrixPreviewTarget | null>(null);
   const [showPreviewBoxes, setShowPreviewBoxes] = useState(true);
   const matrixBodyRef = useRef<HTMLDivElement | null>(null);
+  const matrixTableScrollRef = useRef<HTMLDivElement | null>(null);
+  const matrixTableRef = useRef<HTMLTableElement | null>(null);
   const previewStickyRef = useRef<HTMLDivElement | null>(null);
   const [previewStyle, setPreviewStyle] = useState<CSSProperties>({ top: "0px" });
   const [previewSlices, setPreviewSlices] = useState<Record<string, PreviewSlice>>({});
@@ -968,6 +1026,20 @@ function SummaryTablePage() {
     [buildPopoverState, getCellAnchor, matrixPopover],
   );
 
+  const handleMatrixScroll = useCallback((direction: "left" | "right") => {
+    const container = matrixTableRef.current?.parentElement ?? matrixTableScrollRef.current;
+    if (!container) {
+      return;
+    }
+    const maxScroll = Math.max(0, container.scrollWidth - container.clientWidth);
+    const targetLeft = direction === "left" ? 0 : maxScroll;
+    if (typeof container.scrollTo === "function") {
+      container.scrollTo({ left: targetLeft, behavior: "smooth" });
+    } else {
+      container.scrollLeft = targetLeft;
+    }
+  }, []);
+
   const presentDocTypes = useMemo(() => {
     const set = new Set<string>();
     presentDocInfo.forEach((_, actualType) => {
@@ -977,68 +1049,87 @@ function SummaryTablePage() {
     return set;
   }, [presentDocInfo]);
 
-  const fieldMatrix = useMemo(() => {
-    const matrix = batch?.report?.field_matrix;
-    if (!matrix || typeof matrix !== "object") {
-      return null;
-    }
-    const matrixData = matrix as Record<string, unknown>;
-    const documentsRaw = Array.isArray(matrixData.documents) ? matrixData.documents : [];
-    const docHeaders = documentsRaw
-      .map((entry) => (typeof entry === "string" && entry.trim().length > 0 ? entry : null))
-      .filter((entry): entry is string => entry !== null);
-    if (docHeaders.length === 0) {
-      return null;
-    }
-    const filteredDocHeaders = docHeaders.filter((doc) => {
-      const displayDoc = toDisplayDocType(doc);
-      const actualDoc = toActualDocType(doc);
-      return (
-        presentDocTypes.has(doc) ||
-        presentDocTypes.has(displayDoc) ||
-        presentDocTypes.has(actualDoc)
-      );
-    });
-    if (filteredDocHeaders.length === 0) {
-      return null;
-    }
-    const rowsRaw = Array.isArray(matrixData.rows) ? matrixData.rows : [];
-    const rows: FieldMatrixRowView[] = rowsRaw
-      .map((entry) => {
-        if (!entry || typeof entry !== "object") {
-          return null;
-        }
-        const data = entry as Record<string, unknown>;
-        const fieldKeyRaw = data["FieldKey"];
-        if (typeof fieldKeyRaw !== "string" || fieldKeyRaw.trim().length === 0) {
-          return null;
-        }
-        const statusesRaw = data["statuses"];
-        const statuses =
-          statusesRaw && typeof statusesRaw === "object" ? (statusesRaw as Record<string, unknown>) : {};
-        const cells: Record<string, FieldMatrixCell> = {};
-        filteredDocHeaders.forEach((doc) => {
-          const value = normalizeText(data[doc]);
-          const rawStatus = statuses[doc];
-          cells[doc] = {
-            value,
-            status: typeof rawStatus === "string" ? rawStatus : null,
+  const buildFieldMatrixView = useCallback(
+    (matrix: unknown) => {
+      if (!matrix || typeof matrix !== "object") {
+        return null;
+      }
+      const matrixData = matrix as Record<string, unknown>;
+      const documentsRaw = Array.isArray(matrixData.documents) ? matrixData.documents : [];
+      const docHeaders = documentsRaw
+        .map((entry) => (typeof entry === "string" && entry.trim().length > 0 ? entry : null))
+        .filter((entry): entry is string => entry !== null);
+      if (docHeaders.length === 0) {
+        return null;
+      }
+      const filteredDocHeaders = docHeaders.filter((doc) => {
+        const displayDoc = toDisplayDocType(doc);
+        const actualDoc = toActualDocType(doc);
+        return (
+          presentDocTypes.has(doc) ||
+          presentDocTypes.has(displayDoc) ||
+          presentDocTypes.has(actualDoc)
+        );
+      });
+      if (filteredDocHeaders.length === 0) {
+        return null;
+      }
+      const rowsRaw = Array.isArray(matrixData.rows) ? matrixData.rows : [];
+      const rows: FieldMatrixRowView[] = rowsRaw
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") {
+            return null;
+          }
+          const data = entry as Record<string, unknown>;
+          const fieldKeyRaw = data["FieldKey"];
+          if (typeof fieldKeyRaw !== "string" || fieldKeyRaw.trim().length === 0) {
+            return null;
+          }
+          const statusesRaw = data["statuses"];
+          const statuses =
+            statusesRaw && typeof statusesRaw === "object" ? (statusesRaw as Record<string, unknown>) : {};
+          const cells: Record<string, FieldMatrixCell> = {};
+          filteredDocHeaders.forEach((doc) => {
+            const value = normalizeText(data[doc]);
+            const rawStatus = statuses[doc];
+            cells[doc] = {
+              value,
+              status: typeof rawStatus === "string" ? rawStatus : null,
+            };
+          });
+          return {
+            fieldKey: fieldKeyRaw,
+            cells,
           };
-        });
-        return {
-          fieldKey: fieldKeyRaw,
-          cells,
-        };
-      })
-      .filter((row): row is FieldMatrixRowView => row !== null);
-    if (rows.length === 0) {
-      return null;
+        })
+        .filter((row): row is FieldMatrixRowView => row !== null);
+      if (rows.length === 0) {
+        return null;
+      }
+      return {
+        documents: filteredDocHeaders,
+        rows,
+      };
+    },
+    [presentDocTypes],
+  );
+
+  const fieldMatrix = useMemo(
+    () => buildFieldMatrixView(batch?.report?.field_matrix),
+    [batch, buildFieldMatrixView],
+  );
+
+  const fieldMatrixDiff = useMemo(
+    () => buildFieldMatrixView(batch?.report?.field_matrix_diff),
+    [batch, buildFieldMatrixView],
+  );
+  const activeMatrix = diffMode && fieldMatrixDiff ? fieldMatrixDiff : fieldMatrix;
+
+  useEffect(() => {
+    if (!fieldMatrixDiff && diffMode) {
+      setDiffMode(false);
     }
-    return {
-      documents: filteredDocHeaders,
-      rows,
-    };
-  }, [batch, presentDocTypes]);
+  }, [fieldMatrixDiff, diffMode]);
 
   const docPresence: DocPresenceItem[] = useMemo(() => {
     if (!batch) {
@@ -1435,6 +1526,22 @@ function SummaryTablePage() {
           const { previewUrl, frameStyle, imageStyle, confidenceValue } = snapshot;
           const value = matrixPopover.value ?? "";
           const showTextarea = value.length > 80;
+          const diffValue = (() => {
+            if (!fieldMatrixDiff) {
+              return null;
+            }
+            const docDisplay = toDisplayDocType(matrixPopover.doc.doc_type);
+            const row = fieldMatrixDiff.rows.find((item) => item.fieldKey === matrixPopover.field.field_key);
+            const cell = row?.cells[docDisplay];
+            if (!cell || cell.value == null) {
+              return null;
+            }
+            if (typeof cell.value === "string") {
+              return cell.value.replace(/\[missing\]/g, "");
+            }
+            return String(cell.value);
+          })();
+          const diffSegments = diffValue ? splitDiffSegments(diffValue) : null;
           return createPortal(
             <div
               className={cn("fixed z-50", isPopoverEditing ? "pointer-events-auto" : "pointer-events-none")}
@@ -1478,6 +1585,25 @@ function SummaryTablePage() {
                     ) : (
                       <p className="text-sm font-medium break-words">{value.trim() ? value : "-"}</p>
                     )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Различие с якорным полем</p>
+                    <p className="text-sm font-medium break-words">
+                      {diffSegments
+                        ? diffSegments.map((segment, index) => (
+                            <span
+                              key={`diff-${matrixPopover.field.field_key}-${index}`}
+                              className={
+                                segment.isDiff
+                                  ? "rounded-sm bg-rose-100 px-0.5 font-semibold text-rose-700"
+                                  : undefined
+                              }
+                            >
+                              {segment.text}
+                            </span>
+                          ))
+                        : "—"}
+                    </p>
                   </div>
                   <p className="text-xs text-muted-foreground">Уверенность: {confidenceValue ?? "-"}</p>
                   {previewUrl ? (
@@ -1586,18 +1712,47 @@ function SummaryTablePage() {
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>Матрица полей</CardTitle>
           {fieldMatrix ? (
-            <Button
-              variant={previewEnabled ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => setPreviewEnabled((prev) => !prev)}
-              aria-pressed={previewEnabled}
-            >
-              Предпросмотр документа
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleMatrixScroll("left")}
+                aria-label="Прокрутить таблицу влево"
+                disabled={!activeMatrix}
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleMatrixScroll("right")}
+                aria-label="Прокрутить таблицу вправо"
+                disabled={!activeMatrix}
+              >
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+              <Button
+                variant={diffMode ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setDiffMode((prev) => !prev)}
+                aria-pressed={diffMode}
+                disabled={!fieldMatrixDiff}
+              >
+                Показать различия
+              </Button>
+              <Button
+                variant={previewEnabled ? "secondary" : "outline"}
+                size="sm"
+                onClick={() => setPreviewEnabled((prev) => !prev)}
+                aria-pressed={previewEnabled}
+              >
+                Предпросмотр документа
+              </Button>
+            </div>
           ) : null}
         </CardHeader>
         <CardContent className="space-y-4">
-          {!fieldMatrix ? (
+          {!activeMatrix ? (
             <Alert variant="info">Для пакета пока нет матрицы полей.</Alert>
           ) : (
             <>
@@ -1613,24 +1768,33 @@ function SummaryTablePage() {
                 className={cn("flex flex-col gap-6", previewEnabled ? "lg:flex-row" : "")}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="overflow-x-auto">
-                    <Table>
+                  <div className="overflow-x-auto" ref={matrixTableScrollRef}>
+                    <Table ref={matrixTableRef}>
                       <TableHeader>
                         <TableRow>
                           <TableHead>Поле</TableHead>
-                          {fieldMatrix.documents.map((doc) => (
+                          {activeMatrix.documents.map((doc) => (
                             <TableHead key={doc}>{doc}</TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {fieldMatrix.rows.map((row) => (
+                        {activeMatrix.rows.map((row) => (
                           <TableRow key={row.fieldKey}>
-                            <TableCell className="font-medium">{row.fieldKey}</TableCell>
-                            {fieldMatrix.documents.map((doc) => {
+                            <TableCell className="font-medium">
+                              {FIELD_LABELS_RU[row.fieldKey] ?? row.fieldKey}
+                            </TableCell>
+                            {activeMatrix.documents.map((doc) => {
                               const cell = row.cells[doc];
                               const { docEntry, fieldState } = resolveDocField(doc, row.fieldKey);
                               const isInteractive = Boolean(docEntry && fieldState);
+                              const rawValue = cell?.value ?? "-";
+                              const cleanedValue =
+                                diffMode && typeof rawValue === "string"
+                                  ? rawValue.replace(/\[missing\]/g, "")
+                                  : rawValue;
+                              const displayValue =
+                                diffMode && typeof cleanedValue === "string" ? splitDiffSegments(cleanedValue) : null;
                               return (
                                 <TableCell
                                   key={`${row.fieldKey}-${doc}`}
@@ -1647,7 +1811,22 @@ function SummaryTablePage() {
                                     fieldState && docEntry && handleCellClick(event, docEntry, fieldState)
                                   }
                                 >
-                                  <span className="whitespace-pre-wrap break-words">{cell?.value ?? "-"}</span>
+                                  <span className="whitespace-pre-wrap break-words">
+                                    {displayValue
+                                      ? displayValue.map((segment, index) => (
+                                          <span
+                                            key={`${row.fieldKey}-${doc}-${index}`}
+                                            className={
+                                              segment.isDiff
+                                                ? "rounded-sm bg-rose-100 px-0.5 font-semibold text-rose-700"
+                                                : undefined
+                                            }
+                                          >
+                                            {segment.text}
+                                          </span>
+                                        ))
+                                      : cleanedValue}
+                                  </span>
                                 </TableCell>
                               );
                             })}
