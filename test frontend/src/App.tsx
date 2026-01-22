@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import AppShell from "./components/layout/AppShell";
 import { HistoryProvider } from "./contexts/history-context";
+import FeedbackPage from "./pages/FeedbackPage";
 import HistoryPage from "./pages/HistoryPage";
 import NewPacketPage from "./pages/NewPacketPage";
 import QueuePage from "./pages/QueuePage";
@@ -20,6 +21,7 @@ function App() {
           <Route path="/resolve/:batchId/:docIndex" element={<ResolvePage />} />
           <Route path="/table/:batchId" element={<SummaryTablePage />} />
           <Route path="/history" element={<HistoryPage />} />
+          <Route path="/feedback" element={<FeedbackPage />} />
           <Route path="*" element={<Navigate to="/new" replace />} />
         </Routes>
       </AppShell>

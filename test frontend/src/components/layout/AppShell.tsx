@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ChevronLeft, History, Upload, type LucideIcon } from "lucide-react";
+import { ChevronLeft, History, MessageSquare, Upload, type LucideIcon } from "lucide-react";
 
 import logomark from "../../assets/logo.png";
 import { useHistoryContext } from "../../contexts/history-context";
@@ -22,6 +22,7 @@ type NavItem = {
 const NAV_ITEMS: NavItem[] = [
   { to: "/new", label: "Новый пакет", icon: Upload },
   { to: "/history", label: "История", icon: History },
+  { to: "/feedback", label: "Обратная связь", icon: MessageSquare },
 ];
 
 function formatCompactStamp(value: string | null | undefined) {
@@ -67,6 +68,7 @@ function AppShell({ children }: AppShellProps) {
       return bDate - aDate;
     });
   }, [batches]);
+  const currentPath = `${location.pathname}${location.search}${location.hash}`;
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -118,7 +120,13 @@ function AppShell({ children }: AppShellProps) {
                     isActive ? "shadow-sm" : "bg-muted text-foreground hover:bg-muted/80",
                   )}
                 >
-                  <Link to={item.to} aria-label={item.label} title={item.label} aria-current={isActive ? "page" : undefined}>
+                  <Link
+                    to={item.to}
+                    state={item.to === "/feedback" ? { from: currentPath } : undefined}
+                    aria-label={item.label}
+                    title={item.label}
+                    aria-current={isActive ? "page" : undefined}
+                  >
                     <Icon className="h-5 w-5 shrink-0" />
                     {isCollapsed ? <span className="sr-only">{item.label}</span> : <span className="truncate">{item.label}</span>}
                   </Link>
@@ -170,13 +178,16 @@ function AppShell({ children }: AppShellProps) {
                   const isActive = location.pathname.includes(batch.id) || recentBatchId === batch.id;
                   const compactStamp = formatCompactStamp(batch.created_at);
                   const fullDate = formatPacketTimestamp(batch.created_at);
+                  const batchTitle = typeof batch.title === "string" ? batch.title.trim() : "";
+                  const displayTitle = batchTitle || fullDate;
+                  const tooltipTitle = batchTitle ? `${batchTitle} · ${fullDate}` : fullDate;
                   const statusText = statusLabel(mappedStatus);
                   return (
                     <li key={batch.id}>
                       <Link
                         to={target}
-                        aria-label={`Пакет ${fullDate}. Статус: ${statusText}`}
-                        title={`${fullDate} - ${statusText}`}
+                        aria-label={`Пакет ${displayTitle}. Статус: ${statusText}`}
+                        title={`${tooltipTitle} - ${statusText}`}
                         className={cn(
                           isCollapsed
                             ? "group flex h-12 w-12 items-center justify-center rounded-lg border border-transparent bg-background/70 text-[11px] font-semibold leading-tight text-foreground transition-colors hover:border-primary/40 hover:bg-primary/5"
@@ -185,7 +196,7 @@ function AppShell({ children }: AppShellProps) {
                         )}
                       >
                         <span className={cn("text-center", !isCollapsed && "truncate")}>
-                          {isCollapsed ? compactStamp : fullDate}
+                          {isCollapsed ? compactStamp : displayTitle}
                         </span>
                         <span className="sr-only">{statusText}</span>
                       </Link>

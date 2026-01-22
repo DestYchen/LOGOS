@@ -9,6 +9,8 @@ import { uploadDocuments } from "../lib/api";
 import { cn, safeRandomId } from "../lib/utils";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 import { Spinner } from "../components/ui/spinner";
 
 const MAX_FILE_SIZE_MB = 50;
@@ -50,6 +52,7 @@ function NewPacketPage() {
   const [dragActive, setDragActive] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [title, setTitle] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   const validFiles = useMemo(() => items.filter((item) => !item.error).map((item) => item.file), [items]);
@@ -120,7 +123,8 @@ function NewPacketPage() {
     }
     try {
       setUploading(true);
-      const response = await uploadDocuments(validFiles);
+      const trimmedTitle = title.trim();
+      const response = await uploadDocuments(validFiles, trimmedTitle || null);
       markAsRecent(response.batch_id);
       navigate(`/queue?batch=${response.batch_id}`, { replace: true });
     } catch (err) {
@@ -132,6 +136,19 @@ function NewPacketPage() {
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-8rem)] w-full max-w-4xl flex-col items-center justify-center gap-10">
+      <div className="w-full space-y-2">
+        <Label htmlFor="batch-title">Название пакета</Label>
+        <Input
+          id="batch-title"
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Например: Поставка февраль 2026"
+          maxLength={120}
+        />
+        <p className="text-xs text-muted-foreground">
+          Если оставить пустым, будет использоваться дата загрузки.
+        </p>
+      </div>
       <div
         onDrop={onDrop}
         onDragOver={onDragOver}

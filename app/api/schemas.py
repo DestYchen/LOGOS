@@ -11,6 +11,7 @@ from app.core.enums import BatchStatus, DocumentStatus, DocumentType
 
 class BatchCreateRequest(BaseModel):
     created_by: Optional[str] = Field(default=None, max_length=128)
+    title: Optional[str] = Field(default=None, max_length=120)
 
 
 class BatchCreateResponse(BaseModel):
@@ -35,6 +36,7 @@ class BatchSummary(BaseModel):
     created_at: datetime
     updated_at: datetime
     created_by: Optional[str]
+    title: Optional[str] = None
     documents: List[DocumentSummary]
 
 

@@ -3,10 +3,13 @@
 import asyncio
 import json
 import logging
+import re
 import shutil
 import uuid
+from pathlib import Path
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from collections import Counter
 
 from celery.app.base import Celery
 
@@ -55,6 +58,8 @@ _CONTRACT_PART_ORDER = [
     DocumentType.CONTRACT_2,
     DocumentType.CONTRACT_3,
 ]
+
+_TOKEN_ID_RE = re.compile(r"^p(\d+)_t(.+)$")
 
 
 @dataclass
@@ -210,6 +215,169 @@ def _build_contract_text(paths, document: Document, tokens: List[Dict[str, Any]]
     return "\n\n".join(parts)
 
 
+def _parse_preview_page(path: Path) -> Optional[int]:
+    stem = path.stem.lower()
+    if stem.startswith("page_"):
+        suffix = stem[5:]
+        if suffix.isdigit():
+            return int(suffix)
+    return None
+
+
+def _load_contract_previews(paths, document: Document) -> List[Tuple[int, Path]]:
+    preview_dir = paths.preview / str(document.id)
+    if not preview_dir.exists():
+        return []
+    items: List[Tuple[Optional[int], Path]] = []
+    for preview in preview_dir.iterdir():
+        if not preview.is_file() or preview.suffix.lower() != ".png":
+            continue
+        items.append((_parse_preview_page(preview), preview))
+    items.sort(key=lambda item: (item[0] is None, item[0] or 0, item[1].name))
+    normalized: List[Tuple[int, Path]] = []
+    for index, (page_number, preview) in enumerate(items, start=1):
+        normalized.append((page_number if page_number else index, preview))
+    return normalized
+
+
+def _token_page_number(token: Dict[str, Any]) -> int:
+    raw = token.get("page", 1)
+    try:
+        page = int(raw)
+    except (TypeError, ValueError):
+        page = 1
+    return page if page > 0 else 1
+
+
+def _shift_token_id(token_id: Optional[str], new_page: int) -> Optional[str]:
+    if not token_id:
+        return token_id
+    match = _TOKEN_ID_RE.match(str(token_id))
+    if not match:
+        return token_id
+    try:
+        page_index = max(new_page - 1, 0)
+    except Exception:
+        page_index = 0
+    suffix = match.group(2)
+    return f"p{page_index}_t{suffix}"
+
+
+def _build_token_page_map(tokens: List[Dict[str, Any]]) -> Dict[str, int]:
+    token_page_map: Dict[str, int] = {}
+    for token in tokens:
+        token_id = token.get("id")
+        if token_id is None:
+            continue
+        token_page_map[str(token_id)] = _token_page_number(token)
+    return token_page_map
+
+
+def _parse_token_ref_page(token_ref: Any) -> Optional[int]:
+    if token_ref is None:
+        return None
+    ref = str(token_ref)
+    if not ref:
+        return None
+    match = _TOKEN_ID_RE.match(ref)
+    if not match:
+        return None
+    try:
+        page_index = int(match.group(1))
+    except (TypeError, ValueError):
+        return None
+    if page_index < 0:
+        return None
+    return page_index + 1
+
+
+def _derive_page_from_refs(
+    token_refs: Any,
+    token_page_map: Dict[str, int],
+    tokens: List[Dict[str, Any]],
+) -> Optional[int]:
+    if not token_refs:
+        return None
+    if not isinstance(token_refs, list):
+        token_refs = [token_refs]
+
+    pages: List[int] = []
+    for ref in token_refs:
+        ref_id = "" if ref is None else str(ref)
+        if not ref_id:
+            continue
+        mapped = token_page_map.get(ref_id)
+        if mapped is not None:
+            pages.append(mapped)
+            continue
+        try:
+            idx = int(ref_id)
+        except (TypeError, ValueError):
+            idx = None
+        if idx is not None and 0 <= idx < len(tokens):
+            pages.append(_token_page_number(tokens[idx]))
+            continue
+        parsed = _parse_token_ref_page(ref_id)
+        if parsed is not None:
+            pages.append(parsed)
+
+    if not pages:
+        return None
+    counts = Counter(pages)
+    most_common = counts.most_common()
+    if not most_common:
+        return None
+    top_count = most_common[0][1]
+    candidates = [page for page, count in most_common if count == top_count]
+    return min(candidates)
+
+
+def _sync_field_pages(
+    fields: Dict[str, Dict[str, Any]],
+    tokens: List[Dict[str, Any]],
+    *,
+    doc_id: Optional[uuid.UUID] = None,
+) -> None:
+    if not fields or not tokens:
+        return
+    token_page_map = _build_token_page_map(tokens)
+    if not token_page_map:
+        return
+    for key, payload in fields.items():
+        token_refs = payload.get("token_refs")
+        derived = _derive_page_from_refs(token_refs, token_page_map, tokens)
+        if derived is None:
+            continue
+        current = payload.get("page")
+        try:
+            current_page = int(current)
+        except (TypeError, ValueError):
+            current_page = None
+        if current_page != derived:
+            payload["page"] = derived
+            logger.debug(
+                "Adjusted field page from %s to %s for %s (doc=%s)",
+                current_page,
+                derived,
+                key,
+                doc_id,
+            )
+
+
+def _contract_page_count(
+    document: Document,
+    tokens: List[Dict[str, Any]],
+    previews: List[Tuple[int, Path]],
+) -> int:
+    if tokens:
+        return max(_token_page_number(token) for token in tokens)
+    if document.pages and document.pages > 0:
+        return document.pages
+    if previews:
+        return max(page for page, _ in previews)
+    return 1
+
+
 def _cleanup_document_assets(paths, document: Document) -> None:
     raw_file = paths.raw / document.filename
     try:
@@ -256,20 +424,29 @@ async def _merge_contract_parts(session, batch: Batch, paths) -> None:
     ordered_parts = [parts_by_type[doc_type][0] for doc_type in _CONTRACT_PART_ORDER]
     combined_tokens: List[Dict[str, Any]] = []
     combined_texts: List[str] = []
+    part_previews: List[List[Tuple[int, Path]]] = []
+    part_page_counts: List[int] = []
     page_offset = 0
 
     for document in ordered_parts:
         tokens = _load_contract_tokens(paths, document)
+        previews = _load_contract_previews(paths, document)
+        part_page_count = _contract_page_count(document, tokens, previews)
+        part_previews.append(previews)
+        part_page_counts.append(part_page_count)
         part_text = _build_contract_text(paths, document, tokens)
         if part_text:
             combined_texts.append(part_text)
         if tokens:
-            max_page = max(int(token.get("page", 1)) for token in tokens)
             for token in tokens:
                 new_token = dict(token)
-                new_token["page"] = int(token.get("page", 1)) + page_offset
+                new_page = _token_page_number(token) + page_offset
+                new_token["page"] = new_page
+                shifted_id = _shift_token_id(token.get("id"), new_page)
+                if shifted_id is not None:
+                    new_token["id"] = shifted_id
                 combined_tokens.append(new_token)
-            page_offset += max_page
+        page_offset += part_page_count
 
     merged_text = "\n\n".join(text for text in combined_texts if text.strip())
     merged_filename = unique_filename(paths.raw, "contract_merged.txt")
@@ -294,7 +471,18 @@ async def _merge_contract_parts(session, batch: Batch, paths) -> None:
         json.dump({"doc_id": str(merged_doc.id), "tokens": combined_tokens}, handle, indent=2)
     merged_doc.ocr_path = str(ocr_file.relative_to(paths.base))
 
-    # TODO: add preview aggregation if needed for merged contract.
+    merged_preview_dir = paths.preview_for(str(merged_doc.id))
+    page_offset = 0
+    for index, document in enumerate(ordered_parts):
+        previews = part_previews[index]
+        for page_number, preview in previews:
+            target_page = page_offset + page_number
+            target_path = merged_preview_dir / f"page_{target_page}.png"
+            try:
+                shutil.copy2(preview, target_path)
+            except Exception:
+                logger.debug("Failed to copy contract preview %s", preview, exc_info=True)
+        page_offset += part_page_counts[index]
 
     for document in ordered_parts:
         _cleanup_document_assets(paths, document)
@@ -570,6 +758,8 @@ async def _run_filler_step(session, batch_id: uuid.UUID, document: Document) -> 
         payload['confidence'] = score
         scored_fields[key] = payload
 
+    _sync_field_pages(scored_fields, tokens, doc_id=document.id)
+
     filled_file = derived / 'filled.json'
     with filled_file.open('w', encoding='utf-8') as handle:
         json.dump({'fields': scored_fields}, handle, indent=2)
@@ -727,6 +917,8 @@ async def fill_document_from_existing_ocr(
         score = confidence.score_field(key, payload, tokens, schema)
         payload["confidence"] = score
         scored_fields[key] = payload
+
+    _sync_field_pages(scored_fields, tokens, doc_id=document.id)
 
     derived = paths.derived_for(str(document.id))
     filled_file = derived / "filled.json"

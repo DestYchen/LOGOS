@@ -2,6 +2,7 @@ import {
   type ApiMessageResponse,
   type BatchDetailsResponse,
   type BatchesResponse,
+  type FeedbackResponse,
   type UploadResponse,
 } from "../types/api";
 import { API_BASE, API_JSON_BASE } from "./utils";
@@ -27,10 +28,40 @@ async function request<T>(input: RequestInfo, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-export async function uploadDocuments(files: File[]): Promise<UploadResponse> {
+export async function uploadDocuments(files: File[], title?: string | null): Promise<UploadResponse> {
   const formData = new FormData();
   files.forEach((file) => formData.append("files", file));
+  if (title) {
+    formData.append("title", title);
+  }
   return request<UploadResponse>(`${API_BASE}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export async function sendFeedback(
+  subject: string,
+  message: string,
+  files: File[],
+  context?: string | null,
+  feedbackType?: string | null,
+  contact?: string | null,
+): Promise<FeedbackResponse> {
+  const formData = new FormData();
+  formData.append("subject", subject);
+  formData.append("message", message);
+  if (feedbackType) {
+    formData.append("feedback_type", feedbackType);
+  }
+  if (contact) {
+    formData.append("contact", contact);
+  }
+  if (context) {
+    formData.append("context", context);
+  }
+  files.forEach((file) => formData.append("files", file));
+  return request<FeedbackResponse>(`${API_JSON_BASE}/feedback`, {
     method: "POST",
     body: formData,
   });

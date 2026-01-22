@@ -50,6 +50,7 @@ def _serialize_batch_summary(batch) -> BatchSummary:
         created_at=batch.created_at,
         updated_at=batch.updated_at,
         created_by=batch.created_by,
+        title=batch_service.extract_batch_title(batch),
         documents=documents,
     )
 
@@ -80,7 +81,9 @@ async def create_batch(
     payload: BatchCreateRequest | None = None,
     session: AsyncSession = Depends(get_db),
 ):
-    batch = await batch_service.create_batch(session, payload.created_by if payload else None)
+    created_by = payload.created_by if payload else None
+    title = payload.title if payload else None
+    batch = await batch_service.create_batch(session, created_by, title)
     return BatchCreateResponse(batch_id=batch.id)
 
 

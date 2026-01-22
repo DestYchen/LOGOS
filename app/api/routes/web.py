@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Request, UploadFile, status
 
 from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse, Response
 
@@ -42,6 +42,7 @@ from app.services import batches as batch_service
 
 from app.services import deletion
 
+from app.services import feedback as feedback_service
 from app.services import pipeline, reports, review
 
 
@@ -80,6 +81,21 @@ def _ensure_frontend_build() -> None:
             detail="frontend_not_built",
 
         )
+
+
+def _feedback_error_message(code: str) -> str:
+    mapping = {
+        "subject_required": "Укажите тему.",
+        "subject_too_long": "Тема слишком длинная.",
+        "message_required": "Опишите проблему.",
+        "message_too_long": "Описание слишком длинное.",
+        "feedback_type_invalid": "Выберите тип обращения.",
+        "contact_too_long": "Контакт слишком длинный.",
+        "too_many_files": "Можно добавить не более 5 изображений.",
+        "unsupported_file_type": "Поддерживаются только изображения JPG или PNG.",
+        "file_too_large": "Размер каждого изображения не должен превышать 5 МБ.",
+    }
+    return mapping.get(code, "Не удалось отправить обратную связь.")
 
 
 
@@ -153,6 +169,8 @@ async def handle_upload(
 
     files: List[UploadFile] = File(...),
 
+    title: Optional[str] = Form(None),
+
     session: AsyncSession = Depends(get_db),
 
 ) -> Dict[str, Any]:
@@ -163,7 +181,7 @@ async def handle_upload(
 
 
 
-    batch = await batch_service.create_batch(session, created_by="web")
+    batch = await batch_service.create_batch(session, created_by="web", title=title)
 
     saved_urls = await batch_service.save_documents(session, batch, files)
 
@@ -220,6 +238,8 @@ async def list_batches(session: AsyncSession = Depends(get_db)) -> Dict[str, Any
             "created_at": item.created_at.isoformat() if item.created_at else None,
 
             "created_at_display": item.created_at.strftime("%Y-%m-%d %H:%M") if item.created_at else None,
+
+            "title": batch_service.extract_batch_title(item),
 
             "can_delete": item.status
 
@@ -448,6 +468,8 @@ async def get_batch_details(
 
             "status": batch.status.value,
 
+            "title": batch_service.extract_batch_title(batch),
+
             "created_at": batch.created_at.isoformat() if batch.created_at else None,
 
             "updated_at": batch.updated_at.isoformat() if batch.updated_at else None,
@@ -502,6 +524,79 @@ async def get_batch_details(
     }
 
 
+
+
+
+@router.post("/api/feedback")
+
+async def submit_feedback(
+
+    request: Request,
+
+    subject: str = Form(...),
+
+    message: str = Form(...),
+
+    feedback_type: str = Form("problem"),
+
+    contact: Optional[str] = Form(None),
+
+    context: Optional[str] = Form(None),
+
+    files: List[UploadFile] = File(default=[]),
+
+) -> Dict[str, Any]:
+
+    meta = {
+
+        "user_agent": request.headers.get("user-agent"),
+
+        "remote_ip": request.client.host if request.client else None,
+
+    }
+
+    try:
+
+        ticket_id, ticket_dir, payload, saved_files = await feedback_service.store_feedback(
+
+            subject,
+
+            message,
+
+            feedback_type,
+
+            contact,
+
+            context,
+
+            files or [],
+
+            meta=meta,
+
+        )
+
+    except feedback_service.FeedbackValidationError as exc:
+
+        detail = _feedback_error_message(str(exc))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail) from exc
+
+
+
+    sent = await feedback_service.send_to_telegram(payload, saved_files)
+
+    if sent:
+
+        feedback_service.cleanup_feedback(ticket_dir)
+
+
+
+    return {
+
+        "status": "sent" if sent else "stored",
+
+        "ticket_id": ticket_id,
+
+    }
 
 
 
@@ -790,6 +885,8 @@ async def set_document_type(
     )
 
     await session.flush()
+    await session.commit()
+    await pipeline.run_validation_pipeline(document.batch_id)
 
     return {
 
@@ -846,6 +943,8 @@ async def refill_document(
     )
 
     await session.flush()
+    await session.commit()
+    await pipeline.run_validation_pipeline(document.batch_id)
 
     return {
 

@@ -1510,6 +1510,7 @@ function SummaryTablePage() {
     return <Alert variant="info">Данные отчёта недоступны.</Alert>;
   }
 
+  const batchTitle = typeof batch.title === "string" ? batch.title.trim() : "";
   const isPopoverEditing = matrixPopover?.mode === "edit";
   const matrixPopoverPortal =
     matrixPopover && typeof document !== "undefined"
@@ -1644,7 +1645,9 @@ function SummaryTablePage() {
     <div className="space-y-6">
       <header className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">Сводка по пакету</h1>
+          <h1 className="text-2xl font-semibold">
+            Сводка по пакету{batchTitle ? `: ${batchTitle}` : ""}
+          </h1>
           <p className="text-muted-foreground">
             Загружен {formatPacketTimestamp(batch.created_at)} · Статус: {statusLabel(mapBatchStatus(batch.status))} · Обновлён {formatDateTime(batch.updated_at)}
           </p>

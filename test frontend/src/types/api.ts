@@ -15,12 +15,18 @@ export type UploadResponse = {
   document_urls: string[];
 };
 
+export type FeedbackResponse = {
+  status: string;
+  ticket_id: string;
+};
+
 export type BatchSummary = {
   id: string;
   status: string;
   documents_count: number;
   created_at: string | null;
   created_at_display: string | null;
+  title?: string | null;
   can_delete: boolean;
 };
 
@@ -124,6 +130,7 @@ export type ReportSection = {
 export type BatchDetails = {
   id: string;
   status: string;
+  title?: string | null;
   created_at: string | null;
   updated_at: string | null;
   documents: DocumentPayload[];

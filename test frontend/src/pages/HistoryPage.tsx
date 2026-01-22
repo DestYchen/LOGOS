@@ -63,12 +63,14 @@ function HistoryPage() {
           {ordered.map((item) => {
             const route = deriveHistoryRoute(item.id, mapBatchStatus(item.status));
             const isMenuOpen = menuId === item.id;
+            const title = typeof item.title === "string" ? item.title.trim() : "";
+            const displayName = title || `Пакет ${formatPacketTimestamp(item.created_at)}`;
             return (
               <div key={item.id} className="relative flex flex-wrap items-center justify-between gap-4 py-3">
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <div className="min-w-0 flex-1">
                     <Link to={route} className="block truncate text-sm font-medium text-primary hover:underline">
-                      Пакет {formatPacketTimestamp(item.created_at)}
+                      {displayName}
                     </Link>
                   </div>
                   <StatusPill status={mapBatchStatus(item.status)} className="shrink-0" />

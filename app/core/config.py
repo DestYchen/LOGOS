@@ -39,6 +39,14 @@ class Settings(BaseSettings):
         default=False,
         description="Use built-in stubs for OCR/JSON filler instead of external services.",
     )
+    telegram_bot_token: str | None = Field(
+        default=None,
+        description="Telegram bot token for feedback forwarding.",
+    )
+    telegram_chat_id: str | None = Field(
+        default=None,
+        description="Telegram chat ID to receive feedback messages.",
+    )
 
     class Config:
         env_prefix = "SUPPLYHUB_"

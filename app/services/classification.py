@@ -10,6 +10,14 @@ from app.core.enums import DocumentType
 
 logger = logging.getLogger(__name__)
 _CLASSIFICATION_DEBUG = os.getenv("SUPPLYHUB_CLASSIFICATION_DEBUG", "").lower() in {"1", "true", "yes", "on"}
+_PROFORMA_PRIORITY_RE = re.compile(r"(?i)\bproforma[\s-]+invoice\b")
+_PACKING_LIST_PRIORITY_RE = re.compile(r"(?i)\bpacking\s+list\b")
+_PRICE_LIST_2_PRIORITY_RE = re.compile(r"(?i)\bprice\s+per\s+kg\b")
+_EXPORT_DECL_PRIORITY_RE = re.compile(
+    r"(?i)\bdocumento\s+unico\s+de\s+salida\b|\bservicio\s+nacional\s+de\s+aduanas\b|\bexport\s+declaration\b"
+)
+_VET_CERT_HEADER_RE = re.compile(r"(?i)\bveterinar\w*\s+certificate\b|ветеринар\w*\s+сертификат")
+_VET_CERT_NUMBER_RE = re.compile(r"(?i)\bcertificate\s*(?:no|number)\b|сертификат\s*№")
 
 
 # Keyword patterns per document type.
@@ -174,6 +182,35 @@ def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = 
 
     token_texts = [token.get("text", "").lower() for token in tokens if token.get("text", "")]
     full_text = " ".join(token_texts)
+    header_text = " ".join(token_texts[:80])
+    if _PROFORMA_PRIORITY_RE.search(full_text):
+        if _CLASSIFICATION_DEBUG:
+            logger.info("Classification override: file=%s doc_type=PROFORMA (proforma invoice)", file_name or "<unknown>")
+        return DocumentType.PROFORMA
+    if _PACKING_LIST_PRIORITY_RE.search(full_text):
+        if _CLASSIFICATION_DEBUG:
+            logger.info("Classification override: file=%s doc_type=PACKING_LIST (packing list)", file_name or "<unknown>")
+        return DocumentType.PACKING_LIST
+    if _EXPORT_DECL_PRIORITY_RE.search(full_text):
+        if _CLASSIFICATION_DEBUG:
+            logger.info(
+                "Classification override: file=%s doc_type=EXPORT_DECLARATION (declaration header)",
+                file_name or "<unknown>",
+            )
+        return DocumentType.EXPORT_DECLARATION
+    if _VET_CERT_HEADER_RE.search(header_text) or (
+        _VET_CERT_HEADER_RE.search(full_text) and _VET_CERT_NUMBER_RE.search(full_text)
+    ):
+        if _CLASSIFICATION_DEBUG:
+            logger.info(
+                "Classification override: file=%s doc_type=VETERINARY_CERTIFICATE (veterinary certificate)",
+                file_name or "<unknown>",
+            )
+        return DocumentType.VETERINARY_CERTIFICATE
+    if _PRICE_LIST_2_PRIORITY_RE.search(full_text):
+        if _CLASSIFICATION_DEBUG:
+            logger.info("Classification override: file=%s doc_type=PRICE_LIST_2 (price per kg)", file_name or "<unknown>")
+        return DocumentType.PRICE_LIST_2
 
     per_token_patterns: Dict[DocumentType, List[str]] = {}
     full_text_patterns: Dict[DocumentType, List[str]] = {}

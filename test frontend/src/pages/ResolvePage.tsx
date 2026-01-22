@@ -1621,6 +1621,8 @@ const goToDocument = (index: number) => {
 
 
 
+  const batchTitle = typeof batch.title === "string" ? batch.title.trim() : "";
+
   const totalDocs = documents.length;
 
   const canSubmit = batch.pending_total === 0 && !batch.awaiting_processing;
@@ -1635,7 +1637,9 @@ const goToDocument = (index: number) => {
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold">Документ — исправление ошибок</h1>
 
-          <p className="text-muted-foreground">Пакет {formatPacketTimestamp(batch.created_at)} · Статус пакета:</p>
+          <p className="text-muted-foreground">
+            Пакет {batchTitle || formatPacketTimestamp(batch.created_at)} · Статус пакета:
+          </p>
 
           <div className="mt-1">
             <StatusPill status={mapBatchStatus(batch.status)} />

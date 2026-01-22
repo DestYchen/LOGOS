@@ -20,6 +20,28 @@ import subprocess
 def _documents_with_fields():
     return selectinload(Batch.documents).selectinload(Document.fields)
 
+MAX_BATCH_TITLE_LENGTH = 120
+
+
+def _normalize_batch_title(title: Optional[str]) -> Optional[str]:
+    if not title:
+        return None
+    cleaned = title.strip()
+    if not cleaned:
+        return None
+    if len(cleaned) > MAX_BATCH_TITLE_LENGTH:
+        cleaned = cleaned[:MAX_BATCH_TITLE_LENGTH]
+    return cleaned
+
+
+def extract_batch_title(batch: Batch) -> Optional[str]:
+    meta = batch.meta if isinstance(batch.meta, dict) else {}
+    title = meta.get("title")
+    if isinstance(title, str):
+        cleaned = title.strip()
+        return cleaned or None
+    return None
+
 def _is_docx(path: Path, content_type: Optional[str]) -> bool:
     if path.suffix.lower() == ".docx":
         return True
@@ -97,9 +119,13 @@ def _split_pdf_file(source: Path, target_dir: Path, base_name: str) -> List[Path
         document.close()
 
 
-async def create_batch(session: AsyncSession, created_by: Optional[str]) -> Batch:
+async def create_batch(session: AsyncSession, created_by: Optional[str], title: Optional[str] = None) -> Batch:
     ensure_base_dir()
     batch = Batch(created_by=created_by)
+    normalized_title = _normalize_batch_title(title)
+    if normalized_title:
+        meta = batch.meta if isinstance(batch.meta, dict) else {}
+        batch.meta = {**meta, "title": normalized_title}
     session.add(batch)
     await session.flush()
     batch_paths = batch_dir(str(batch.id))

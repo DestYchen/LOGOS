@@ -15,6 +15,9 @@ RAW_DIR = "raw"
 DERIVED_DIR = "derived"
 PREVIEW_DIR = "preview"
 REPORT_DIR = "report"
+FEEDBACK_DIR = "feedback"
+FEEDBACK_PENDING_DIR = "pending"
+FEEDBACK_SENT_DIR = "sent"
 _FILENAME_SAFE = re.compile(r"[^A-Za-z0-9_.-]+")
 
 
@@ -58,10 +61,25 @@ class BatchPaths:
 def ensure_base_dir() -> None:
     _settings.base_dir.mkdir(parents=True, exist_ok=True)
     batches_root().mkdir(parents=True, exist_ok=True)
+    feedback_root().mkdir(parents=True, exist_ok=True)
+    feedback_pending_root().mkdir(parents=True, exist_ok=True)
+    feedback_sent_root().mkdir(parents=True, exist_ok=True)
 
 
 def batches_root() -> Path:
     return _settings.base_dir / "batches"
+
+
+def feedback_root() -> Path:
+    return _settings.base_dir / FEEDBACK_DIR
+
+
+def feedback_pending_root() -> Path:
+    return feedback_root() / FEEDBACK_PENDING_DIR
+
+
+def feedback_sent_root() -> Path:
+    return feedback_root() / FEEDBACK_SENT_DIR
 
 
 def batch_dir(batch_id: str) -> BatchPaths:
