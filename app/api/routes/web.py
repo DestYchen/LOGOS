@@ -3,6 +3,8 @@
 
 
 import asyncio
+import time
+from datetime import datetime, timezone
 
 import json
 
@@ -44,6 +46,7 @@ from app.services import deletion
 
 from app.services import feedback as feedback_service
 from app.services import pipeline, reports, review
+import fitz  # type: ignore import-not-found
 
 
 
@@ -191,7 +194,69 @@ async def handle_upload(
 
 
 
-    await pipeline.enqueue_batch_processing(batch.id)
+    return {
+
+        "status": "ok",
+
+        "batch_id": str(batch.id),
+
+        "documents": len(saved_urls),
+
+        "document_urls": saved_urls,
+
+    }
+
+
+
+
+@router.post("/api/batches/{batch_id}/upload")
+
+async def upload_batch_documents(
+
+    batch_id: uuid.UUID,
+
+    files: List[UploadFile] = File(...),
+
+    session: AsyncSession = Depends(get_db),
+
+) -> Dict[str, Any]:
+
+    batch = await batch_service.get_batch(session, batch_id)
+
+    if batch is None:
+
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="batch_not_found")
+
+
+
+    if batch.status in (BatchStatus.CANCEL_REQUESTED, BatchStatus.CANCELLED):
+
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="batch_cancelled")
+
+
+
+    if not files:
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="files_required")
+
+
+
+    saved_urls = await batch_service.save_documents(session, batch, files, update_status=False)
+
+    if not saved_urls:
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="upload_failed")
+
+    meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
+    meta["prep_complete"] = False
+    batch.meta = meta
+
+
+
+    await session.flush()
+
+    await session.commit()
+
 
     return {
 
@@ -205,6 +270,96 @@ async def handle_upload(
 
     }
 
+
+
+
+
+
+@router.post("/api/batches/{batch_id}/confirm-prep")
+
+async def confirm_batch_prep(
+
+    batch_id: uuid.UUID,
+
+    session: AsyncSession = Depends(get_db),
+
+) -> Dict[str, Any]:
+
+    batch = await batch_service.get_batch(session, batch_id)
+
+    if batch is None:
+
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="batch_not_found")
+
+
+
+    if _prep_complete(batch):
+
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="prep_locked")
+
+
+
+    if not batch.documents:
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="batch_empty")
+
+
+
+    meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
+
+    meta["prep_complete"] = True
+
+    if batch.status in (BatchStatus.NEW, BatchStatus.PREPARED):
+        run_meta = meta.get("processing_run")
+        if not isinstance(run_meta, dict) or run_meta.get("mode") != "initial_upload":
+            doc_ids = [
+                str(document.id)
+                for document in batch.documents
+                if document.doc_type not in _INTERNAL_DOC_TYPES
+            ]
+            meta["processing_run"] = {
+                "mode": "initial_upload",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "doc_ids": doc_ids,
+            }
+
+    batch.meta = meta
+
+
+
+    await session.flush()
+
+    await session.commit()
+
+
+
+    if batch.status in (BatchStatus.NEW, BatchStatus.PREPARED):
+
+        task_id = await pipeline.enqueue_batch_processing(batch.id)
+
+        kind = "process"
+
+    else:
+
+        task_id = await pipeline.enqueue_batch_delta_processing(batch.id)
+
+        kind = "process_delta"
+
+
+
+    return {
+
+        "status": "ok",
+
+        "message": "prep_confirmed",
+
+        "batch_id": str(batch.id),
+
+        "task_id": task_id,
+
+        "kind": kind,
+
+    }
 
 
 
@@ -400,6 +555,8 @@ async def get_batch_details(
                 "products": products_table,
 
                 "previews": previews,
+                "mime": document.mime,
+                "updated_at": document.updated_at.isoformat() if document.updated_at else None,
 
             }
 
@@ -454,7 +611,77 @@ async def get_batch_details(
 
     processing_warnings = [str(item) for item in warnings_raw] if isinstance(warnings_raw, list) else []
 
+    processing_run: Optional[Dict[str, Any]] = None
+    run_meta = processed_meta.get("processing_run") if isinstance(processed_meta, dict) else None
+    if isinstance(run_meta, dict) and run_meta.get("mode") == "initial_upload":
+        doc_ids_raw = run_meta.get("doc_ids")
+        doc_id_set = set()
+        if isinstance(doc_ids_raw, list):
+            doc_id_set = {str(item) for item in doc_ids_raw if item}
+        current_doc_ids = {
+            str(document.id)
+            for document in batch.documents
+            if document.doc_type not in _INTERNAL_DOC_TYPES
+        }
+        if not doc_id_set:
+            doc_id_set = current_doc_ids
+        else:
+            doc_id_set = doc_id_set & current_doc_ids
+        total = len(doc_id_set)
+        completed = 0
+        failed = 0
+        steps_total = total * 2
+        steps_completed = 0
+        steps_failed = 0
+        if total:
+            for document in batch.documents:
+                if document.doc_type in _INTERNAL_DOC_TYPES:
+                    continue
+                if str(document.id) not in doc_id_set:
+                    continue
+                ocr_failed = (
+                    document.status == DocumentStatus.FAILED
+                    and (not document.ocr_path or document.doc_type == DocumentType.UNKNOWN)
+                )
+                if document.status in (DocumentStatus.FILLED_AUTO, DocumentStatus.FILLED_REVIEWED, DocumentStatus.FAILED):
+                    completed += 1
+                    if document.status == DocumentStatus.FAILED:
+                        failed += 1
+                if ocr_failed:
+                    steps_completed += 2
+                    steps_failed += 2
+                    continue
+                ocr_done = bool(document.ocr_path) or document.status in (
+                    DocumentStatus.TEXT_READY,
+                    DocumentStatus.FILLED_AUTO,
+                    DocumentStatus.FILLED_REVIEWED,
+                )
+                if ocr_done:
+                    steps_completed += 1
+                filler_done = bool(document.filled_path) or document.status in (
+                    DocumentStatus.FILLED_AUTO,
+                    DocumentStatus.FILLED_REVIEWED,
+                )
+                if filler_done:
+                    steps_completed += 1
+                elif document.status == DocumentStatus.FAILED:
+                    steps_failed += 1
+        if steps_total:
+            steps_completed = min(steps_completed, steps_total)
+            steps_failed = min(steps_failed, steps_total)
+        processing_run = {
+            "mode": "initial_upload",
+            "started_at": run_meta.get("started_at"),
+            "doc_ids": list(doc_id_set),
+            "total": total,
+            "completed": completed,
+            "failed": failed,
+            "steps_total": steps_total,
+            "steps_completed": steps_completed,
+            "steps_failed": steps_failed,
+        }
 
+    prep_complete = _prep_complete(batch)
 
     can_complete = pending_total == 0 and not awaiting_processing
 
@@ -487,6 +714,9 @@ async def get_batch_details(
             "can_complete": can_complete,
 
             "processing_warnings": processing_warnings,
+
+            "prep_complete": prep_complete,
+            "processing_run": processing_run,
 
             "report": {
 
@@ -962,6 +1192,114 @@ async def refill_document(
 
 
 
+
+@router.post("/api/documents/{doc_id}/rotate")
+
+async def rotate_document(
+
+    doc_id: uuid.UUID,
+
+    payload: Dict[str, Any] = Body(...),
+
+    session: AsyncSession = Depends(get_db),
+
+) -> Dict[str, Any]:
+
+    document = await _load_document(session, doc_id)
+
+    if document is None:
+
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document_not_found")
+
+
+
+    _ensure_prep_open(document.batch)
+
+
+
+    degrees_raw = payload.get("degrees")
+
+    if degrees_raw is None:
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="degrees_required")
+
+    try:
+
+        degrees = int(degrees_raw)
+
+    except (TypeError, ValueError) as exc:
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="degrees_invalid") from exc
+
+    if degrees not in (-270, -180, -90, 90, 180, 270):
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="degrees_invalid")
+
+
+
+    paths = batch_dir(str(document.batch_id))
+
+    raw_file = paths.raw / document.filename
+
+    if not raw_file.exists():
+
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="raw_missing")
+
+    if not _is_pdf_document(document, raw_file):
+
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="pdf_required")
+
+
+
+    try:
+
+        _rotate_pdf(raw_file, degrees)
+
+    except Exception as exc:
+
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="rotate_failed") from exc
+
+
+
+    try:
+
+        batch_service._generate_pdf_preview(raw_file, paths.preview_for(str(document.id)))
+
+    except Exception:
+
+        pass
+
+
+
+    document.updated_at = datetime.utcnow()
+
+    await session.flush()
+
+    await session.commit()
+
+
+
+    cache_bust = int(time.time())
+
+    preview_url = f"/files/batches/{document.batch_id}/preview/{document.id}/page_1.png?v={cache_bust}"
+
+    return {
+
+        "status": "ok",
+
+        "message": "rotated",
+
+        "doc_id": str(document.id),
+
+        "degrees": degrees,
+
+        "preview_url": preview_url,
+
+    }
+
+
+
+
 @router.post("/api/documents/{doc_id}/delete")
 
 async def delete_document(
@@ -978,6 +1316,8 @@ async def delete_document(
 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document_not_found")
 
+
+    _ensure_prep_open(document.batch)
 
 
     import shutil as _shutil
@@ -1084,6 +1424,40 @@ async def download_batch_report(batch_id: uuid.UUID) -> StreamingResponse:
 
 
 
+
+
+
+
+def _prep_complete(batch: Any) -> bool:
+    meta = batch.meta if isinstance(batch.meta, dict) else {}
+    if "prep_complete" in meta:
+        return bool(meta.get("prep_complete"))
+    return batch.status not in (BatchStatus.NEW, BatchStatus.PREPARED)
+
+
+def _ensure_prep_open(batch: Any) -> None:
+    if _prep_complete(batch):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="prep_locked")
+
+
+def _is_pdf_document(document: Document, path: Path) -> bool:
+    if document.mime:
+        return document.mime.split(";", 1)[0].strip().lower() == "application/pdf"
+    return path.suffix.lower() == ".pdf"
+
+
+def _rotate_pdf(path: Path, degrees: int) -> None:
+    if degrees % 90 != 0:
+        raise ValueError("degrees must be multiple of 90")
+    doc = fitz.open(path)  # type: ignore[misc]
+    try:
+        for page in doc:
+            page.set_rotation((page.rotation + degrees) % 360)
+        temp_path = path.with_suffix(path.suffix + ".rotated")
+        doc.save(temp_path)
+        temp_path.replace(path)
+    finally:
+        doc.close()
 
 
 async def _load_document(session: AsyncSession, doc_id: uuid.UUID) -> Optional[Document]:

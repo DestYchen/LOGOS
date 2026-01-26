@@ -139,6 +139,13 @@ async def _is_cancelled(batch_id: uuid.UUID, status: BatchStatus) -> bool:
         return fresh.status in CANCELLATION_STATUSES
 
 
+def _prep_complete(batch: Batch) -> bool:
+    meta = batch.meta if isinstance(batch.meta, dict) else {}
+    if "prep_complete" in meta:
+        return bool(meta.get("prep_complete"))
+    return batch.status not in (BatchStatus.NEW, BatchStatus.PREPARED)
+
+
 def _celery() -> Celery:
     return celery_app
 
@@ -183,6 +190,12 @@ def _build_document_text(tokens: List[Dict[str, Any]], extraction: Optional[text
     if extraction and extraction.text not in parts:
         parts.append(extraction.text)
     return "\n\n".join(parts)
+
+
+def _progress_tracking_enabled(batch: Batch) -> bool:
+    meta = batch.meta if isinstance(batch.meta, dict) else {}
+    run_meta = meta.get("processing_run")
+    return isinstance(run_meta, dict) and run_meta.get("mode") == "initial_upload"
 
 
 def _is_contract_part(document: Document) -> bool:
@@ -465,6 +478,28 @@ async def _merge_contract_parts(session, batch: Batch, paths) -> None:
     session.add(merged_doc)
     await session.flush()
 
+    meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
+    run_meta = meta.get("processing_run")
+    if isinstance(run_meta, dict) and run_meta.get("mode") == "initial_upload":
+        doc_ids = run_meta.get("doc_ids")
+        if isinstance(doc_ids, list):
+            removed_ids = {str(doc.id) for doc in ordered_parts}
+            updated_ids: List[str] = []
+            seen: set[str] = set()
+            for doc_id in doc_ids:
+                doc_id_str = str(doc_id)
+                if doc_id_str in removed_ids or doc_id_str in seen:
+                    continue
+                updated_ids.append(doc_id_str)
+                seen.add(doc_id_str)
+            merged_id = str(merged_doc.id)
+            if merged_id not in seen:
+                updated_ids.append(merged_id)
+            run_meta = dict(run_meta)
+            run_meta["doc_ids"] = updated_ids
+            meta["processing_run"] = run_meta
+            batch.meta = meta
+
     derived = paths.derived_for(str(merged_doc.id))
     ocr_file = derived / "ocr.json"
     with ocr_file.open("w", encoding="utf-8") as handle:
@@ -503,9 +538,13 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
             if batch.status in CANCELLATION_STATUSES:
                 logger.info("Skipping processing for cancelled batch %s", batch_id)
                 return
+            if not _prep_complete(batch):
+                logger.info("Skipping processing for batch %s: prep not complete", batch_id)
+                return
             batch_paths = batch_dir(str(batch_id))
             batch_paths.ensure()
 
+            progress_enabled = _progress_tracking_enabled(batch)
             ocr_results: List[ProcessingResult] = []
             for document in list(batch.documents):
                 if batch.status in CANCELLATION_STATUSES:
@@ -513,6 +552,8 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
                 result = await _run_ocr_step(session, batch_id, batch, document)
                 if result is not None:
                     ocr_results.append(result)
+                if progress_enabled:
+                    await session.commit()
 
             await session.flush()
             if await _is_cancelled(batch_id, batch.status):
@@ -531,6 +572,8 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
                         continue
                     result = await _run_filler_step(session, batch_id, document)
                     filler_results.append(result)
+                    if progress_enabled:
+                        await session.commit()
 
             await session.flush()
             if await _is_cancelled(batch_id, batch.status):
@@ -585,6 +628,96 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
             raise
         except Exception:
             logger.exception("Automatic validation failed for batch %s", batch_id)
+
+
+async def run_batch_delta_pipeline(batch_id: uuid.UUID) -> None:
+    auto_validate = False
+    try:
+        async with get_session() as session:
+            batch = await batch_service.get_batch(session, batch_id)
+            if batch is None:
+                return
+            if batch.status in CANCELLATION_STATUSES:
+                logger.info("Skipping delta processing for cancelled batch %s", batch_id)
+                return
+            if not _prep_complete(batch):
+                logger.info("Skipping delta processing for batch %s: prep not complete", batch_id)
+                return
+            batch_paths = batch_dir(str(batch_id))
+            batch_paths.ensure()
+
+            new_documents = [doc for doc in list(batch.documents) if doc.status == DocumentStatus.NEW]
+            if not new_documents:
+                return
+
+            ocr_results: List[ProcessingResult] = []
+            for document in new_documents:
+                if batch.status in CANCELLATION_STATUSES:
+                    break
+                result = await _run_ocr_step(session, batch_id, batch, document)
+                if result is None:
+                    continue
+                if document.status == DocumentStatus.TEXT_READY and (
+                    document.doc_type in _CONTRACT_PART_TYPES or document.doc_type == DocumentType.CONTRACT
+                ):
+                    document.status = DocumentStatus.FAILED
+                    document.filled_path = None
+                    result = ProcessingResult(
+                        document=document,
+                        success=False,
+                        message=(
+                            f"Документ {document.filename} не обработан: "
+                            "добавление контрактов в готовый пакет не поддерживается."
+                        ),
+                    )
+                ocr_results.append(result)
+
+            await session.flush()
+            if await _is_cancelled(batch_id, batch.status):
+                return
+
+            filler_results: List[ProcessingResult] = []
+            for document in new_documents:
+                if batch.status in CANCELLATION_STATUSES:
+                    break
+                if document.status == DocumentStatus.TEXT_READY:
+                    result = await _run_filler_step(session, batch_id, document)
+                    filler_results.append(result)
+
+            await session.flush()
+            if await _is_cancelled(batch_id, batch.status):
+                return
+
+            results = ocr_results + filler_results
+            failures = [result for result in results if not result.success]
+            if failures:
+                meta = dict(batch.meta) if batch.meta else {}
+                warnings = list(meta.get("processing_warnings", []))
+                for failure in failures:
+                    message = failure.message or f"Документ {failure.document.filename} не обработан."
+                    if message not in warnings:
+                        warnings.append(message)
+                meta["processing_warnings"] = warnings
+                batch.meta = meta
+
+            if await _is_cancelled(batch_id, batch.status):
+                return
+
+            if any(doc.status == DocumentStatus.FILLED_AUTO for doc in new_documents):
+                auto_validate = True
+    except asyncio.CancelledError:
+        logger.info("Delta batch pipeline cancelled for %s", batch_id)
+        raise
+    finally:
+        await task_tracker.remove_task(batch_id, kind="process_delta")
+
+    if auto_validate:
+        try:
+            await run_validation_pipeline(batch_id)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Automatic validation failed for batch %s (delta)", batch_id)
 
 
 async def _run_ocr_step(session, batch_id: uuid.UUID, batch: Batch, document: Document) -> ProcessingResult | None:
@@ -976,6 +1109,19 @@ async def enqueue_batch_processing(batch_id: uuid.UUID) -> str:
         return await _start_local_task(batch_id, kind="process", runner=run_batch_pipeline)
     else:
         await task_tracker.record_task(batch_id, kind="process", transport="celery", task_id=result.id)
+        return result.id
+
+
+async def enqueue_batch_delta_processing(batch_id: uuid.UUID) -> str:
+    try:
+        result = _celery().send_task("supplyhub.process_batch_delta", args=[str(batch_id)])
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.warning("Celery unavailable, running batch delta %s locally", batch_id, exc_info=True)
+        return await _start_local_task(batch_id, kind="process_delta", runner=run_batch_delta_pipeline)
+    else:
+        await task_tracker.record_task(batch_id, kind="process_delta", transport="celery", task_id=result.id)
         return result.id
 
 

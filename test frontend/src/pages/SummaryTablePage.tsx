@@ -1,4 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import type { ChangeEvent } from "react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
@@ -12,7 +13,7 @@ import { Spinner } from "../components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/table";
 import { Textarea } from "../components/ui/textarea";
 import { useHistoryContext } from "../contexts/history-context";
-import { confirmField, fetchBatchDetails, updateField } from "../lib/api";
+import { confirmField, fetchBatchDetails, updateField, uploadDocumentsToBatch } from "../lib/api";
 import { cn, formatDateTime, mapBatchStatus, statusLabel } from "../lib/utils";
 import { formatPacketTimestamp } from "../lib/packet";
 import { DOCUMENT_PREVIEW_CALIBRATION } from "../lib/preview-calibration";
@@ -56,6 +57,7 @@ type DocPresenceItem = {
   present: boolean;
   filenames: string[];
   count: number;
+  processing: boolean;
 };
 
 type FieldMatrixCell = {
@@ -117,6 +119,29 @@ type MatrixPreviewRenderItem = {
 
 const EMPTY_DOC_ID = "00000000-0000-0000-0000-000000000000";
 const PREVIEW_CALIBRATION = DOCUMENT_PREVIEW_CALIBRATION;
+const ADD_MAX_FILE_SIZE_MB = 50;
+const ADD_MAX_FILE_SIZE = ADD_MAX_FILE_SIZE_MB * 1024 * 1024;
+const ADD_SUPPORTED_EXT = ["pdf", "doc", "docx", "xls", "xlsx", "txt", "png", "jpg", "jpeg"];
+
+function validateAddedFile(file: File, existing: File[]) {
+  const errors: string[] = [];
+  const ext = (file.name.split(".").pop() || "").toLowerCase();
+  if (!ADD_SUPPORTED_EXT.includes(ext)) {
+    errors.push("Неподдерживаемый формат");
+  }
+  if (file.size > ADD_MAX_FILE_SIZE) {
+    errors.push(`Размер больше ${ADD_MAX_FILE_SIZE_MB} МБ`);
+  }
+  const duplicate = existing.some((entry) => entry.name === file.name && entry.size === file.size);
+  if (duplicate) {
+    errors.push("Файл уже добавлен");
+  }
+  return errors;
+}
+
+function uploadMessageKey(batchId: string) {
+  return `batch-upload-message:${batchId}`;
+}
 
 const PRODUCT_FIELD_LABELS: Record<string, string> = {
   name_product: "Наименование",
@@ -805,6 +830,9 @@ function SummaryTablePage() {
   const [error, setError] = useState<Error | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [uploadMessage, setUploadMessage] = useState<string | null>(null);
+  const [addingDocs, setAddingDocs] = useState(false);
+  const addDocsInputRef = useRef<HTMLInputElement | null>(null);
   const [matrixPopover, setMatrixPopover] = useState<MatrixPopoverState | null>(null);
   const [saving, setSaving] = useState(false);
   const [diffMode, setDiffMode] = useState(false);
@@ -912,12 +940,91 @@ function SummaryTablePage() {
 
   const fetchBatch = useCallback(async () => {
     if (!batchId) {
-      return;
+      return null;
     }
     const response = await fetchBatchDetails(batchId);
     setBatch(response.batch);
     void refresh();
+    return response;
   }, [batchId, refresh]);
+
+  useEffect(() => {
+    setActionError(null);
+    setMessage(null);
+    if (!batchId || typeof window === "undefined") {
+      setUploadMessage(null);
+      return;
+    }
+    const stored = window.sessionStorage.getItem(uploadMessageKey(batchId));
+    setUploadMessage(stored);
+  }, [batchId]);
+
+  useEffect(() => {
+    if (!batchId || typeof window === "undefined") {
+      return;
+    }
+    if (!uploadMessage) {
+      window.sessionStorage.removeItem(uploadMessageKey(batchId));
+      return;
+    }
+    const timeoutId = window.setTimeout(() => {
+      setUploadMessage(null);
+      window.sessionStorage.removeItem(uploadMessageKey(batchId));
+    }, 5000);
+    return () => window.clearTimeout(timeoutId);
+  }, [batchId, uploadMessage]);
+
+  const handleAddDocuments = useCallback(
+    async (event: ChangeEvent<HTMLInputElement>) => {
+      if (!batchId) {
+        return;
+      }
+      const selected = Array.from(event.target.files || []);
+      event.target.value = "";
+      if (selected.length === 0) {
+        return;
+      }
+      const errors: string[] = [];
+      const validFiles: File[] = [];
+      selected.forEach((file) => {
+        const issues = validateAddedFile(file, validFiles);
+        if (issues.length) {
+          errors.push(`${file.name}: ${issues.join(", ")}`);
+        } else {
+          validFiles.push(file);
+        }
+      });
+      if (!validFiles.length) {
+        setActionError(errors.join("; ") || "Нет подходящих файлов для загрузки.");
+        return;
+      }
+      setActionError(null);
+      setMessage(null);
+      setUploadMessage(null);
+      if (typeof window !== "undefined") {
+        window.sessionStorage.removeItem(uploadMessageKey(batchId));
+      }
+      try {
+        setAddingDocs(true);
+        const response = await uploadDocumentsToBatch(batchId, validFiles);
+        const updated = await fetchBatch();
+        const baseMessage = `Добавлено документов: ${response.documents}. Перейдите к подготовке.`;
+        const combined = errors.length ? `${baseMessage} Пропущены: ${errors.join("; ")}` : baseMessage;
+        setUploadMessage(combined);
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(uploadMessageKey(batchId), combined);
+        }
+        if (updated?.batch && !updated.batch.prep_complete) {
+          navigate(`/queue?batch=${batchId}`, { replace: true });
+        }
+      } catch (err) {
+        setActionError((err as Error).message);
+      } finally {
+        setAddingDocs(false);
+      }
+    },
+    [batchId, fetchBatch],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -943,6 +1050,16 @@ function SummaryTablePage() {
     };
   }, [batchId, fetchBatch]);
 
+  useEffect(() => {
+    if (!batchId || !batch || !uploadMessage || typeof window === "undefined") {
+      return;
+    }
+    if (!batch.prep_complete || (batch.report?.available && !batch.awaiting_processing)) {
+      setUploadMessage(null);
+      window.sessionStorage.removeItem(uploadMessageKey(batchId));
+    }
+  }, [batchId, batch, uploadMessage]);
+
   const documents = batch?.documents ?? [];
   const documentMap = useMemo(() => {
     const map = new Map<string, DocumentPayload>();
@@ -950,12 +1067,19 @@ function SummaryTablePage() {
     return map;
   }, [documents]);
   const presentDocInfo = useMemo(() => {
-    const presentByActual = new Map<string, { docIds: string[]; filenames: string[] }>();
+    const presentByActual = new Map<
+      string,
+      { docIds: string[]; filenames: string[]; processingCount: number }
+    >();
     documents.forEach((doc) => {
-      const entry = presentByActual.get(doc.doc_type) ?? { docIds: [], filenames: [] };
+      const entry =
+        presentByActual.get(doc.doc_type) ?? { docIds: [], filenames: [], processingCount: 0 };
       entry.docIds.push(doc.id);
       if (doc.filename) {
         entry.filenames.push(doc.filename);
+      }
+      if (doc.processing && doc.status !== "FAILED") {
+        entry.processingCount += 1;
       }
       presentByActual.set(doc.doc_type, entry);
     });
@@ -1151,6 +1275,7 @@ function SummaryTablePage() {
         present: Boolean(info),
         filenames: info ? info.filenames : [],
         count: info ? info.docIds.length : 0,
+        processing: info ? info.processingCount > 0 : false,
       });
     });
 
@@ -1158,14 +1283,15 @@ function SummaryTablePage() {
       .sort(([a], [b]) => a.localeCompare(b))
       .forEach(([actualType, info]) => {
         const displayType = toDisplayDocType(actualType);
-        rows.push({
-          docType: displayType,
-          actualType,
-          label: DOC_TYPE_LABELS[displayType] ?? displayType,
-          present: true,
-          filenames: info.filenames,
-          count: info.docIds.length,
-        });
+      rows.push({
+        docType: displayType,
+        actualType,
+        label: DOC_TYPE_LABELS[displayType] ?? displayType,
+        present: true,
+        filenames: info.filenames,
+        count: info.docIds.length,
+        processing: info.processingCount > 0,
+      });
       });
 
     return rows;
@@ -1511,6 +1637,7 @@ function SummaryTablePage() {
   }
 
   const batchTitle = typeof batch.title === "string" ? batch.title.trim() : "";
+  const needsPrep = !batch.prep_complete;
   const isPopoverEditing = matrixPopover?.mode === "edit";
   const matrixPopoverPortal =
     matrixPopover && typeof document !== "undefined"
@@ -1666,12 +1793,41 @@ function SummaryTablePage() {
         </div>
       </header>
 
+      {needsPrep ? (
+        <Alert variant="warning" className="flex flex-wrap items-center justify-between gap-3">
+          <span>Пакет в подготовке. Перейдите к подготовке, чтобы повернуть или удалить страницы.</span>
+          <Button size="sm" variant="secondary" onClick={() => navigate(`/queue?batch=${batch.id}`)}>
+            Перейти к подготовке
+          </Button>
+        </Alert>
+      ) : null}
       {actionError ? <Alert variant="destructive">{actionError}</Alert> : null}
+      {uploadMessage ? <Alert variant="success">{uploadMessage}</Alert> : null}
       {message ? <Alert variant="success">{message}</Alert> : null}
 
       <Card className="rounded-3xl border bg-background">
-        <CardHeader>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>Состав пакета</CardTitle>
+          <div className="flex items-center gap-2">
+            {addingDocs ? <Spinner className="h-4 w-4" /> : null}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => addDocsInputRef.current?.click()}
+              disabled={addingDocs || !batchId}
+            >
+              Добавить документы
+            </Button>
+            <input
+              ref={addDocsInputRef}
+              type="file"
+              multiple
+              className="hidden"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.png,.jpg,.jpeg"
+              onChange={handleAddDocuments}
+              disabled={addingDocs}
+            />
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {docPresence.length === 0 ? (
@@ -1698,10 +1854,15 @@ function SummaryTablePage() {
                     <div
                       className={cn(
                         "mt-2 text-sm font-semibold",
-                        item.present ? "text-emerald-600" : "text-destructive"
+                        !item.present
+                          ? "text-destructive"
+                          : item.processing
+                            ? "text-amber-600"
+                            : "text-emerald-600",
                       )}
                     >
-                      Статус: {item.present ? "Есть" : "Нет"}
+                      Статус:{" "}
+                      {!item.present ? "Нет" : item.processing ? "В процессе" : "Есть"}
                     </div>
                   </div>
                 ))}

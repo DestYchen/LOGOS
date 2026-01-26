@@ -19,6 +19,12 @@ def process_batch(batch_id: str) -> None:
     _worker_loop.run_until_complete(pipeline.run_batch_pipeline(uuid.UUID(batch_id)))
 
 
+@celery_app.task(name="supplyhub.process_batch_delta")
+def process_batch_delta(batch_id: str) -> None:
+    logger.info("Processing batch delta %s", batch_id)
+    _worker_loop.run_until_complete(pipeline.run_batch_delta_pipeline(uuid.UUID(batch_id)))
+
+
 @celery_app.task(name="supplyhub.validate_batch")
 def validate_batch(batch_id: str) -> None:
     logger.info("Validating batch %s", batch_id)

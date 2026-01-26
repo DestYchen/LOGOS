@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 import logging
 
@@ -102,6 +103,9 @@ async def upload_documents(
     saved = await batch_service.save_documents(session, batch, files)
     if not saved:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="upload_failed")
+    meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
+    meta["prep_complete"] = False
+    batch.meta = meta
     return BatchUploadResponse(saved=saved)
 
 
@@ -110,8 +114,67 @@ async def process_batch(batch_id: uuid.UUID, session: AsyncSession = Depends(get
     batch = await batch_service.get_batch(session, batch_id)
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="batch_not_found")
+    meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
+    prep_complete = meta.get("prep_complete")
+    if prep_complete is False or (prep_complete is None and batch.status in (BatchStatus.NEW, BatchStatus.PREPARED)):
+        if not batch.documents:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="batch_empty")
+        # Backwards compatibility: explicit process call confirms prep.
+        meta["prep_complete"] = True
+        if batch.status in (BatchStatus.NEW, BatchStatus.PREPARED):
+            run_meta = meta.get("processing_run")
+            if not isinstance(run_meta, dict) or run_meta.get("mode") != "initial_upload":
+                meta["processing_run"] = {
+                    "mode": "initial_upload",
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "doc_ids": [str(doc.id) for doc in batch.documents],
+                }
+        batch.meta = meta
+        await session.flush()
+        await session.commit()
     task_id = await pipeline.enqueue_batch_processing(batch_id)
     return {"batch_id": batch_id, "task_id": task_id}
+
+
+@router.post("/{batch_id}/confirm-prep", status_code=status.HTTP_202_ACCEPTED)
+async def confirm_prep(batch_id: uuid.UUID, session: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
+    batch = await batch_service.get_batch(session, batch_id)
+    if batch is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="batch_not_found")
+    if not batch.documents:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="batch_empty")
+
+    meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
+    if meta.get("prep_complete"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="prep_locked")
+
+    meta["prep_complete"] = True
+    if batch.status in (BatchStatus.NEW, BatchStatus.PREPARED):
+        run_meta = meta.get("processing_run")
+        if not isinstance(run_meta, dict) or run_meta.get("mode") != "initial_upload":
+            meta["processing_run"] = {
+                "mode": "initial_upload",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+                "doc_ids": [str(doc.id) for doc in batch.documents],
+            }
+    batch.meta = meta
+    await session.flush()
+    await session.commit()
+
+    if batch.status in (BatchStatus.NEW, BatchStatus.PREPARED):
+        task_id = await pipeline.enqueue_batch_processing(batch.id)
+        kind = "process"
+    else:
+        task_id = await pipeline.enqueue_batch_delta_processing(batch.id)
+        kind = "process_delta"
+
+    return {
+        "status": "ok",
+        "message": "prep_confirmed",
+        "batch_id": str(batch.id),
+        "task_id": task_id,
+        "kind": kind,
+    }
 
 
 @router.get("/{batch_id}/review", response_model=ReviewResponse)

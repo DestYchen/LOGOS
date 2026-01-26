@@ -111,6 +111,8 @@ export type DocumentPayload = {
   processing: boolean;
   products: ProductTable;
   previews: string[];
+  mime?: string | null;
+  updated_at?: string | null;
 };
 
 export type ReportSection = {
@@ -127,6 +129,18 @@ export type ReportSection = {
   raw_json: string | null;
 };
 
+export type ProcessingRun = {
+  mode: "initial_upload";
+  started_at: string | null;
+  doc_ids: string[];
+  total: number;
+  completed: number;
+  failed: number;
+  steps_total: number;
+  steps_completed: number;
+  steps_failed: number;
+};
+
 export type BatchDetails = {
   id: string;
   status: string;
@@ -140,6 +154,8 @@ export type BatchDetails = {
   awaiting_processing: boolean;
   can_complete: boolean;
   processing_warnings: string[];
+  prep_complete: boolean;
+  processing_run: ProcessingRun | null;
   report: ReportSection;
   links: {
     report_xlsx: string | null;

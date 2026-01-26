@@ -40,6 +40,15 @@ export async function uploadDocuments(files: File[], title?: string | null): Pro
   });
 }
 
+export async function uploadDocumentsToBatch(batchId: string, files: File[]): Promise<UploadResponse> {
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file));
+  return request<UploadResponse>(`${API_JSON_BASE}/batches/${batchId}/upload`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
 export async function sendFeedback(
   subject: string,
   message: string,
@@ -73,6 +82,12 @@ export async function fetchBatches(): Promise<BatchesResponse> {
 
 export async function fetchBatchDetails(batchId: string): Promise<BatchDetailsResponse> {
   return request<BatchDetailsResponse>(`${API_JSON_BASE}/batches/${batchId}`);
+}
+
+export async function confirmBatchPrep(batchId: string): Promise<ApiMessageResponse> {
+  return request<ApiMessageResponse>(`${API_JSON_BASE}/batches/${batchId}/confirm-prep`, {
+    method: "POST",
+  });
 }
 
 export async function completeBatch(batchId: string): Promise<ApiMessageResponse> {
@@ -126,5 +141,15 @@ export async function refillDocument(docId: string): Promise<ApiMessageResponse>
 export async function deleteDocument(docId: string): Promise<ApiMessageResponse> {
   return request<ApiMessageResponse>(`${API_JSON_BASE}/documents/${docId}/delete`, {
     method: "POST",
+  });
+}
+
+export async function rotateDocument(docId: string, degrees: number): Promise<ApiMessageResponse> {
+  return request<ApiMessageResponse>(`${API_JSON_BASE}/documents/${docId}/rotate`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ degrees }),
   });
 }

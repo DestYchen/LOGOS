@@ -1664,6 +1664,10 @@ def _collect_value(field: Optional[FilledField]) -> Optional[str]:
     return field.value
 
 
+def _matrix_values_equal(anchor_value: str, other_value: str) -> bool:
+    return anchor_value.casefold() == other_value.casefold()
+
+
 def _build_field_matrix_snapshot(
     documents: List[Document], fields_by_doc: Dict[uuid.UUID, Dict[str, FilledField]]
 ) -> Dict[str, Any]:
@@ -1748,7 +1752,7 @@ def _build_field_matrix_snapshot(
                     continue
                 if not target_present or target_value == "":
                     status = "missing"
-                elif anchor_present and target_value == anchor_value:
+                elif anchor_present and _matrix_values_equal(anchor_value, target_value):
                     status = "match"
                 elif not anchor_present:
                     status = "missing"
@@ -1767,6 +1771,8 @@ DIFF_REDACTED_CLOSE = "{/redacted}"
 
 def _diff_against_anchor(anchor_value: str, other_value: str) -> str:
     if anchor_value == other_value:
+        return other_value
+    if _matrix_values_equal(anchor_value, other_value):
         return other_value
     if not anchor_value:
         return other_value
@@ -1882,7 +1888,7 @@ def _build_field_matrix_diff_snapshot(
                 if not target_present or target_value == "":
                     status = "missing"
                     row[target_display] = ""
-                elif anchor_present and target_value == anchor_value:
+                elif anchor_present and _matrix_values_equal(anchor_value, target_value):
                     status = "match"
                     row[target_display] = target_value
                 elif not anchor_present:
