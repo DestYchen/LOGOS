@@ -227,6 +227,7 @@ const EXPECTED_DOC_TYPES = [
   { key: "FORM_A", label: "FORM A" },
   { key: "EAV", label: "EAV" },
   { key: "CT-3", label: "CT-3" },
+  { key: "T1", label: "T1" },
 ];
 
 const DOC_TYPE_LABELS: Record<string, string> = EXPECTED_DOC_TYPES.reduce(
@@ -255,6 +256,7 @@ const FIELD_MATRIX_DOC_TYPE_MAP: Record<string, string> = {
   FORM_A: "FORM_A",
   EAV: "EAV",
   "CT-3": "CT-3",
+  T1: "T1",
 };
 
 const FIELD_MATRIX_ACTUAL_TO_DISPLAY: Record<string, string> = Object.entries(FIELD_MATRIX_DOC_TYPE_MAP).reduce(

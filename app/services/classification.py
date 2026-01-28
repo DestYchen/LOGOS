@@ -16,6 +16,9 @@ _PRICE_LIST_2_PRIORITY_RE = re.compile(r"(?i)\bprice\s+per\s+kg\b")
 _EXPORT_DECL_PRIORITY_RE = re.compile(
     r"(?i)\bdocumento\s+unico\s+de\s+salida\b|\bservicio\s+nacional\s+de\s+aduanas\b|\bexport\s+declaration\b"
 )
+_T1_PRIORITY_RE = re.compile(
+    r"(?i)ihracat\s+refakat\s+belgesi|export\s+accompanying\s+document|transit\s+accompanying\s+document"
+)
 _VET_CERT_HEADER_RE = re.compile(r"(?i)\bveterinar\w*\s+certificate\b|ветеринар\w*\s+сертификат")
 _VET_CERT_NUMBER_RE = re.compile(r"(?i)\bcertificate\s*(?:no|number)\b|сертификат\s*№")
 
@@ -116,6 +119,14 @@ KEYWORDS: Dict[DocumentType, List[str]] = {
         r"(?i)proforma\s+factura",
         r"(?:????|????|????|????)",
     ],
+    DocumentType.T1: [
+        r"(?i)ihracat\s+refakat\s+belgesi",
+        r"(?i)export\s+accompanying\s+document",
+        r"(?i)transit\s+accompanying\s+document",
+        r"(?i)\bT1\b",
+        r"(?i)\bIRB\b",
+        r"(?i)\bMRN\b",
+    ],
     # Contract parts (content-based; filename not required).
     DocumentType.CONTRACT_1: [
         r"(?i)\bhereinafter\s+referred\s+to\s+as\s+the\s+buyer\b",
@@ -191,6 +202,10 @@ def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = 
         if _CLASSIFICATION_DEBUG:
             logger.info("Classification override: file=%s doc_type=PACKING_LIST (packing list)", file_name or "<unknown>")
         return DocumentType.PACKING_LIST
+    if _T1_PRIORITY_RE.search(full_text):
+        if _CLASSIFICATION_DEBUG:
+            logger.info("Classification override: file=%s doc_type=T1 (T1 header)", file_name or "<unknown>")
+        return DocumentType.T1
     if _EXPORT_DECL_PRIORITY_RE.search(full_text):
         if _CLASSIFICATION_DEBUG:
             logger.info(

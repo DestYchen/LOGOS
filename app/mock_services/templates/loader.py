@@ -25,6 +25,7 @@ _DOC_MAPPING = {
     DocumentType.FORM_A: "form_a.json",
     DocumentType.EAV: "eav.json",
     DocumentType.CT_3: "ct_3.json",
+    DocumentType.T1: "t1.json",
 }
 
 # Point loader to the new templates directory

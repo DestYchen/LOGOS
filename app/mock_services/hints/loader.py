@@ -21,6 +21,7 @@ _DOC_MAPPING: Dict[DocumentType, str] = {
     DocumentType.PROFORMA: "proforma_hints.json",
     DocumentType.SPECIFICATION: "specification_hints.json",
     DocumentType.CMR: "cmr_hints.json",
+    DocumentType.T1: "t1_hints.json",
 }
 
 _BASE_DIR = Path(__file__).resolve().parent

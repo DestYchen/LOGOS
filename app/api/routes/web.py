@@ -483,8 +483,8 @@ async def get_batch_details(
                 filled_json = json.dumps(filled_data, indent=2, ensure_ascii=False)
 
         else:
-
-            awaiting_processing = True
+            if document.status != DocumentStatus.FAILED:
+                awaiting_processing = True
 
 
 
@@ -522,8 +522,7 @@ async def get_batch_details(
 
         pending_total += pending_count
 
-        if filled_json is None:
-
+        if filled_json is None and document.status != DocumentStatus.FAILED:
             awaiting_processing = True
 
 

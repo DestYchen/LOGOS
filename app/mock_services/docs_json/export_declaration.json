@@ -38,10 +38,6 @@
             "value": "",
             "bbox": []
         },
-        "destination": {
-            "value": "",
-            "bbox": []
-        },
         "products": {
             "product_1": {
                 "name_product": {
@@ -99,23 +95,19 @@
             },
             "product_2": {}
         },
-        "container_no": {
-            "value": "",
-            "bbox": []
-        },
-        "veterinary_seal": {
-            "value": "",
-            "bbox": []
-        },
-        "vessel": {
-            "value": "",
-            "bbox": []
-        },
         "incoterms": {
             "value": "",
             "bbox": []
         },
         "total_price": {
+            "value": "",
+            "bbox": []
+        },
+        "proforma_no": {
+            "value": "",
+            "bbox": []
+        },
+        "HS_code": {
             "value": "",
             "bbox": []
         }

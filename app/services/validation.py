@@ -688,6 +688,7 @@ ALL_DOC_TYPES = [
     "FORM_A",
     "EAV",
     "CT_3",
+    "T1",
 ]
 
 FIELD_MATRIX_DOC_TYPES = [
@@ -708,6 +709,7 @@ FIELD_MATRIX_DOC_TYPES = [
     "FORM_A",
     "EAV",
     "CT-3",
+    "T1",
 ]
 
 FIELD_MATRIX_DOC_TYPE_MAP = {
@@ -728,6 +730,7 @@ FIELD_MATRIX_DOC_TYPE_MAP = {
     "FORM_A": "FORM_A",
     "EAV": "EAV",
     "CT-3": "CT-3",
+    "T1": "T1",
 }
 
 FIELD_MATRIX_FIELDS: List[Tuple[str, List[str]]] = [
@@ -766,6 +769,7 @@ DOCUMENT_NUMBER_FIELDS: Dict[str, List[str]] = {
     "FORM_A": ["form_a_no"],
     "EAV": ["eav_no"],
     "CT-3": ["ct3_no"],
+    "T1": ["t1_no"],
 }
 
 DOCUMENT_DATE_FIELDS: Dict[str, List[str]] = {
@@ -785,6 +789,7 @@ DOCUMENT_DATE_FIELDS: Dict[str, List[str]] = {
     "FORM_A": ["form_a_date"],
     "EAV": ["eav_date"],
     "CT-3": ["ct3_date"],
+    "T1": ["t1_date"],
 }
 
 FIELD_COMPARISON_RULES: Dict[str, List[FieldComparisonRule]] = defaultdict(list)

@@ -4,6 +4,7 @@ import AppShell from "./components/layout/AppShell";
 import { HistoryProvider } from "./contexts/history-context";
 import FeedbackPage from "./pages/FeedbackPage";
 import HistoryPage from "./pages/HistoryPage";
+import InstructionsPage from "./pages/InstructionsPage";
 import NewPacketPage from "./pages/NewPacketPage";
 import QueuePage from "./pages/QueuePage";
 import ResolvePage from "./pages/ResolvePage";
@@ -22,6 +23,7 @@ function App() {
           <Route path="/table/:batchId" element={<SummaryTablePage />} />
           <Route path="/history" element={<HistoryPage />} />
           <Route path="/feedback" element={<FeedbackPage />} />
+          <Route path="/feedback/instructions" element={<InstructionsPage />} />
           <Route path="*" element={<Navigate to="/new" replace />} />
         </Routes>
       </AppShell>

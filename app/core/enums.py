@@ -46,6 +46,7 @@ class DocumentType(str, Enum):
     FORM_A = "FORM_A"
     EAV = "EAV"
     CT_3 = "CT-3"
+    T1 = "T1"
 
 
 class ValidationSeverity(str, Enum):

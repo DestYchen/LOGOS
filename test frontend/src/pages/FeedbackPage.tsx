@@ -1,4 +1,4 @@
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+﻿import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 
 import { Alert } from "../components/ui/alert";
@@ -66,15 +66,15 @@ function FeedbackPage() {
     const next = [...files];
     for (const file of selected) {
       if (next.length >= MAX_FILES) {
-        setError(`Можно добавить не более ${MAX_FILES} изображений.`);
+        setError(`Можно прикрепить не больше ${MAX_FILES} файлов.`);
         break;
       }
       if (!isAcceptedImage(file)) {
-        setError("Поддерживаются только изображения JPG или PNG.");
+        setError("Поддерживаются только файлы JPG или PNG.");
         continue;
       }
       if (file.size > MAX_FILE_SIZE) {
-        setError(`Размер каждого файла должен быть не больше ${MAX_FILE_SIZE_MB} МБ.`);
+        setError(`Файл слишком большой. Максимальный размер ${MAX_FILE_SIZE_MB} МБ.`);
         continue;
       }
       const duplicate = next.some((existing) => existing.name === file.name && existing.size === file.size);
@@ -101,7 +101,7 @@ function FeedbackPage() {
     const trimmedMessage = message.trim();
     const trimmedContact = contact.trim();
     if (!trimmedSubject || !trimmedMessage) {
-      setError("Заполните тему и описание проблемы.");
+      setError("Заполните тему и описание обращения.");
       return;
     }
     setError(null);
@@ -118,7 +118,7 @@ function FeedbackPage() {
         trimmedContact ? trimmedContact : null,
       );
       const delivered = response.status === "sent";
-      setSuccess(delivered ? "Отправлено в Telegram." : "Сохранено локально, отправим позже.");
+      setSuccess(delivered ? "Сообщение отправлено в Telegram." : "Сообщение принято, команда проверит позже.");
       setSubject("");
       setMessage("");
       setFeedbackType("problem");
@@ -185,7 +185,7 @@ function FeedbackPage() {
               value={subject}
               onChange={(event) => setSubject(event.target.value)}
               maxLength={120}
-              placeholder="Например: Ошибка при проверке пакета"
+              placeholder="Например: ошибка при загрузке документов"
             />
           </div>
 
@@ -197,7 +197,7 @@ function FeedbackPage() {
               onChange={(event) => setMessage(event.target.value)}
               rows={6}
               maxLength={3500}
-              placeholder="Описание проблемы. Как работает сейчас программа / как следовало бы работать программе."
+              placeholder="Опишите проблему. Как работает сейчас и как должно работать."
             />
           </div>
 
@@ -223,7 +223,7 @@ function FeedbackPage() {
                 </div>
               </div>
               <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={fileLimitReached}>
-                Добавить изображения
+                Добавить файлы
               </Button>
               <input
                 ref={fileInputRef}
@@ -256,7 +256,7 @@ function FeedbackPage() {
               </div>
             ) : (
               <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-                Скриншоты не добавлены.
+                Скриншоты еще не добавлены.
               </div>
             )}
           </div>
@@ -269,6 +269,7 @@ function FeedbackPage() {
           </div>
         </CardContent>
       </Card>
+
     </div>
   );
 }

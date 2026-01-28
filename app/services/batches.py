@@ -77,6 +77,15 @@ def _is_pdf(path: Path, content_type: Optional[str]) -> bool:
     return False
 
 
+def _is_image(path: Path, content_type: Optional[str]) -> bool:
+    if path.suffix.lower() in {".png", ".jpg", ".jpeg"}:
+        return True
+    if content_type:
+        ctype = content_type.split(";", 1)[0].strip().lower()
+        return ctype in {"image/png", "image/jpeg"}
+    return False
+
+
 def _find_soffice() -> Optional[str]:
     env_path = os.environ.get("SOFFICE_PATH")
     if env_path:
@@ -180,6 +189,39 @@ def _convert_xlsx_to_pdf(source: Path, target_dir: Path, base_name: str, timeout
 
     pdfs = sorted(target_dir.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
     return pdfs[0] if pdfs else None
+
+
+def _convert_image_to_pdf(source: Path, target_dir: Path, base_name: str) -> Optional[Path]:
+    """
+    Convert PNG/JPEG to PDF in target_dir using PyMuPDF.
+    """
+    target_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        image_doc = fitz.open(source)  # type: ignore[misc]
+    except Exception:
+        return None
+
+    try:
+        pdf_bytes = image_doc.convert_to_pdf()
+    except Exception:
+        return None
+    finally:
+        image_doc.close()
+
+    try:
+        pdf_doc = fitz.open("pdf", pdf_bytes)  # type: ignore[misc]
+    except Exception:
+        return None
+
+    candidate = target_dir / f"{Path(base_name).stem}.pdf"
+    try:
+        pdf_doc.save(candidate)
+    except Exception:
+        return None
+    finally:
+        pdf_doc.close()
+
+    return candidate if candidate.exists() else None
 
 def _split_pdf_file(source: Path, target_dir: Path, base_name: str) -> List[Path]:
     try:
@@ -313,6 +355,8 @@ async def save_documents(
 
         if _is_pdf(dest, content_type):
             pdf_source = dest
+        elif _is_image(dest, content_type):
+            pdf_source = _convert_image_to_pdf(dest, batch_paths.raw, safe_name)
         elif _is_docx(dest, content_type):
             pdf_source = _convert_docx_to_pdf(dest, batch_paths.raw, safe_name)
         elif _is_xlsx(dest, content_type):

@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ChevronLeft, History, MessageSquare, Upload, type LucideIcon } from "lucide-react";
+import { BookOpen, ChevronLeft, History, MessageSquare, Upload, type LucideIcon } from "lucide-react";
 
 import logomark from "../../assets/logo.png";
 import { useHistoryContext } from "../../contexts/history-context";
@@ -21,8 +21,9 @@ type NavItem = {
 
 const NAV_ITEMS: NavItem[] = [
   { to: "/new", label: "Новый пакет", icon: Upload },
-  { to: "/history", label: "История", icon: History },
+  { to: "/history", label: "История пакетов", icon: History },
   { to: "/feedback", label: "Обратная связь", icon: MessageSquare },
+  { to: "/feedback/instructions", label: "Инструкция", icon: BookOpen },
 ];
 
 function formatCompactStamp(value: string | null | undefined) {
@@ -107,7 +108,9 @@ function AppShell({ children }: AppShellProps) {
 
           <nav className={cn("flex flex-col gap-2 py-4", isCollapsed ? "items-center px-2" : "px-4")}>
             {NAV_ITEMS.map((item) => {
-              const isActive = location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+              const isActive =
+                location.pathname === item.to ||
+                (item.to !== "/feedback" && location.pathname.startsWith(`${item.to}/`));
               const Icon = item.icon;
               return (
                 <Button
@@ -135,7 +138,7 @@ function AppShell({ children }: AppShellProps) {
             })}
           </nav>
 
-          <div className={cn("px-4", isCollapsed && "px-0 text-center")}>
+          <div className={cn("px-4", isCollapsed && "px-0 text-center")}> 
             <h2
               className={cn(
                 "text-xs font-semibold uppercase tracking-wide text-muted-foreground",
@@ -167,7 +170,7 @@ function AppShell({ children }: AppShellProps) {
                 Не удалось загрузить историю: {error.message}
               </div>
             ) : orderedBatches.length === 0 ? (
-              <p className={cn("px-2 py-4 text-sm text-muted-foreground", isCollapsed && "text-center text-xs")}>
+              <p className={cn("px-2 py-4 text-sm text-muted-foreground", isCollapsed && "text-center text-xs")}> 
                 История пуста. Загрузите первый пакет.
               </p>
             ) : (

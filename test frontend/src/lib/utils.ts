@@ -1,4 +1,4 @@
-import { type ClassValue, clsx } from "clsx";
+﻿﻿import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
@@ -102,7 +102,7 @@ export function statusLabel(status: StatusKey): string {
     case "needs_review":
       return "Нужно проверить";
     case "ready_for_check":
-      return "К проверке";
+      return "Обработано";
     case "in_review":
       return "На проверке";
     case "completed":
@@ -165,3 +165,7 @@ export function getFileTypeIcon(ext: string): string {
   }
   return "/src/assets/other_icon.png";
 }
+
+
+
+

@@ -591,6 +591,47 @@ CT3_SCHEMA = DocumentSchema(
 )
 
 
+T1_SCHEMA = DocumentSchema(
+    doc_type=DocumentType.T1,
+    fields={
+        "t1_no": make_field("t1_no", "T1 Number"),
+        "t1_date": make_field("t1_date", "T1 Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "export_declaration_no": make_field("export_declaration_no", "Export Declaration Number"),
+        "export_declaration_date": make_field(
+            "export_declaration_date",
+            "Export Declaration Date",
+            fmt=r"^\\d{4}-\\d{2}-\\d{2}$",
+        ),
+        "invoice_no": make_field("invoice_no", "Invoice Number"),
+        "invoice_date": make_field("invoice_date", "Invoice Date", fmt=r"^\\d{4}-\\d{2}-\\d{2}$"),
+        "country_of_origin": make_field("country_of_origin", "Country of Origin"),
+        "exporter": make_field("exporter", "Exporter"),
+        "importer": make_field("importer", "Importer"),
+        "buyer": make_field("buyer", "Buyer"),
+        "seller": make_field("seller", "Seller"),
+        "destination": make_field("destination", "Destination"),
+        "container_no": make_field("container_no", "Container Number"),
+        "packages": make_field("packages", "Packages"),
+        "net_weight": make_field("net_weight", "Net Weight"),
+        "gross_weight": make_field("gross_weight", "Gross Weight"),
+        "veterinary_certificate_no": make_field("veterinary_certificate_no", "Veterinary Certificate Number"),
+        "HS_code": make_field("HS_code", "HS Code"),
+        "products": build_products_template(
+            children={
+                "name_product": make_field("name_product", "Product Name"),
+                "latin_name": make_field("latin_name", "Latin Name"),
+                "size_product": make_field("size_product", "Product Size"),
+                "unit_box": make_field("unit_box", "Units per Box"),
+                "packages": make_field("packages", "Packages"),
+                "net_weight": make_field("net_weight", "Net Weight"),
+                "gross_weight": make_field("gross_weight", "Gross Weight"),
+                "HS_code": make_field("HS_code", "HS Code"),
+            }
+        ),
+    },
+)
+
+
 CONTRACT_SCHEMA = DocumentSchema(
     doc_type=DocumentType.CONTRACT,
     fields={
@@ -625,6 +666,7 @@ DOCUMENT_SCHEMAS: Dict[DocumentType, DocumentSchema] = {
         FORM_A_SCHEMA,
         EAV_SCHEMA,
         CT3_SCHEMA,
+        T1_SCHEMA,
         CONTRACT_SCHEMA,
     )
 }
