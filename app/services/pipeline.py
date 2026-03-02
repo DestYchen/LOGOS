@@ -25,6 +25,8 @@ from app.services import (
     classification,
     confidence,
     json_filler,
+    json_filler_router,
+    local_archive,
     ocr,
     reporting,
     status,
@@ -377,6 +379,139 @@ def _sync_field_pages(
             )
 
 
+def _has_token_refs(token_refs: Any) -> bool:
+    if not token_refs:
+        return False
+    if isinstance(token_refs, list):
+        for ref in token_refs:
+            if ref is None:
+                continue
+            if str(ref).strip():
+                return True
+        return False
+    return bool(str(token_refs).strip())
+
+
+def _apply_vet_cert_date_page_override(
+    fields: Dict[str, Dict[str, Any]],
+    tokens: List[Dict[str, Any]],
+    doc_type: DocumentType,
+) -> None:
+    if doc_type != DocumentType.VETERINARY_CERTIFICATE:
+        return
+    if not fields:
+        return
+    payload = fields.get("veterinary_certificate_date")
+    if not isinstance(payload, dict):
+        return
+    if _has_token_refs(payload.get("token_refs")):
+        return
+    max_page = 0
+    for token in tokens:
+        if not isinstance(token, dict):
+            continue
+        page = _token_page_number(token)
+        if page > max_page:
+            max_page = page
+    if max_page < 2:
+        return
+    payload["page"] = 2
+
+
+def _normalize_bbox(bbox: Any) -> Optional[List[float]]:
+    if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+        return None
+    try:
+        return [float(value) for value in bbox]
+    except (TypeError, ValueError):
+        return None
+
+
+def _bbox_missing(bbox: Any) -> bool:
+    normalized = _normalize_bbox(bbox)
+    if not normalized:
+        return True
+    return all(value == 0 for value in normalized)
+
+
+def _derive_bbox_from_refs(
+    token_refs: Any,
+    tokens: List[Dict[str, Any]],
+    *,
+    page_hint: Optional[int] = None,
+) -> Optional[List[float]]:
+    if not token_refs:
+        return None
+    if not isinstance(token_refs, list):
+        token_refs = [token_refs]
+
+    token_map: Dict[str, Dict[str, Any]] = {}
+    for token in tokens:
+        token_id = token.get("id")
+        if token_id is None:
+            continue
+        token_map[str(token_id)] = token
+
+    candidates: List[Tuple[int, List[float]]] = []
+    for ref in token_refs:
+        ref_id = "" if ref is None else str(ref)
+        if not ref_id:
+            continue
+        token = token_map.get(ref_id)
+        if token is None:
+            try:
+                idx = int(ref_id)
+            except (TypeError, ValueError):
+                idx = None
+            if idx is not None and 0 <= idx < len(tokens):
+                token = tokens[idx]
+        if token is None:
+            continue
+        bbox = _normalize_bbox(token.get("bbox"))
+        if not bbox:
+            continue
+        page = _token_page_number(token)
+        candidates.append((page, bbox))
+
+    if not candidates:
+        return None
+
+    if page_hint is None:
+        counts = Counter(page for page, _ in candidates)
+        top_count = max(counts.values())
+        page_hint = min(page for page, count in counts.items() if count == top_count)
+
+    page_candidates = [bbox for page, bbox in candidates if page == page_hint]
+    if not page_candidates:
+        page_candidates = [bbox for _, bbox in candidates]
+
+    x1 = min(bbox[0] for bbox in page_candidates)
+    y1 = min(bbox[1] for bbox in page_candidates)
+    x2 = max(bbox[2] for bbox in page_candidates)
+    y2 = max(bbox[3] for bbox in page_candidates)
+    return [x1, y1, x2, y2]
+
+
+def _sync_field_bboxes(
+    fields: Dict[str, Dict[str, Any]],
+    tokens: List[Dict[str, Any]],
+) -> None:
+    if not fields or not tokens:
+        return
+    for payload in fields.values():
+        if not _bbox_missing(payload.get("bbox")):
+            continue
+        token_refs = payload.get("token_refs")
+        page_hint = payload.get("page")
+        try:
+            page_hint = int(page_hint) if page_hint is not None else None
+        except (TypeError, ValueError):
+            page_hint = None
+        derived = _derive_bbox_from_refs(token_refs, tokens, page_hint=page_hint)
+        if derived is not None:
+            payload["bbox"] = derived
+
+
 def _contract_page_count(
     document: Document,
     tokens: List[Dict[str, Any]],
@@ -528,6 +663,109 @@ async def _merge_contract_parts(session, batch: Batch, paths) -> None:
     await session.flush()
 
 
+async def _merge_veterinary_certificate_parts(session, batch: Batch, paths) -> None:
+    parts = [doc for doc in batch.documents if doc.doc_type == DocumentType.VETERINARY_CERTIFICATE]
+    if len(parts) <= 1:
+        return
+
+    if any(part.status != DocumentStatus.TEXT_READY for part in parts):
+        logger.info("Veterinary certificate parts not ready for batch %s; skipping merge", batch.id)
+        return
+
+    ordered_parts = sorted(parts, key=lambda doc: (doc.filename or "").lower())
+    combined_tokens: List[Dict[str, Any]] = []
+    combined_texts: List[str] = []
+    part_previews: List[List[Tuple[int, Path]]] = []
+    part_page_counts: List[int] = []
+    page_offset = 0
+
+    for document in ordered_parts:
+        tokens = _load_contract_tokens(paths, document)
+        previews = _load_contract_previews(paths, document)
+        part_page_count = _contract_page_count(document, tokens, previews)
+        part_previews.append(previews)
+        part_page_counts.append(part_page_count)
+        part_text = _build_contract_text(paths, document, tokens)
+        if part_text:
+            combined_texts.append(part_text)
+        if tokens:
+            for token in tokens:
+                new_token = dict(token)
+                new_page = _token_page_number(token) + page_offset
+                new_token["page"] = new_page
+                shifted_id = _shift_token_id(token.get("id"), new_page)
+                if shifted_id is not None:
+                    new_token["id"] = shifted_id
+                combined_tokens.append(new_token)
+        page_offset += part_page_count
+
+    merged_text = "\n\n".join(text for text in combined_texts if text.strip())
+    merged_filename = unique_filename(paths.raw, "veterinary_certificate_merged.txt")
+    merged_raw = paths.raw / merged_filename
+    merged_raw.write_text(merged_text, encoding="utf-8")
+
+    merged_doc = Document(
+        batch_id=batch.id,
+        filename=merged_filename,
+        mime="text/plain",
+        doc_type=DocumentType.VETERINARY_CERTIFICATE,
+        status=DocumentStatus.TEXT_READY,
+        pages=page_offset,
+    )
+    batch.documents.append(merged_doc)
+    session.add(merged_doc)
+    await session.flush()
+
+    meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
+    run_meta = meta.get("processing_run")
+    if isinstance(run_meta, dict) and run_meta.get("mode") == "initial_upload":
+        doc_ids = run_meta.get("doc_ids")
+        if isinstance(doc_ids, list):
+            removed_ids = {str(doc.id) for doc in ordered_parts}
+            updated_ids: List[str] = []
+            seen: set[str] = set()
+            for doc_id in doc_ids:
+                doc_id_str = str(doc_id)
+                if doc_id_str in removed_ids or doc_id_str in seen:
+                    continue
+                updated_ids.append(doc_id_str)
+                seen.add(doc_id_str)
+            merged_id = str(merged_doc.id)
+            if merged_id not in seen:
+                updated_ids.append(merged_id)
+            run_meta = dict(run_meta)
+            run_meta["doc_ids"] = updated_ids
+            meta["processing_run"] = run_meta
+            batch.meta = meta
+
+    derived = paths.derived_for(str(merged_doc.id))
+    ocr_file = derived / "ocr.json"
+    with ocr_file.open("w", encoding="utf-8") as handle:
+        json.dump({"doc_id": str(merged_doc.id), "tokens": combined_tokens}, handle, indent=2)
+    merged_doc.ocr_path = str(ocr_file.relative_to(paths.base))
+
+    merged_preview_dir = paths.preview_for(str(merged_doc.id))
+    page_offset = 0
+    for index, document in enumerate(ordered_parts):
+        previews = part_previews[index]
+        for page_number, preview in previews:
+            target_page = page_offset + page_number
+            target_path = merged_preview_dir / f"page_{target_page}.png"
+            try:
+                shutil.copy2(preview, target_path)
+            except Exception:
+                logger.debug("Failed to copy veterinary certificate preview %s", preview, exc_info=True)
+        page_offset += part_page_counts[index]
+
+    for document in ordered_parts:
+        _cleanup_document_assets(paths, document)
+        if document in batch.documents:
+            batch.documents.remove(document)
+        await session.delete(document)
+
+    await session.flush()
+
+
 async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
     auto_validate = False
     try:
@@ -560,6 +798,9 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
                 return
 
             await _merge_contract_parts(session, batch, batch_paths)
+            if await _is_cancelled(batch_id, batch.status):
+                return
+            await _merge_veterinary_certificate_parts(session, batch, batch_paths)
             if await _is_cancelled(batch_id, batch.status):
                 return
 
@@ -720,6 +961,42 @@ async def run_batch_delta_pipeline(batch_id: uuid.UUID) -> None:
             logger.exception("Automatic validation failed for batch %s (delta)", batch_id)
 
 
+def _should_use_parallel_filler() -> bool:
+    provider = (settings.remote_json_filler_provider or "http").strip().lower()
+    if provider not in ("http", "openrouter"):
+        provider = "http"
+    if provider == "http" and not settings.remote_json_filler_endpoint:
+        return False
+    try:
+        from app.services import json_filler_router
+    except Exception:
+        logger.warning("Failed to import json_filler_router; falling back to local pipeline", exc_info=True)
+        return False
+    try:
+        return bool(json_filler_router.remote_doc_types())
+    except Exception:
+        logger.warning("Failed to load remote filler types; falling back to local pipeline", exc_info=True)
+        return False
+
+
+async def run_batch_pipeline_auto(batch_id: uuid.UUID) -> None:
+    if _should_use_parallel_filler():
+        from app.services import pipeline_parallel
+
+        await pipeline_parallel.run_batch_pipeline_parallel(batch_id)
+        return
+    await run_batch_pipeline(batch_id)
+
+
+async def run_batch_delta_pipeline_auto(batch_id: uuid.UUID) -> None:
+    if _should_use_parallel_filler():
+        from app.services import pipeline_parallel
+
+        await pipeline_parallel.run_batch_delta_pipeline_parallel(batch_id)
+        return
+    await run_batch_delta_pipeline(batch_id)
+
+
 async def _run_ocr_step(session, batch_id: uuid.UUID, batch: Batch, document: Document) -> ProcessingResult | None:
     paths = batch_dir(str(batch_id))
     raw_file = paths.raw / document.filename
@@ -858,6 +1135,21 @@ async def _run_filler_step(session, batch_id: uuid.UUID, document: Document) -> 
         {key: value for key, value in token.items() if key != 'category'}
         for token in tokens
     ]
+    archive_batch_title = None
+    if local_archive.enabled():
+        batch = await session.get(Batch, batch_id)
+        if batch is not None:
+            archive_batch_title = batch_service.extract_batch_title(batch)
+        local_archive.write_filler_request(
+            batch_id=str(batch_id),
+            batch_title=archive_batch_title,
+            doc_id=str(document.id),
+            doc_type=doc_type,
+            file_name=document.filename,
+            doc_text=doc_text,
+            ocr_tokens=filler_tokens or None,
+            source="initial",
+        )
 
     try:
         filled_response = await json_filler.fill_json(
@@ -878,6 +1170,16 @@ async def _run_filler_step(session, batch_id: uuid.UUID, document: Document) -> 
             success=False,
             message=f"Документ {document.filename} не обработан: ошибка вызова JSON Filler. Обратитесь к администратору.",
         )
+    if local_archive.enabled():
+        local_archive.write_filler_response(
+            batch_id=str(batch_id),
+            batch_title=archive_batch_title,
+            doc_id=str(document.id),
+            doc_type=doc_type,
+            file_name=document.filename,
+            response=filled_response,
+            source="initial",
+        )
 
     fields_raw = filled_response.get('fields', {})
     normalized_fields = _flatten_filler_fields(fields_raw)
@@ -892,6 +1194,8 @@ async def _run_filler_step(session, batch_id: uuid.UUID, document: Document) -> 
         scored_fields[key] = payload
 
     _sync_field_pages(scored_fields, tokens, doc_id=document.id)
+    _apply_vet_cert_date_page_override(scored_fields, tokens, doc_type)
+    _sync_field_bboxes(scored_fields, tokens)
 
     filled_file = derived / 'filled.json'
     with filled_file.open('w', encoding='utf-8') as handle:
@@ -1015,10 +1319,25 @@ async def fill_document_from_existing_ocr(
         {key: value for key, value in token.items() if key != "category"}
         for token in tokens
     ]
+    archive_batch_title = None
+    if local_archive.enabled():
+        batch = await session.get(Batch, batch_id)
+        if batch is not None:
+            archive_batch_title = batch_service.extract_batch_title(batch)
+        local_archive.write_filler_request(
+            batch_id=str(batch_id),
+            batch_title=archive_batch_title,
+            doc_id=str(document.id),
+            doc_type=forced_doc_type,
+            file_name=document.filename,
+            doc_text=doc_text,
+            ocr_tokens=filler_tokens or None,
+            source="refill",
+        )
 
     # Call JSON filler
     try:
-        filled_response = await json_filler.fill_json(
+        filled_response = await json_filler_router.fill_json(
             document.id,
             forced_doc_type,
             doc_text=doc_text,
@@ -1037,6 +1356,16 @@ async def fill_document_from_existing_ocr(
             f"Документ {document.filename} не обработан: ошибка сервиса JSON Filler. Обратитесь к разработчику.",
         )
         return
+    if local_archive.enabled():
+        local_archive.write_filler_response(
+            batch_id=str(batch_id),
+            batch_title=archive_batch_title,
+            doc_id=str(document.id),
+            doc_type=forced_doc_type,
+            file_name=document.filename,
+            response=filled_response,
+            source="refill",
+        )
 
     fields_raw = filled_response.get("fields", {})
     normalized_fields = _flatten_filler_fields(fields_raw)
@@ -1052,6 +1381,8 @@ async def fill_document_from_existing_ocr(
         scored_fields[key] = payload
 
     _sync_field_pages(scored_fields, tokens, doc_id=document.id)
+    _apply_vet_cert_date_page_override(scored_fields, tokens, forced_doc_type)
+    _sync_field_bboxes(scored_fields, tokens)
 
     derived = paths.derived_for(str(document.id))
     filled_file = derived / "filled.json"
@@ -1106,7 +1437,7 @@ async def enqueue_batch_processing(batch_id: uuid.UUID) -> str:
         raise
     except Exception:
         logger.warning("Celery unavailable, running batch %s locally", batch_id, exc_info=True)
-        return await _start_local_task(batch_id, kind="process", runner=run_batch_pipeline)
+        return await _start_local_task(batch_id, kind="process", runner=run_batch_pipeline_auto)
     else:
         await task_tracker.record_task(batch_id, kind="process", transport="celery", task_id=result.id)
         return result.id
@@ -1119,7 +1450,7 @@ async def enqueue_batch_delta_processing(batch_id: uuid.UUID) -> str:
         raise
     except Exception:
         logger.warning("Celery unavailable, running batch delta %s locally", batch_id, exc_info=True)
-        return await _start_local_task(batch_id, kind="process_delta", runner=run_batch_delta_pipeline)
+        return await _start_local_task(batch_id, kind="process_delta", runner=run_batch_delta_pipeline_auto)
     else:
         await task_tracker.record_task(batch_id, kind="process_delta", transport="celery", task_id=result.id)
         return result.id

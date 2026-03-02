@@ -30,6 +30,50 @@ class Settings(BaseSettings):
         description="External OCR endpoint. Leave unset to use built-in dots.ocr runtime.",
     )
     json_filler_endpoint: HttpUrl = Field(default="http://json-filler.internal/v1/fill")
+    remote_json_filler_endpoint: HttpUrl | None = Field(
+        default=None,
+        description="Remote JSON filler endpoint for parallel API processing.",
+    )
+    remote_json_filler_provider: str = Field(
+        default="openrouter",
+        description="Remote JSON filler provider ('http' or 'openrouter').",
+    )
+    remote_json_filler_timeout: int = Field(
+        default=120,
+        description="Timeout for remote JSON filler requests in seconds.",
+    )
+    remote_json_filler_fallback_timeout: int = Field(
+        default=90,
+        description="Timeout before falling back from remote to local JSON filler.",
+    )
+    remote_json_filler_concurrency: int = Field(
+        default=1,
+        description="Maximum concurrent remote JSON filler requests.",
+    )
+    remote_json_filler_types_path: Path = Field(
+        default=Path(__file__).resolve().parents[1] / "remote_filler_types.txt",
+        description="Path to text file with document types for remote JSON filler.",
+    )
+    local_archive_mode: bool = Field(
+        default=False,
+        description="Enable local archive for uploads and filler logs.",
+    )
+    local_archive_dir: Path = Field(
+        default=Path(__file__).resolve().parents[2] / "local_archive",
+        description="Root directory for local archive files.",
+    )
+    doc_classifier_endpoint: HttpUrl | None = Field(
+        default=None,
+        description="Optional document classifier endpoint (OpenAI-compatible adapter).",
+    )
+    doc_classifier_timeout: int = Field(
+        default=30,
+        description="Timeout for document classifier requests in seconds.",
+    )
+    doc_classifier_max_text_chars: int = Field(
+        default=20000,
+        description="Max characters sent to document classifier.",
+    )
     low_conf_threshold: float = Field(default=0.75)
     report_timezone: str = Field(default="UTC")
     preview_max_width: int = Field(default=1280)

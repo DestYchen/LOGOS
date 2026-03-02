@@ -126,6 +126,26 @@ const FIELD_LABELS_RU: Record<string, string> = {
   HS_code: "Код ТНВЭД",
 };
 
+const DOC_TYPE_SHORT_LABELS: Record<string, string> = {
+  INVOICE: "INV",
+  PROFORMA: "PFI",
+  PACKING_LIST: "PL",
+  PRICE_LIST_1: "PR1",
+  PRICE_LIST_2: "PR2",
+  BILL_OF_LADING: "B/L",
+  CMR: "CMR",
+  CONTRACT: "CTR",
+  ADDENDUM: "ADD",
+  SPECIFICATION: "SPEC",
+  QUALITY_CERTIFICATE: "QC",
+  VETERINARY_CERTIFICATE: "VET",
+  EXPORT_DECLARATION: "EXD",
+  CERTIFICATE_OF_ORIGIN: "COO",
+  FORM_A: "FA",
+  "CT-3": "CT3",
+  T1: "T1",
+  EAV: "EAV",
+};
 
 
 
@@ -258,6 +278,35 @@ function normalizeBBox(bbox: unknown): number[] | null {
 
   return null;
 
+}
+
+function shortDocTypeLabel(docType: string): string {
+  const normalized = docType.trim();
+  if (!normalized) {
+    return "DOC";
+  }
+  const upper = normalized.toUpperCase();
+  const direct = DOC_TYPE_SHORT_LABELS[upper];
+  if (direct) {
+    return direct;
+  }
+  const contractMatch = upper.match(/^CONTRACT_(\d+)$/);
+  if (contractMatch) {
+    return `CTR${contractMatch[1]}`;
+  }
+  const priceMatch = upper.match(/^PRICE_LIST_(\d+)$/);
+  if (priceMatch) {
+    return `PR${priceMatch[1]}`;
+  }
+  const cleaned = upper.replace(/[^A-Z0-9]+/g, " ").trim();
+  if (!cleaned) {
+    return upper.slice(0, 4);
+  }
+  const parts = cleaned.split(" ");
+  if (parts.length === 1) {
+    return parts[0].slice(0, 4);
+  }
+  return parts.map((part) => part[0]).join("").slice(0, 4);
 }
 
 
@@ -883,6 +932,7 @@ function ResolvePage() {
   const [showBoxes, setShowBoxes] = useState(false);
 
   const [showResolvedFields, setShowResolvedFields] = useState(false);
+  const [showProducts, setShowProducts] = useState(false);
 
   const [editingFieldKey, setEditingFieldKey] = useState<string | null>(null);
 
@@ -1141,7 +1191,6 @@ function ResolvePage() {
     setShowBoxes(false);
 
     setShowResolvedFields(false);
-
     setEditingFieldKey(null);
 
   }, [activeIndex]);
@@ -1573,6 +1622,8 @@ const goToDocument = (index: number) => {
 
     setHighlightedField(null);
 
+    setShowProducts(true);
+
     setActiveIndex(index);
 
     navigate(`/resolve/${batchId}/${index}`, { replace: true });
@@ -1670,36 +1721,35 @@ const goToDocument = (index: number) => {
 
         </span>
 
-        <div className="flex items-center gap-2">
-
-          {documents.map((doc, index) => (
-
-            <button
-
-              key={doc.id}
-
-              type="button"
-
-              onClick={() => goToDocument(index)}
-
-              className={cn(
-
-                "h-4 w-4 rounded-full border-2 transition-colors",
-
-                index === activeIndex
-
-                  ? "border-primary bg-primary"
-
-                  : "border-muted-foreground/40 bg-muted-foreground/30 hover:border-primary hover:bg-primary/50",
-
-              )}
-
-              aria-label={`Документ ${index + 1}`}
-
-            />
-
-          ))}
-
+        <div className="flex flex-wrap items-end gap-3">
+          {documents.map((doc, index) => {
+            const isActive = index === activeIndex;
+            const shortLabel = shortDocTypeLabel(doc.doc_type);
+            return (
+              <div key={doc.id} className="flex flex-col items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => goToDocument(index)}
+                  className={cn(
+                    "h-4 w-4 rounded-full border-2 transition-colors",
+                    isActive
+                      ? "border-primary bg-primary"
+                      : "border-muted-foreground/40 bg-muted-foreground/30 hover:border-primary hover:bg-primary/50",
+                  )}
+                  aria-label={`Документ ${index + 1}: ${doc.doc_type}`}
+                  title={doc.doc_type}
+                />
+                <span
+                  className={cn(
+                    "text-[10px] font-medium tracking-wide text-muted-foreground",
+                    isActive && "text-primary",
+                  )}
+                >
+                  {shortLabel}
+                </span>
+              </div>
+            );
+          })}
         </div>
 
       </div>
@@ -2238,8 +2288,18 @@ const goToDocument = (index: number) => {
 
               {hasProducts ? (
                 <section className="space-y-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowProducts((prev) => !prev)}
+                    className="flex w-full items-center justify-between rounded-xl border border-transparent bg-muted/30 px-4 py-3 text-left text-sm font-medium transition hover:border-muted-foreground/40 hover:bg-muted/40"
+                    aria-label="Toggle products"
+                  >
                   <h2 className="text-sm font-semibold">Товары</h2>
-                  {productGroups.map((group, index) => {
+                  {showProducts ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </button>
+                  {showProducts ? (
+                    <div className="space-y-3">
+                      {productGroups.map((group, index) => {
                     const label =
                       group.order !== Number.MAX_SAFE_INTEGER ? `Продукт ${group.order + 1}` : `Продукт ${index + 1}`;
                     return (
@@ -2278,7 +2338,9 @@ const goToDocument = (index: number) => {
                         </div>
                       </div>
                     );
-                  })}
+                      })}
+                    </div>
+                  ) : null}
                 </section>
               ) : null}
 

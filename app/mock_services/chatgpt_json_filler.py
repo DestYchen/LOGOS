@@ -5,6 +5,7 @@ import os
 import logging
 import re
 from copy import deepcopy
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterator, Optional, Tuple, List
 from urllib import request as urlrequest
 
@@ -12,6 +13,7 @@ from fastapi import FastAPI
 from openai import OpenAI
 from pydantic import BaseModel
 from app.core.enums import DocumentType
+from app.services import local_archive
 from app.mock_services.templates import get_template_definition
 from app.mock_services.hints import get_hints_text
 from pathlib import Path
@@ -28,7 +30,7 @@ LLM_BASE_URL: str = "http://10.0.0.247:1234/v1"
 LLM_API_KEY: str = ""  # intentionally left empty by default
 
 # Model names (can be the same or different; overridable via env)
-LLM_MODEL_MAIN: str = "openai/gpt-oss-20b"
+LLM_MODEL_MAIN: str = "openai/gpt-oss-120b"
 LLM_MODEL_PRODUCTS: str = LLM_MODEL_MAIN
 
 # Reasoning effort (used for responses API). Default to low for speed.
@@ -359,7 +361,7 @@ def _extract_json(payload: str) -> str:
     return cleaned
 
 
-def _sanitize_json_like(text: str) -> Tuple[str, bool]:
+def _sanitize_json_like(text: str, normalize_smart_quotes: bool = True) -> Tuple[str, bool]:
     """
     Attempt minimal repair of near-JSON while keeping valid JSON intact.
     Returns (possibly_modified_text, changed_flag).
@@ -368,13 +370,14 @@ def _sanitize_json_like(text: str) -> Tuple[str, bool]:
         return text, False
     original = text
 
-    # Normalize smart quotes
-    t = (
-        text.replace("\u201c", '"')
-            .replace("\u201d", '"')
-            .replace("\u2018", "'")
-            .replace("\u2019", "'")
-    )
+    t = text
+    if normalize_smart_quotes:
+        t = (
+            text.replace("\u201c", '"')
+                .replace("\u201d", '"')
+                .replace("\u2018", "'")
+                .replace("\u2019", "'")
+        )
 
     # Remove trailing commas before } or ]
     t = re.sub(r",\s*([}\]])", r"\1", t)
@@ -438,7 +441,20 @@ def _parse_json_str(raw: str) -> Tuple[Dict[str, Any], bool]:
     Extract, sanitize, and load JSON. Returns (data, repaired_flag).
     """
     extracted = _extract_json(raw or "")
-    sanitized, changed = _sanitize_json_like(extracted)
+    try:
+        data = json.loads(extracted)
+        return data, False
+    except json.JSONDecodeError:
+        pass
+
+    sanitized, changed = _sanitize_json_like(extracted, normalize_smart_quotes=False)
+    try:
+        data = json.loads(sanitized)
+        return data, changed
+    except json.JSONDecodeError:
+        pass
+
+    sanitized, changed = _sanitize_json_like(extracted, normalize_smart_quotes=True)
     try:
         data = json.loads(sanitized)
         return data, changed
@@ -897,12 +913,22 @@ def _llm_chat(messages: list, model: str, timeout: int = 300) -> str:
     return (resp.choices[0].message.content or "").strip()
 
 
-def _llm_json_with_retries(messages: list, model: str, branch: str, timeout: int = 300) -> Tuple[Optional[Dict[str, Any]], bool, Optional[str]]:
+def _llm_json_with_retries(
+    messages: list,
+    model: str,
+    branch: str,
+    timeout: int = 300,
+    *,
+    doc_id: Optional[str] = None,
+    doc_type: Optional[DocumentType] = None,
+    file_name: Optional[str] = None,
+) -> Tuple[Optional[Dict[str, Any]], bool, Optional[str]]:
     """
     Calls LLM and parses JSON with retries. Returns (payload, repaired_flag, raw_text).
     On retries, appends a corrective user message to enforce strict JSON.
     """
     last_raw: Optional[str] = None
+    request_kind = f"local_llm_{branch.lower()}"
     for attempt in range(1, max(1, MAX_LLM_RETRIES) + 1):
         try:
             msgs = deepcopy(messages)
@@ -918,8 +944,46 @@ def _llm_json_with_retries(messages: list, model: str, branch: str, timeout: int
                     }],
                 }
                 msgs.append(correction)
+            if local_archive.enabled() and doc_id and doc_type:
+                local_archive.write_api_request(
+                    doc_id=str(doc_id),
+                    doc_type=doc_type,
+                    request_kind=request_kind,
+                    attempt=attempt,
+                    payload={
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "provider": "local_llm",
+                        "request_kind": request_kind,
+                        "attempt": attempt,
+                        "doc_id": str(doc_id),
+                        "doc_type": doc_type.value,
+                        "file_name": file_name,
+                        "model": model,
+                        "temperature": 0,
+                        "timeout": timeout,
+                        "messages": msgs,
+                    },
+                )
             raw = _llm_chat(msgs, model=model, timeout=timeout)
             last_raw = raw
+            if local_archive.enabled() and doc_id and doc_type:
+                local_archive.write_api_response(
+                    doc_id=str(doc_id),
+                    doc_type=doc_type,
+                    request_kind=request_kind,
+                    attempt=attempt,
+                    payload={
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "provider": "local_llm",
+                        "request_kind": request_kind,
+                        "attempt": attempt,
+                        "doc_id": str(doc_id),
+                        "doc_type": doc_type.value,
+                        "file_name": file_name,
+                        "model": model,
+                        "raw_response": raw,
+                    },
+                )
             if _DETAILED:
                 logger.debug("%s attempt %d raw (%d chars): %s", branch, attempt, len(raw or ""), _brief(raw or ""))
             data, repaired = _parse_json_str(raw)
@@ -1223,6 +1287,9 @@ async def fill(request: FillerRequest) -> FillerResponse:
         messages=msgs_main,
         model=LLM_MODEL_MAIN,
         branch="MAIN",
+        doc_id=request.doc_id,
+        doc_type=request.doc_type,
+        file_name=request.file_name,
     )
     if isinstance(main_payload, dict):
         try:
@@ -1271,6 +1338,9 @@ async def fill(request: FillerRequest) -> FillerResponse:
             messages=msgs_products,
             model=LLM_MODEL_PRODUCTS,
             branch="PRODUCTS",
+            doc_id=request.doc_id,
+            doc_type=request.doc_type,
+            file_name=request.file_name,
         )
         if isinstance(products_payload, dict):
             try:

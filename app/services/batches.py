@@ -16,6 +16,7 @@ from app.core.config import get_settings
 from app.core.enums import BatchStatus, DocumentStatus
 from app.core.storage import batch_dir, ensure_base_dir, unique_filename
 from app.models import Batch, Document
+from app.services import local_archive
 
 import subprocess
 import shutil
@@ -318,6 +319,7 @@ async def save_documents(
 ) -> List[str]:
     batch_paths = batch_dir(str(batch.id))
     batch_paths.ensure()
+    batch_title = extract_batch_title(batch)
     saved_urls: List[str] = []
 
     async def _add_document(path: Path, mime: Optional[str]) -> None:
@@ -349,6 +351,12 @@ async def save_documents(
                     break
                 buffer.write(chunk)
         await upload.close()
+        if local_archive.enabled():
+            local_archive.store_raw_file(
+                batch_id=str(batch.id),
+                batch_title=batch_title,
+                source_path=dest,
+            )
 
         created_paths: List[Path] = []
         pdf_source: Optional[Path] = None

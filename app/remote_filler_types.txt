@@ -1,0 +1,7 @@
+# One DocumentType per line for remote JSON filler routing.
+# Example:
+# PRICE_LIST_1
+# CMR
+EXPORT_DECLARATION
+CONTRACT
+VETERINARY_CERTIFICATE

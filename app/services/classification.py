@@ -6,13 +6,41 @@ from typing import Any, Dict, Iterable, List, Tuple
 import logging
 import os
 
+import httpx
+
+from app.core.config import get_settings
 from app.core.enums import DocumentType
 
 logger = logging.getLogger(__name__)
 _CLASSIFICATION_DEBUG = os.getenv("SUPPLYHUB_CLASSIFICATION_DEBUG", "").lower() in {"1", "true", "yes", "on"}
+settings = get_settings()
+_LLM_CLASSIFIER_DISABLED_LOGGED = False
 _PROFORMA_PRIORITY_RE = re.compile(r"(?i)\bproforma[\s-]+invoice\b")
 _PACKING_LIST_PRIORITY_RE = re.compile(r"(?i)\bpacking\s+list\b")
-_PRICE_LIST_2_PRIORITY_RE = re.compile(r"(?i)\bprice\s+per\s+kg\b")
+_SPECIFICATION_PRIORITY_RE = re.compile(
+    "(?i)\\b(?:specification|\\u0441\\u043f\\u0435\\u0446\\u0438\\u0444\\u0438\\u043a\\u0430\\u0446\\u0438\\u044f)\\b"
+    "\\s*(?:no\\.?|n\\.?|#|\\u2116)\\s*[A-Za-z0-9-]+"
+)
+_CONTRACT_SIGNAL_RE = re.compile(
+    "(?i)\\bcontract\\b|\\b(?:\\u043a\\u043e\\u043d\\u0442\\u0440\\u0430\\u043a\\u0442|\\u0434\\u043e\\u0433\\u043e\\u0432\\u043e\\u0440)\\w*\\b"
+)
+_INVOICE_HEADER_STRONG_RE = re.compile(
+    r"(?i)\bcommercial\s+invoice\b|\binvoice\s*(?:no|number)\b|\binvoice\s+date\b"
+)
+_PRICE_LIST_PER_KG_RE = re.compile(
+    r"(?i)\b(?:unit\s+price|price)\s*(?:per|/)\s*kgs?\b"
+    r"|\b(?:usd|eur|rmb|cny)\s*/\s*kgs?\b"
+)
+_PRICE_LIST_PER_PACK_RE = re.compile(
+    r"(?i)\b(?:unit\s+price|price)\s*(?:per|/)\s*"
+    r"(?:bag|bags|pack|packs|package|packages|carton|cartons|box|boxes|case|cases|sack|sacks|ctn|ctns)\b"
+    r"|\b(?:usd|eur|rmb|cny)\s*/\s*"
+    r"(?:bag|bags|pack|packs|package|packages|carton|cartons|box|boxes|case|cases|sack|sacks|ctn|ctns)\b"
+)
+_PRICE_LIST_HEADER_RE = re.compile(
+    r"(?i)\bprice\s*list\b|\bfiyat\s+listesi\b|\blista\s+de\s+precios\b"
+)
+_CMR_PRIORITY_RE = re.compile(r"(?i)\binternational\s+consignment\s+note\b|\bconsignment\s+note\b|\bCMR\b")
 _EXPORT_DECL_PRIORITY_RE = re.compile(
     r"(?i)\bdocumento\s+unico\s+de\s+salida\b|\bservicio\s+nacional\s+de\s+aduanas\b|\bexport\s+declaration\b"
 )
@@ -110,6 +138,11 @@ KEYWORDS: Dict[DocumentType, List[str]] = {
         r"(?i)certificado\s+veterinario",
         r"(?:????|????|??????|??????)",
     ],
+    DocumentType.CMR: [
+        r"(?i)\bCMR\b",
+        r"(?i)international\s+consignment\s+note",
+        r"(?i)\bconsignment\s+note\b",
+    ],
     DocumentType.PROFORMA: [
         r"(?i)\bproforma(?:[\s-]+invoice)?\b",
         r"(?i)проформа\s+счёт",
@@ -126,6 +159,9 @@ KEYWORDS: Dict[DocumentType, List[str]] = {
         r"(?i)\bT1\b",
         r"(?i)\bIRB\b",
         r"(?i)\bMRN\b",
+    ],
+    DocumentType.SPECIFICATION: [
+        r"(?i)\bspecification\b",
     ],
     # Contract parts (content-based; filename not required).
     DocumentType.CONTRACT_1: [
@@ -155,6 +191,14 @@ KEYWORDS: Dict[DocumentType, List[str]] = {
     DocumentType.CONTRACT_3: [
         r"(?i)\blegal\s+addresses\s+of\s+the\s+parties\b",
         r"(?i)\bюридические\s+адреса\s+сторон\b",
+        r"(?i)\bon\s+behalf\s+of\s+the\s+buyer\b",
+        r"(?i)\bon\s+behalf\s+of\s+the\s+seller\b",
+        r"(?i)\bgeneral\s+director\b",
+        r"(?i)\bbeneficiary\'?s\s+bank\b",
+        r"(?i)\bswift\b",
+        r"(?i)\b(?:\u043e\u0442\s+\u0438\u043c\u0435\u043d\u0438)\s+\u043f\u043e\u043a\u0443\u043f\u0430\u0442\u0435\u043b\u044f\b",
+        r"(?i)\b(?:\u043e\u0442\s+\u0438\u043c\u0435\u043d\u0438)\s+\u043f\u0440\u043e\u0434\u0430\u0432\u0446\u0430\b",
+        r"(?i)\b\u0433\u0435\u043d\u0435\u0440\u0430\u043b\u044c\u043d\u044b\u0439\s+\u0434\u0438\u0440\u0435\u043a\u0442\u043e\u0440\b",
     ],
 }
 
@@ -187,17 +231,189 @@ def _split_patterns(patterns: List[str]) -> Tuple[List[str], List[str]]:
     return single_word, multi_word
 
 
-def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = None) -> DocumentType:
-    scores: Counter[DocumentType] = Counter()
-    matched_patterns: Dict[DocumentType, List[str]] = {}
+def _pick_price_list_type(header_text: str, full_text: str) -> Tuple[DocumentType | None, str | None]:
+    if not (_PRICE_LIST_HEADER_RE.search(header_text) or _PRICE_LIST_HEADER_RE.search(full_text)):
+        return None, None
 
+    pack_in_header = bool(_PRICE_LIST_PER_PACK_RE.search(header_text))
+    kg_in_header = bool(_PRICE_LIST_PER_KG_RE.search(header_text))
+    if kg_in_header and not pack_in_header:
+        return DocumentType.PRICE_LIST_1, "price per kg"
+    if pack_in_header and not kg_in_header:
+        return DocumentType.PRICE_LIST_2, "price per pack"
+    if kg_in_header and pack_in_header:
+        return DocumentType.PRICE_LIST_1, "price per kg"
+
+    pack_in_full = bool(_PRICE_LIST_PER_PACK_RE.search(full_text))
+    kg_in_full = bool(_PRICE_LIST_PER_KG_RE.search(full_text))
+    if kg_in_full and not pack_in_full:
+        return DocumentType.PRICE_LIST_1, "price per kg"
+    if pack_in_full and not kg_in_full:
+        return DocumentType.PRICE_LIST_2, "price per pack"
+    if kg_in_full and pack_in_full:
+        return DocumentType.PRICE_LIST_1, "price per kg"
+
+    return None, None
+
+
+def _normalize_doc_type_value(raw: str | None) -> DocumentType | None:
+    if not raw:
+        return None
+    token = str(raw).strip().split()[0].strip("`\"' ")
+    if not token:
+        return None
+    token_upper = token.upper()
+    if token_upper in ("CT-3", "CT_3"):
+        return DocumentType.CT_3
+    for doc_type in DocumentType:
+        if token_upper == doc_type.value.upper():
+            return doc_type
+        if token_upper == doc_type.name.upper():
+            return doc_type
+    alt = token_upper.replace("-", "_")
+    for doc_type in DocumentType:
+        if alt == doc_type.value.upper() or alt == doc_type.name.upper():
+            return doc_type
+    return None
+
+
+def _score_contract_parts(full_text: str) -> Dict[DocumentType, int]:
+    scores: Dict[DocumentType, int] = {}
+    for doc_type in (DocumentType.CONTRACT_1, DocumentType.CONTRACT_2, DocumentType.CONTRACT_3):
+        count = 0
+        for pattern in SANITIZED_KEYWORDS.get(doc_type, []):
+            try:
+                if re.search(pattern, full_text):
+                    count += 1
+            except re.error:
+                logger.warning("Invalid regex pattern skipped at runtime for %s: %s", doc_type, pattern)
+        scores[doc_type] = count
+    return scores
+
+
+def _pick_contract_part(full_text: str) -> DocumentType | None:
+    scores = _score_contract_parts(full_text)
+    ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+    if not ranked or ranked[0][1] <= 0:
+        return None
+    if len(ranked) > 1 and ranked[0][1] == ranked[1][1]:
+        return None
+    return ranked[0][0]
+
+
+def _classify_document_llm(tokens: Iterable[Dict[str, str]], file_name: str | None = None) -> DocumentType | None:
+    endpoint = settings.doc_classifier_endpoint
+    if not endpoint:
+        global _LLM_CLASSIFIER_DISABLED_LOGGED
+        if not _LLM_CLASSIFIER_DISABLED_LOGGED:
+            logger.info("Doc classifier endpoint not configured; skipping LLM classification.")
+            _LLM_CLASSIFIER_DISABLED_LOGGED = True
+        return None
+
+    raw_texts = [token.get("text", "") for token in tokens if token.get("text", "")]
+    if not raw_texts:
+        return None
+
+    header_text = " ".join(raw_texts[:80]).strip()
+    doc_text = " ".join(raw_texts).strip()
+    max_chars = settings.doc_classifier_max_text_chars
+    if max_chars and len(doc_text) > max_chars:
+        doc_text = doc_text[:max_chars]
+
+    payload: Dict[str, Any] = {
+        "doc_id": file_name or "",
+        "file_name": file_name,
+        "header_text": header_text,
+        "doc_text": doc_text,
+    }
+
+    try:
+        logger.info(
+            "Classification (LLM request): file=%s endpoint=%s header_len=%s text_len=%s",
+            file_name or "<unknown>",
+            endpoint,
+            len(header_text),
+            len(doc_text),
+        )
+        with httpx.Client(timeout=float(settings.doc_classifier_timeout)) as client:
+            response = client.post(str(endpoint), json=payload)
+            response.raise_for_status()
+            data = response.json()
+    except (httpx.HTTPError, ValueError):
+        logger.warning(
+            "Doc classifier request failed; falling back to regex for %s",
+            file_name or "<unknown>",
+            exc_info=True,
+        )
+        return None
+
+    doc_type_raw: Any | None = None
+    if isinstance(data, dict):
+        doc_type_raw = data.get("doc_type") or data.get("type") or data.get("docType")
+        if isinstance(doc_type_raw, dict):
+            doc_type_raw = doc_type_raw.get("value")
+    elif isinstance(data, str):
+        doc_type_raw = data
+
+    normalized = _normalize_doc_type_value(doc_type_raw)
+    logger.info(
+        "Classification (LLM response): file=%s doc_type=%s",
+        file_name or "<unknown>",
+        (normalized.value if normalized else DocumentType.UNKNOWN.value),
+    )
+    return normalized
+
+
+def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = None) -> DocumentType:
     token_texts = [token.get("text", "").lower() for token in tokens if token.get("text", "")]
     full_text = " ".join(token_texts)
     header_text = " ".join(token_texts[:80])
-    if _PROFORMA_PRIORITY_RE.search(full_text):
+    invoice_header_strong = bool(_INVOICE_HEADER_STRONG_RE.search(header_text))
+    if _PROFORMA_PRIORITY_RE.search(header_text):
         if _CLASSIFICATION_DEBUG:
             logger.info("Classification override: file=%s doc_type=PROFORMA (proforma invoice)", file_name or "<unknown>")
         return DocumentType.PROFORMA
+    if invoice_header_strong:
+        if _CLASSIFICATION_DEBUG:
+            logger.info("Classification override: file=%s doc_type=INVOICE (invoice header)", file_name or "<unknown>")
+        return DocumentType.INVOICE
+    contract_part = _pick_contract_part(full_text)
+    contract_signal = bool(_CONTRACT_SIGNAL_RE.search(header_text) or _CONTRACT_SIGNAL_RE.search(full_text))
+    if contract_part and contract_signal:
+        if _CLASSIFICATION_DEBUG:
+            logger.info(
+                "Classification override: file=%s doc_type=%s (contract signals)",
+                file_name or "<unknown>",
+                contract_part.value,
+            )
+        return contract_part
+    if _PACKING_LIST_PRIORITY_RE.search(full_text):
+        if _CLASSIFICATION_DEBUG:
+            logger.info("Classification override: file=%s doc_type=PACKING_LIST (packing list)", file_name or "<unknown>")
+        return DocumentType.PACKING_LIST
+    if _SPECIFICATION_PRIORITY_RE.search(header_text):
+        if _CLASSIFICATION_DEBUG:
+            logger.info("Classification override: file=%s doc_type=SPECIFICATION (specification header)", file_name or "<unknown>")
+        return DocumentType.SPECIFICATION
+    price_list_type, price_list_reason = _pick_price_list_type(header_text, full_text)
+    if price_list_type:
+        if _CLASSIFICATION_DEBUG:
+            logger.info(
+                "Classification override: file=%s doc_type=%s (%s)",
+                file_name or "<unknown>",
+                price_list_type.value,
+                price_list_reason,
+            )
+        return price_list_type
+
+    llm_doc_type = _classify_document_llm(tokens, file_name=file_name)
+    if llm_doc_type and llm_doc_type != DocumentType.UNKNOWN:
+        file_label = file_name or "<unknown>"
+        logger.info("Classification (LLM): file=%s doc_type=%s", file_label, llm_doc_type.value)
+        return llm_doc_type
+
+    scores: Counter[DocumentType] = Counter()
+    matched_patterns: Dict[DocumentType, List[str]] = {}
     if _PACKING_LIST_PRIORITY_RE.search(full_text):
         if _CLASSIFICATION_DEBUG:
             logger.info("Classification override: file=%s doc_type=PACKING_LIST (packing list)", file_name or "<unknown>")
@@ -213,6 +429,10 @@ def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = 
                 file_name or "<unknown>",
             )
         return DocumentType.EXPORT_DECLARATION
+    if _CMR_PRIORITY_RE.search(full_text):
+        if _CLASSIFICATION_DEBUG:
+            logger.info("Classification override: file=%s doc_type=CMR (consignment note)", file_name or "<unknown>")
+        return DocumentType.CMR
     if _VET_CERT_HEADER_RE.search(header_text) or (
         _VET_CERT_HEADER_RE.search(full_text) and _VET_CERT_NUMBER_RE.search(full_text)
     ):
@@ -222,11 +442,6 @@ def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = 
                 file_name or "<unknown>",
             )
         return DocumentType.VETERINARY_CERTIFICATE
-    if _PRICE_LIST_2_PRIORITY_RE.search(full_text):
-        if _CLASSIFICATION_DEBUG:
-            logger.info("Classification override: file=%s doc_type=PRICE_LIST_2 (price per kg)", file_name or "<unknown>")
-        return DocumentType.PRICE_LIST_2
-
     per_token_patterns: Dict[DocumentType, List[str]] = {}
     full_text_patterns: Dict[DocumentType, List[str]] = {}
     for doc_type, patterns in SANITIZED_KEYWORDS.items():

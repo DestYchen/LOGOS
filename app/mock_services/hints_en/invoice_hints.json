@@ -5,7 +5,7 @@
   "buyer": "Identify the buyer by labels \"Buyer\", \"Customer\", \"Consignee\", \"Bill to\". Keep the full name and, if shown, the address in a single line without abbreviations. Add the text to buyer.",
   "seller": "Identify the seller by labels \"Seller\", \"Supplier\", \"Shipper\", \"Exporter\". Keep the full legal name and, if shown, the address in a single line. Add the text to seller.",
   "producer": "If the invoice shows \"Producer\"/\"Manufacturer\"/\"Factory\", extract the legal name. If multiple producers are listed, join them with \"; \". Add the text to producer.",
-  "incoterms": "Extract delivery terms (Incoterms) - a three-letter code (e.g., EXW/FOB/CFR/CIF/DAP) and, if shown, the place (e.g., \"CFR ST. PETERSBURG - RUSSIA\"). Keep exactly as in the document and add to incoterms.",
+  "incoterms": "Extract delivery terms (Incoterms) - a three-letter code (e.g., EXW/FOB/CFR/CIF/DAP) and, if shown, the place (e.g., \"CFR ST. PETERSBURG - RUSSIA\"). Keep exactly as in the document and add to incoterms. Incoterms can also appear inside the line-item table; if you see something like \"FOB QINGDAO\" in the table, treat it as incoterms.",
   "terms_of_payment": "Find payment terms (\"Terms of payment\", \"Payment\"). Keep the full wording (e.g., \"ADV. 20%, BALANCE C/COPY DOC.\") and add it to terms_of_payment.",
   "bank_details": "Extract the bank details block (bank, account/IBAN, SWIFT/BIC, beneficiary and address). Keep it as one multiline text without normalization and add it to bank_details.",
   "proforma_no": "If the invoice references a proforma, find \"Proforma Invoice No.\"/\"Proforma No.\"/\"PI/P.I.\". Extract only the proforma number, do not confuse with the order number (\"Order\", \"P.Code\"). Add the value to proforma_no.",

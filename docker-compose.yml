@@ -40,6 +40,11 @@ services:
       SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
       SUPPLYHUB_REDIS_URL: redis://redis:6379/0
       SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:8002/v1/fill
+      SUPPLYHUB_DOC_CLASSIFIER_ENDPOINT: http://doc-classifier:8003/v1/classify
+      SUPPLYHUB_LOCAL_ARCHIVE_MODE: "1"
+      SUPPLYHUB_LOCAL_ARCHIVE_DIR: /app/local_archive
+      SUPPLYHUB_REMOTE_JSON_FILLER_PROVIDER: http
+      SUPPLYHUB_REMOTE_JSON_FILLER_ENDPOINT: http://remote-json-filler:8004/v1/fill
       SUPPLYHUB_CELERY_BROKER_URL: redis://redis:6379/1
       SUPPLYHUB_CELERY_RESULT_BACKEND: redis://redis:6379/2
       SUPPLYHUB_BASE_DIR: /data/storage
@@ -64,6 +69,8 @@ services:
       - ../dots/dots.ocr:/vendor/dots.ocr:ro
       # Mount source code so container uses latest backend without rebuild
       - ./app:/app/app:ro
+      # Local archive root (host project folder)
+      - ./local_archive:/app/local_archive
     ports:
       - "8000:8000"
 
@@ -81,6 +88,11 @@ services:
       SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
       SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:8002/v1/fill
       SUPPLYHUB_REDIS_URL: redis://redis:6379/0
+      SUPPLYHUB_DOC_CLASSIFIER_ENDPOINT: http://doc-classifier:8003/v1/classify
+      SUPPLYHUB_LOCAL_ARCHIVE_MODE: "1"
+      SUPPLYHUB_LOCAL_ARCHIVE_DIR: /app/local_archive
+      SUPPLYHUB_REMOTE_JSON_FILLER_PROVIDER: http
+      SUPPLYHUB_REMOTE_JSON_FILLER_ENDPOINT: http://remote-json-filler:8004/v1/fill
       SUPPLYHUB_CELERY_BROKER_URL: redis://redis:6379/1
       SUPPLYHUB_CELERY_RESULT_BACKEND: redis://redis:6379/2
       SUPPLYHUB_BASE_DIR: /data/storage
@@ -104,6 +116,8 @@ services:
       - ../dots/dots.ocr:/vendor/dots.ocr:ro
       # Mount source code for worker to use latest backend without rebuild
       - ./app:/app/app:ro
+      # Local archive root (host project folder)
+      - ./local_archive:/app/local_archive
     command: [
       "celery",
       "-A",
@@ -111,6 +125,49 @@ services:
       "worker",
       "--loglevel=info"
     ]
+
+  doc-classifier:
+    build: .
+    restart: unless-stopped
+    command: [
+      "uvicorn",
+      "app.mock_services.chatgpt_doc_classifier:app",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8003"
+    ]
+    volumes:
+      - ./app:/app/app:ro
+    ports:
+      - "8003:8003"
+
+  remote-json-filler:
+    build: .
+    restart: unless-stopped
+    command: [
+      "uvicorn",
+      "app.mock_services.openrouter_json_filler:app",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8004"
+    ]
+    environment:
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL_MAIN: ${OPENROUTER_MODEL_MAIN:-openai/gpt-oss-120b}
+      OPENROUTER_MODEL_PRODUCTS: ${OPENROUTER_MODEL_PRODUCTS:-openai/gpt-oss-120b}
+      OPENROUTER_HTTP_REFERER: ${OPENROUTER_HTTP_REFERER:-http://localhost}
+      OPENROUTER_X_TITLE: ${OPENROUTER_X_TITLE:-SupplyHub JSON Filler}
+      SUPPLYHUB_LOCAL_ARCHIVE_MODE: "1"
+      SUPPLYHUB_LOCAL_ARCHIVE_DIR: /app/local_archive
+    volumes:
+      - ./app:/app/app:ro
+      # Local archive root (host project folder)
+      - ./local_archive:/app/local_archive
+    ports:
+      - "8004:8004"
 
   init-db:
     build: .

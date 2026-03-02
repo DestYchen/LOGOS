@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timezone
 
 import json
+import re
 
 import uuid
 
@@ -94,9 +95,9 @@ def _feedback_error_message(code: str) -> str:
         "message_too_long": "Описание слишком длинное.",
         "feedback_type_invalid": "Выберите тип обращения.",
         "contact_too_long": "Контакт слишком длинный.",
-        "too_many_files": "Можно добавить не более 5 изображений.",
-        "unsupported_file_type": "Поддерживаются только изображения JPG или PNG.",
-        "file_too_large": "Размер каждого изображения не должен превышать 5 МБ.",
+        "too_many_files": "Можно добавить не более 5 файлов.",
+        "unsupported_file_type": "Поддерживаются JPG, PNG или PDF.",
+        "file_too_large": "Размер каждого файла не должен превышать 5 МБ.",
     }
     return mapping.get(code, "Не удалось отправить обратную связь.")
 
@@ -1316,7 +1317,7 @@ async def delete_document(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="document_not_found")
 
 
-    _ensure_prep_open(document.batch)
+    _ensure_delete_allowed(document.batch)
 
 
     import shutil as _shutil
@@ -1436,6 +1437,11 @@ def _prep_complete(batch: Any) -> bool:
 
 def _ensure_prep_open(batch: Any) -> None:
     if _prep_complete(batch):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="prep_locked")
+
+
+def _ensure_delete_allowed(batch: Any) -> None:
+    if _prep_complete(batch) and batch.status not in (BatchStatus.DONE, BatchStatus.VALIDATED):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="prep_locked")
 
 
@@ -1875,47 +1881,48 @@ def _build_product_table(document: Document) -> Dict[str, Any]:
 
 
 
-    for index in range(0, 500):
+    prefix = f"{base_key}."
+    product_ids: List[str] = []
+    seen: set[str] = set()
+    for key in latest_fields:
+        if not key.startswith(prefix):
+            continue
+        parts = key.split(".")
+        if len(parts) < 3:
+            continue
+        prod_id = parts[1]
+        if prod_id == "product_template":
+            continue
+        if prod_id not in seen:
+            seen.add(prod_id)
+            product_ids.append(prod_id)
 
-        row_key = f"{base_key}.{index}"
+    def _product_order_key(prod_id: str) -> Tuple[int, str]:
+        match = re.search(r"\d+", prod_id)
+        if match:
+            return (int(match.group(0)), prod_id)
+        return (1_000_000_000, prod_id)
 
+    for prod_id in sorted(product_ids, key=_product_order_key):
+        row_key = f"{base_key}.{prod_id}"
         row_cells: Dict[str, Any] = {}
-
         has_values = False
 
-
-
         for column_key in column_keys:
-
             field_key = f"{row_key}.{column_key}"
-
             field = latest_fields.get(field_key)
-
             value = field.value if field else None
-
             confidence = float(field.confidence) if field and field.confidence is not None else None
-
             if value not in (None, ""):
-
                 has_values = True
-
             row_cells[column_key] = {
-
                 "value": value,
-
                 "confidence": confidence,
-
                 "confidence_display": f"{confidence:.2f}" if confidence is not None else None,
-
             }
 
-
-
         if not has_values:
-
-            break
-
-
+            continue
 
         rows.append({"key": row_key, "cells": row_cells})
 

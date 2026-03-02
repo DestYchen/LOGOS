@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 
 import { Button } from "../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import instructionVideo from "../assets/demo_logos.mp4";
 
 function InstructionsPage() {
   return (
@@ -15,6 +16,18 @@ function InstructionsPage() {
           <Link to="/feedback">К обратной связи</Link>
         </Button>
       </header>
+      <div className="overflow-hidden rounded-3xl border bg-background">
+        <video
+          className="w-full"
+          controls
+          playsInline
+          preload="metadata"
+          aria-label="Instruction video"
+        >
+          <source src={instructionVideo} type="video/mp4" />
+          Your browser does not support the video tag.
+        </video>
+      </div>
 
       <Card className="rounded-3xl border bg-background">
         <CardHeader>

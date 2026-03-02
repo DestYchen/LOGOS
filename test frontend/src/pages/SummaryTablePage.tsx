@@ -1,6 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import type { ChangeEvent } from "react";
-import { ArrowLeft, ArrowRight, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
 
@@ -17,7 +17,7 @@ import { confirmField, fetchBatchDetails, updateField, uploadDocumentsToBatch } 
 import { cn, formatDateTime, mapBatchStatus, statusLabel } from "../lib/utils";
 import { formatPacketTimestamp } from "../lib/packet";
 import { DOCUMENT_PREVIEW_CALIBRATION } from "../lib/preview-calibration";
-import type { BatchDetails, DocumentPayload, FieldState } from "../types/api";
+import type { BatchDetails, DocumentPayload, FieldState, ProductColumn, ProductRow } from "../types/api";
 
 type ValidationRef = {
   doc_id?: string;
@@ -25,15 +25,26 @@ type ValidationRef = {
   field_key?: string;
   label?: string;
   message?: string;
+  value?: string | null;
   present?: boolean;
   note?: string;
 };
 
-type ValidationEntry = {
-  ruleId: string;
-  severity: string;
+type ValidationRuleRow = {
+  key: string;
+  docLabel: string;
+  docFilename: string | null;
+  fieldLabel: string;
+  status: string;
+  value: string | null;
+};
+
+type ValidationRuleView = {
+  id: string;
   message: string;
-  refs: ValidationRef[];
+  severity: string;
+  rows: ValidationRuleRow[];
+  baseRuleId?: string;
 };
 
 type MatrixPopoverState = {
@@ -70,15 +81,12 @@ type FieldMatrixRowView = {
   cells: Record<string, FieldMatrixCell>;
 };
 
-type ProductTableDoc = {
-  label: string;
-  fields: Record<string, { value: string | null; confidence: number | null }>;
-};
-
-type ProductComparisonTable = {
+type DocumentProductTable = {
   id: string;
   title: string;
-  docs: ProductTableDoc[];
+  filename: string;
+  columns: ProductColumn[];
+  rows: ProductRow[];
 };
 
 type FieldPreviewSnapshot = {
@@ -183,6 +191,103 @@ const FIELD_LABELS_RU: Record<string, string> = {
   HS_code: "Код ТНВЭД",
 };
 
+const VALIDATION_RULE_MESSAGES: Record<string, string> = {
+  date_proforma_earliest: "Дата проформы должна быть самой ранней среди связанных документов",
+  date_invoice_not_too_early: "Дата инвойса не должна быть раньше даты отгрузки и даты сертификатов",
+  date_bill_of_landing_after_sources: "Дата коноссамента должна быть позже дат проформы, инвойса и прайс листов",
+  date_cmr_after_sources: "Дата CMR должна быть позже даты инвойса, позже проформы и прайс-листа 1",
+  date_packing_list_before_ship: "Дата пакинг листа должна быть раньше чем дата коносамента и не позже чем дата инвойса",
+  date_price_list_1_before_proforma: "Дата прайс листа 1 должна быть раньше или равна дате проформы",
+  date_price_list_2_between_proforma_invoice: "Дата прайс листа 2 должна быть позже даты профомы и не позжедаты инвойса",
+  date_quality_certificate_after_bol: "Дата сертификатат качества должна быть позже или равна дате коноссамента",
+  date_veterinary_certificate_before_bol: "Дата ветеринарного сертификата должна быть раньше чем дата коноссамента",
+  date_export_declaration_after_bol: "Дата экспортной декларации должна быть позже или равна даты коноссамента",
+  date_specification_not_after_invoice: "Дата спецификации должна быть не позже, чем дата инвойса",
+  date_certificate_origin_after_invoice: "Дата сертификата происхождения должна быть позже или равно дате инвойса",
+  date_form_a_after_invoice: "Дата FORM A должна быть равна или позже даты инвойса",
+  date_eav_after_invoice: "Дата EAV должна быть равна или позже даты инвойса",
+  contract_no_alignment: "Номер контракта должен совпадать во всех связанных документах",
+  additional_agreements_alignment: "Дополнительные соглашения должны совпадать во всех связанных документах",
+  country_of_origin_consistency:
+    "Страна происхождения в ветеринарном сертификате должна совпадать с другими документами",
+  total_price_consistency: "Общая стоимость в инвойсе должна совпадать с другими документами",
+  producer_consistency: "Производитель в ветеринарном сертификате должен совпадать с другими документами",
+  incoterms_consistency: "Условия доставки из инвойса должны совпадать с другими документами",
+  terms_of_payment_consistency: "Условия оплаты из инвойса должны совпадать с другими документами",
+  bank_details_consistency: "Банковские реквизиты в контракте должны совпадать с инвойсом и проформой",
+  exporter_consistency: "Экспортер в ветеринарном сертификате должен совпадать с другими",
+  recipient_matches_contract_buyer:
+    "Получатель из контракта должен совпадать с импортёрами в транспортных документах",
+  proforma_number_consistency: "Номер проформы должен совпадать в инвойсе и экспортной декларации",
+  invoice_number_consistency: "Номер инвойса должен совпадать с другими документами",
+  veterinary_seal_consistency:
+    "Ветеринарная пломба в ветеринарном сертификате должна совпадать с другими документами",
+  linear_seal_consistency: "Линейная прлобма в коноссаменте должна совпадать с другими документами",
+  buyer_alignment:
+    "Покупатель должен быть одинаковый среди проформы, инвойса, экспортной декларации, спецификации, ветеринарного сертификата и серфтификата происхождения: значения отличаются между документами",
+  seller_alignment:
+    "Продавец должен быть одинаковый среди проформы, инвойса, экспортной декларации, спецификации и прайс листов",
+  container_number_alignment:
+    "Номер контейнера должен быть одинаковый среди инвойса, ветеринарного сертификата, сертификата качества, серфтификата происхождения и коноссамента",
+  vessel_alignment:
+    "Транспорт доставки должен быть одинаковый среди инвойса, ветеринарного сертификата, серфтификата качества и коноссамента",
+  importer_alignment:
+    "Импортер должен быть одинаковым у коноссамента и сертификата происхождения",
+};
+
+const VALIDATION_RULE_ORDER = [
+  "date_proforma_earliest",
+  "date_invoice_not_too_early",
+  "date_bill_of_landing_after_sources",
+  "date_cmr_after_sources",
+  "date_packing_list_before_ship",
+  "date_price_list_1_before_proforma",
+  "date_price_list_2_between_proforma_invoice",
+  "date_quality_certificate_after_bol",
+  "date_veterinary_certificate_before_bol",
+  "date_export_declaration_after_bol",
+  "date_specification_not_after_invoice",
+  "date_certificate_origin_after_invoice",
+  "date_form_a_after_invoice",
+  "date_eav_after_invoice",
+  "contract_no_alignment",
+  "additional_agreements_alignment",
+  "country_of_origin_consistency",
+  "total_price_consistency",
+  "producer_consistency",
+  "incoterms_consistency",
+  "terms_of_payment_consistency",
+  "bank_details_consistency",
+  "exporter_consistency",
+  "recipient_matches_contract_buyer",
+  "proforma_number_consistency",
+  "invoice_number_consistency",
+  "veterinary_seal_consistency",
+  "linear_seal_consistency",
+  "buyer_alignment",
+  "seller_alignment",
+  "container_number_alignment",
+  "vessel_alignment",
+  "importer_alignment",
+];
+
+const FIELD_DOC_LABELS: Record<string, string> = {
+  proforma_date: "Проформа",
+  invoice_date: "Инвойс",
+  bill_of_landing_date: "Коносамент",
+  packing_list_date: "Пак-лист",
+  price_list_1_date: "Прайс-лист 1",
+  price_list_2_date: "Прайс-лист 2",
+  quality_certificate_date: "Сертификат качества",
+  veterinary_certificate_date: "Вет. сертификат",
+  export_declaration_date: "Экспортная декларация",
+  specification_date: "Спецификация",
+  certificate_of_origin_date: "Сертификат происхождения",
+  cmr_date: "CMR",
+  form_a_date: "FORM A",
+  eav_date: "EAV",
+};
+
 
 const MATRIX_STATUS_CLASSES: Record<string, string> = {
   anchor: "bg-sky-100",
@@ -198,16 +303,6 @@ const MATRIX_STATUS_LABELS: Record<string, string> = {
   mismatch: "Значение отличается",
 };
 
-
-const PRODUCT_TABLE_FIELDS = [
-  { key: "name_product", label: "Наименование" },
-  { key: "latin_name", label: "Латинское название" },
-  { key: "size_product", label: "Размер" },
-  { key: "unit_box", label: "Ед. / упаковка" },
-  { key: "packages", label: "Места" },
-  { key: "price_per_unit", label: "Цена за единицу" },
-  { key: "total_price", label: "Сумма" },
-];
 
 const EXPECTED_DOC_TYPES = [
   { key: "CONTRACT", label: "Контракт" },
@@ -310,33 +405,6 @@ function normalizeText(value: unknown): string | null {
     return null;
   }
   return String(value);
-}
-
-function normalizeConfidence(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) {
-      return parsed;
-    }
-  }
-  return null;
-}
-
-function extractProductField(entry: unknown): { value: string | null; confidence: number | null } {
-  if (entry && typeof entry === "object") {
-    const payload = entry as Record<string, unknown>;
-    return {
-      value: normalizeText(payload.value),
-      confidence: normalizeConfidence(payload.confidence),
-    };
-  }
-  return {
-    value: normalizeText(entry),
-    confidence: null,
-  };
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -755,14 +823,6 @@ function MatrixDocumentPreview({
   );
 }
 
-function productColumnLabel(key: string): string {
-  const match = key.match(/(\d+)/);
-  if (match) {
-    return `Продукт ${match[1]}`;
-  }
-  return key.replace(/_/g, " ");
-}
-
 function severityClass(severity: string): string {
   const normalized = severity.toLowerCase();
   if (normalized === "error" || normalized === "critical") {
@@ -772,6 +832,31 @@ function severityClass(severity: string): string {
     return "text-amber-600";
   }
   return "text-muted-foreground";
+}
+
+function severityLabel(severity: string): string {
+  const normalized = severity.toLowerCase();
+  if (normalized === "error" || normalized === "critical") {
+    return "Ошибка";
+  }
+  if (normalized === "warn" || normalized === "warning") {
+    return "Предупреждение";
+  }
+  return "Инфо";
+}
+
+function formatFieldLabel(fieldKey: string | undefined, fallback?: string): string {
+  if (fallback && fallback.trim()) {
+    return fallback;
+  }
+  if (!fieldKey) {
+    return "Поле";
+  }
+  const mapped = FIELD_LABELS_RU[fieldKey];
+  if (mapped) {
+    return mapped;
+  }
+  return fieldKey.replace(/[_\.]/g, " ");
 }
 
 function parseRefEntry(value: unknown): ValidationRef | null {
@@ -784,6 +869,7 @@ function parseRefEntry(value: unknown): ValidationRef | null {
   const fieldKeyValue = data["field_key"];
   const labelValue = data["label"];
   const messageValue = data["message"];
+  const valueValue = data["value"];
   const presentValue = data["present"];
   const noteValue = data["note"];
   const docId = typeof docIdValue === "string" ? docIdValue : undefined;
@@ -791,6 +877,8 @@ function parseRefEntry(value: unknown): ValidationRef | null {
   const fieldKey = typeof fieldKeyValue === "string" ? fieldKeyValue : undefined;
   const label = typeof labelValue === "string" ? labelValue : undefined;
   const message = typeof messageValue === "string" ? messageValue : undefined;
+  const valueText =
+    valueValue === null || valueValue === undefined ? null : typeof valueValue === "string" ? valueValue : String(valueValue);
   const present =
     typeof presentValue === "boolean"
       ? presentValue
@@ -798,7 +886,7 @@ function parseRefEntry(value: unknown): ValidationRef | null {
         ? false
         : undefined;
   const note = typeof noteValue === "string" ? noteValue : undefined;
-  return { doc_id: docId, doc_type: docType, field_key: fieldKey, label, message, present, note };
+  return { doc_id: docId, doc_type: docType, field_key: fieldKey, label, message, value: valueText, present, note };
 }
 
 function parseRefs(entry: Record<string, unknown>): ValidationRef[] {
@@ -809,6 +897,9 @@ function parseRefs(entry: Record<string, unknown>): ValidationRef[] {
       if (Array.isArray(parsed)) {
         return parsed.map(parseRefEntry).filter((item): item is ValidationRef => item !== null);
       }
+      if (parsed && typeof parsed === "object") {
+        return parseRefs({ refs: parsed });
+      }
       return [];
     } catch {
       return [];
@@ -816,6 +907,30 @@ function parseRefs(entry: Record<string, unknown>): ValidationRef[] {
   }
   if (Array.isArray(raw)) {
     return raw.map(parseRefEntry).filter((item): item is ValidationRef => item !== null);
+  }
+  if (raw && typeof raw === "object") {
+    const refs: ValidationRef[] = [];
+    Object.entries(raw as Record<string, unknown>).forEach(([docId, fields]) => {
+      if (!fields || typeof fields !== "object") {
+        return;
+      }
+      Object.entries(fields as Record<string, unknown>).forEach(([fieldKey, fieldValue]) => {
+        const valueText =
+          fieldValue === null || fieldValue === undefined
+            ? null
+            : typeof fieldValue === "string"
+              ? fieldValue
+              : String(fieldValue);
+        const present = valueText !== null && valueText.trim().length > 0;
+        refs.push({
+          doc_id: docId || undefined,
+          field_key: fieldKey || undefined,
+          value: valueText,
+          present,
+        });
+      });
+    });
+    return refs;
   }
   return [];
 }
@@ -842,6 +957,8 @@ function SummaryTablePage() {
   const [previewHover, setPreviewHover] = useState<MatrixPreviewTarget | null>(null);
   const [previewSelected, setPreviewSelected] = useState<MatrixPreviewTarget | null>(null);
   const [showPreviewBoxes, setShowPreviewBoxes] = useState(true);
+  const [expandedRules, setExpandedRules] = useState<Record<string, boolean>>({});
+  const [expandedProductTables, setExpandedProductTables] = useState<Record<string, boolean>>({});
   const matrixBodyRef = useRef<HTMLDivElement | null>(null);
   const matrixTableScrollRef = useRef<HTMLDivElement | null>(null);
   const matrixTableRef = useRef<HTMLTableElement | null>(null);
@@ -1166,6 +1283,13 @@ function SummaryTablePage() {
     }
   }, []);
 
+  const toggleRule = useCallback((ruleId: string) => {
+    setExpandedRules((prev) => ({ ...prev, [ruleId]: !prev[ruleId] }));
+  }, []);
+  const toggleProductTable = useCallback((tableId: string) => {
+    setExpandedProductTables((prev) => ({ ...prev, [tableId]: !prev[tableId] }));
+  }, []);
+
   const presentDocTypes = useMemo(() => {
     const set = new Set<string>();
     presentDocInfo.forEach((_, actualType) => {
@@ -1325,14 +1449,9 @@ function SummaryTablePage() {
 
   const missingDocEntries = useMemo(() => docPresence.filter((item) => !item.present), [docPresence]);
 
-  const missingDocTypes = useMemo(
-    () => new Set(missingDocEntries.map((item) => item.actualType)),
-    [missingDocEntries]
-  );
-
   const missingDocNames = useMemo(() => missingDocEntries.map((item) => item.label), [missingDocEntries]);
 
-  const validations: ValidationEntry[] = useMemo(() => {
+  const validationRules: ValidationRuleView[] = useMemo(() => {
     if (!batch?.report?.available) {
       return [];
     }
@@ -1345,108 +1464,96 @@ function SummaryTablePage() {
         const messageValue = entry["message"];
         const ruleId =
           typeof ruleIdValue === "string" && ruleIdValue.trim().length > 0 ? ruleIdValue : `rule_${index + 1}`;
+        if (ruleId === "document_matrix" || ruleId === "document_matrix_diff") {
+          return null;
+        }
+        const baseRuleId = ruleId.endsWith("_availability") ? ruleId.replace(/_availability$/, "") : ruleId;
+        const baseMessage = VALIDATION_RULE_MESSAGES[baseRuleId];
+        if (!baseMessage) {
+          return null;
+        }
         const severity = typeof severityValue === "string" ? severityValue : "info";
-        const message = typeof messageValue === "string" ? messageValue : "";
-        const realRefs = refs.filter((ref) => {
-          if (!ref.doc_id || ref.doc_id === EMPTY_DOC_ID) {
-            return false;
-          }
-          if (ref.present === false) {
-            return false;
-          }
-          const doc = documentMap.get(ref.doc_id);
-          if (!doc) {
-            return false;
-          }
-          if (missingDocTypes.has(doc.doc_type)) {
-            return false;
-          }
-          return true;
+        const messageSuffix = ruleId.endsWith("_availability")
+          ? baseRuleId.startsWith("date_")
+            ? "пропущены даты или значения невалидны"
+            : "пропущены данные или значения невалидны"
+          : "";
+        const message = messageSuffix ? `${baseMessage}: ${messageSuffix}` : baseMessage;
+        const ruleKey = `${ruleId}-${index}`;
+        const rows = refs.map((ref, refIndex) => {
+          const docEntry = ref.doc_id ? documentMap.get(ref.doc_id) : null;
+          const docType = docEntry?.doc_type ?? ref.doc_type;
+          const docLabelFromField = ref.field_key ? FIELD_DOC_LABELS[ref.field_key] : undefined;
+          const docLabel = docType
+            ? DOC_TYPE_LABELS[toDisplayDocType(docType)] ?? docType
+            : docLabelFromField ?? "Документ";
+          const docFilename = docEntry?.filename ?? null;
+          const fieldKey = ref.field_key;
+          const fieldLabel = formatFieldLabel(fieldKey, ref.label);
+          const fieldState = docEntry && fieldKey ? docEntry.fields.find((item) => item.field_key === fieldKey) : null;
+          const rawValue = fieldState?.value ?? ref.value ?? null;
+          const valueText = rawValue !== null && rawValue !== undefined ? String(rawValue).trim() : "";
+          const hasValue = valueText.length > 0;
+          const status = ref.present === false || !hasValue ? "Отсутствует" : "Заполнено";
+          return {
+            key: `${ruleKey}-${docEntry?.id ?? docType ?? "doc"}-${fieldKey ?? "field"}-${refIndex}`,
+            docLabel,
+            docFilename,
+            fieldLabel,
+            status,
+            value: hasValue ? valueText : null,
+          };
         });
-        const missingRefs = refs.filter((ref) => {
-          if (ref.present === false) {
-            return true;
-          }
-          if (ref.doc_id === EMPTY_DOC_ID) {
-            return true;
-          }
-          if (!ref.doc_id && ref.doc_type && missingDocTypes.has(ref.doc_type)) {
-            return true;
-          }
-          return false;
-        });
-        if (missingRefs.length > 0 && realRefs.length <= 1) {
+        if (rows.length === 0) {
           return null;
         }
         return {
-          ruleId,
-          severity,
+          id: ruleKey,
           message,
-          refs: realRefs,
-        } as ValidationEntry;
+          severity,
+          rows,
+          baseRuleId,
+        } as ValidationRuleView;
       })
-      .filter((entry): entry is ValidationEntry => entry !== null);
-  }, [batch, documentMap, missingDocTypes]);
+      .filter((entry): entry is ValidationRuleView => entry !== null)
+      .sort((a, b) => {
+        const indexA = VALIDATION_RULE_ORDER.indexOf((a as ValidationRuleView & { baseRuleId?: string }).baseRuleId ?? a.id);
+        const indexB = VALIDATION_RULE_ORDER.indexOf((b as ValidationRuleView & { baseRuleId?: string }).baseRuleId ?? b.id);
+        if (indexA === -1 && indexB === -1) {
+          return a.message.localeCompare(b.message);
+        }
+        if (indexA === -1) {
+          return 1;
+        }
+        if (indexB === -1) {
+          return -1;
+        }
+        return indexA - indexB;
+      });
+  }, [batch, documentMap]);
 
-  const productTables = useMemo(() => {
-    const comparisons = batch?.report?.product_comparisons;
-    if (!Array.isArray(comparisons) || comparisons.length === 0) {
+  const documentProductTables = useMemo(() => {
+    if (documents.length === 0) {
       return [];
     }
-    return comparisons
-      .map((entry, index) => {
-        if (!entry || typeof entry !== "object") {
+    return documents
+      .map((doc) => {
+        const columns = doc.products?.columns ?? [];
+        const rows = doc.products?.rows ?? [];
+        if (columns.length === 0 || rows.length === 0) {
           return null;
         }
-        const data = entry as Record<string, unknown>;
-        const productKey = data["product_key"] as Record<string, unknown> | undefined;
-        const name = productKey ? normalizeText(productKey["name_product"]) : null;
-        const latin = productKey ? normalizeText(productKey["latin_name"]) : null;
-        const size = productKey ? normalizeText(productKey["size_product"]) : null;
-        const titleParts = [name, latin, size].filter((part): part is string => Boolean(part));
-        const fallbackTitle = `Product ${index + 1}`;
-        const title = titleParts.length > 0 ? titleParts.join(" / ") : fallbackTitle;
-        const docsRaw = Array.isArray(data["documents"]) ? (data["documents"] as unknown[]) : [];
-        const docs: ProductTableDoc[] = docsRaw
-          .map((docEntry) => {
-            if (!docEntry || typeof docEntry !== "object") {
-              return null;
-            }
-            const docData = docEntry as Record<string, unknown>;
-            const docType = normalizeText(docData["doc_type"]) ?? "-";
-            const productId = normalizeText(docData["product_id"]);
-            const docId = normalizeText(docData["doc_id"]);
-            const labelParts = [docType];
-            if (productId) {
-              labelParts.push(`(${productId})`);
-            } else if (docId) {
-              labelParts.push(`(${docId})`);
-            }
-            const label = labelParts.join(" ");
-            const fieldsRaw = docData["fields"];
-            const normalizedFields: Record<string, { value: string | null; confidence: number | null }> = {};
-            if (fieldsRaw && typeof fieldsRaw === "object") {
-              Object.entries(fieldsRaw as Record<string, unknown>).forEach(([key, payload]) => {
-                normalizedFields[key] = extractProductField(payload);
-              });
-            }
-            return {
-              label,
-              fields: normalizedFields,
-            };
-          })
-          .filter((doc): doc is ProductTableDoc => doc !== null);
-        if (docs.length === 0) {
-          return null;
-        }
+        const title = DOC_TYPE_LABELS[toDisplayDocType(doc.doc_type)] ?? doc.doc_type;
         return {
-          id: `product-${index}`,
+          id: doc.id,
           title,
-          docs,
+          filename: doc.filename,
+          columns,
+          rows,
         };
       })
-      .filter((table): table is ProductComparisonTable => table !== null);
-  }, [batch]);
+      .filter((table): table is DocumentProductTable => table !== null);
+  }, [documents]);
 
   const handleSave = async () => {
     if (!matrixPopover || matrixPopover.mode !== "edit") return;
@@ -1934,13 +2041,15 @@ function SummaryTablePage() {
                 className={cn("flex flex-col gap-6", previewEnabled ? "lg:flex-row" : "")}
               >
                 <div className="min-w-0 flex-1">
-                  <div className="overflow-x-auto" ref={matrixTableScrollRef}>
+                  <div className="max-h-[70vh] overflow-auto" ref={matrixTableScrollRef}>
                     <Table ref={matrixTableRef}>
-                      <TableHeader>
+                      <TableHeader className="sticky top-0 z-20 bg-background">
                         <TableRow>
-                          <TableHead>Поле</TableHead>
+                          <TableHead className="sticky top-0 z-20 bg-background">Поле</TableHead>
                           {activeMatrix.documents.map((doc) => (
-                            <TableHead key={doc}>{doc}</TableHead>
+                            <TableHead key={doc} className="sticky top-0 z-20 bg-background">
+                              {doc}
+                            </TableHead>
                           ))}
                         </TableRow>
                       </TableHeader>
@@ -2036,58 +2145,148 @@ function SummaryTablePage() {
         </CardContent>
       </Card>
 
-      {productTables.length === 0 ? (
+      {documentProductTables.length === 0 ? (
         <Card className="rounded-3xl border bg-background">
           <CardHeader>
-            <CardTitle>Сопоставление товаров</CardTitle>
+            <CardTitle>Товары</CardTitle>
           </CardHeader>
           <CardContent>
-            <Alert variant="info">Нет объединённых товаров.</Alert>
+            <Alert variant="info">Нет товаров.</Alert>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
-          {productTables.map((table) => (
+          {documentProductTables.map((table) => (
             <Card key={table.id} className="rounded-3xl border bg-background">
-              <CardHeader>
-                <CardTitle>{table.title}</CardTitle>
+              <CardHeader className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => toggleProductTable(table.id)}
+                  className="flex w-full items-start justify-between gap-3 text-left"
+                  aria-label="Toggle products"
+                  aria-expanded={Boolean(expandedProductTables[table.id])}
+                >
+                  <div className="space-y-1">
+                    <CardTitle>{table.title}</CardTitle>
+                    {table.filename ? (
+                      <p className="text-sm text-muted-foreground">{table.filename}</p>
+                    ) : null}
+                  </div>
+                  <span className="mt-1 text-muted-foreground">
+                    {expandedProductTables[table.id] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                  </span>
+                </button>
               </CardHeader>
-              <CardContent>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Поле</TableHead>
-                        {table.docs.map((doc) => (
-                          <TableHead key={doc.label}>{doc.label}</TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {PRODUCT_TABLE_FIELDS.map(({ key, label }) => (
-                        <TableRow key={`${table.id}-${key}`}>
-                          <TableCell className="font-medium">{label}</TableCell>
-                          {table.docs.map((doc) => {
-                            const field = doc.fields[key] ?? { value: null, confidence: null };
-                            return (
-                              <TableCell key={`${table.id}-${key}-${doc.label}`} className="align-top text-sm">
-                                <div>{field.value ?? "-"}</div>
-                                {field.confidence != null ? (
-                                  <div className="text-xs text-muted-foreground">({field.confidence.toFixed(2)})</div>
-                                ) : null}
-                              </TableCell>
-                            );
-                          })}
+              {expandedProductTables[table.id] ? (
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Поле</TableHead>
+                          {table.rows.map((row, index) => (
+                            <TableHead key={row.key}>{`Продукт ${index + 1}`}</TableHead>
+                          ))}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </CardContent>
+                      </TableHeader>
+                      <TableBody>
+                        {table.columns.map((column) => (
+                          <TableRow key={`${table.id}-${column.key}`}>
+                            <TableCell className="font-medium">{column.label}</TableCell>
+                            {table.rows.map((row, index) => {
+                              const field = row.cells[column.key] ?? { value: null, confidence: null };
+                              return (
+                                <TableCell key={`${table.id}-${column.key}-${row.key}-${index}`} className="align-top text-sm">
+                                  <div>{field.value ?? "-"}</div>
+                                  {field.confidence != null ? (
+                                    <div className="text-xs text-muted-foreground">({field.confidence.toFixed(2)})</div>
+                                  ) : null}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              ) : null}
             </Card>
           ))}
         </div>
       )}
+
+      <Card className="rounded-3xl border bg-background">
+        <CardHeader>
+          <CardTitle>Проверки</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {validationRules.length === 0 ? (
+            <Alert variant="info">Нет проверок.</Alert>
+          ) : (
+            validationRules.map((rule) => {
+              const isOpen = Boolean(expandedRules[rule.id]);
+              return (
+                <div key={rule.id} className="rounded-2xl border border-muted/60 bg-muted/10 p-3">
+                  <button
+                    type="button"
+                    onClick={() => toggleRule(rule.id)}
+                    className="flex w-full items-start justify-between gap-3 text-left"
+                  >
+                    <div className="space-y-1">
+                      <div className="text-sm font-semibold">{rule.message || rule.id}</div>
+                      <div className={cn("text-xs font-medium", severityClass(rule.severity))}>
+                        {severityLabel(rule.severity)}
+                      </div>
+                    </div>
+                    <span className="mt-1 text-muted-foreground">
+                      {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </span>
+                  </button>
+                  {isOpen ? (
+                    <div className="mt-3 overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Документ</TableHead>
+                            <TableHead>Поле</TableHead>
+                            <TableHead>Статус</TableHead>
+                            <TableHead>Значение</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {rule.rows.map((row) => (
+                            <TableRow key={row.key}>
+                              <TableCell className="align-top text-sm">
+                                <div className="font-medium">{row.docLabel}</div>
+                                {row.docFilename ? (
+                                  <div className="text-xs text-muted-foreground">{row.docFilename}</div>
+                                ) : null}
+                              </TableCell>
+                              <TableCell className="align-top text-sm">{row.fieldLabel}</TableCell>
+                              <TableCell className="align-top text-sm">
+                                <span
+                                  className={cn(
+                                    "text-xs font-semibold",
+                                    row.status === "Отсутствует" ? "text-amber-600" : "text-emerald-600",
+                                  )}
+                                >
+                                  {row.status}
+                                </span>
+                              </TableCell>
+                              <TableCell className="align-top text-sm">{row.value ?? "Нет значения"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })
+          )}
+        </CardContent>
+      </Card>
 
       {matrixPopoverPortal}
     </div>

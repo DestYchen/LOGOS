@@ -1,0 +1,104 @@
+﻿{
+  "INVOICE": [
+    "Invoice",
+    "Invoice Number",
+    "Total",
+    "Seller",
+    "Buyer"
+  ],
+  "PACKING_LIST": [
+    "Packing List",
+    "Packages",
+    "Net Weight",
+    "Gross Weight"
+  ],
+  "BILL_OF_LANDING": [
+    "Bill of Lading",
+    "B/L",
+    "Consignee",
+    "Vessel"
+  ],
+  "EXPORT_DECLARATION": [
+    "Export Declaration",
+    "Customs Declaration",
+    "Declaration Number"
+  ],
+  "PROFORMA": [
+    "Proforma Invoice"
+  ],
+  "SPECIFICATION": [
+    "Specification",
+    "Contract"
+  ],
+  "PRICE_LIST_1": [
+    "Price List",
+    "Unit Price / KG",
+    "Price / KG",
+    "USD/KG, EUR/KG, RMB/KG, CNY/KG",
+    "If the unit price column is per kg, classify as PRICE_LIST_1 (ignore kg/ctn in size or packing)."
+  ],
+  "PRICE_LIST_2": [
+    "Price List",
+    "Unit Price / CTN",
+    "Price / CTN",
+    "Price per carton/box/bag/pack",
+    "USD/CTN, EUR/CTN, RMB/CTN, CNY/CTN",
+    "If the unit price column is per carton/box/bag/pack, classify as PRICE_LIST_2 (ignore kg/ctn in size or packing)."
+  ],
+  "QUALITY_CERTIFICATE": [
+    "Quality Certificate"
+  ],
+  "CERTIFICATE_OF_ORIGIN": [
+    "Certificate of Origin"
+  ],
+  "VETERINARY_CERTIFICATE": [
+    "Veterinary Certificate"
+  ],
+  "CMR": [
+    "CMR",
+    "International Consignment Note"
+  ],
+  "CONTRACT": [
+    "Contract"
+  ],
+  "CONTRACT_1": [
+    "Subject of the Contract",
+    "Hereinafter referred to as the Seller",
+    "Hereinafter referred to as the Buyer",
+    "Предмет Контракта",
+    "Цена и общая сумма Контракта",
+    "Условия поставки"
+  ],
+  "CONTRACT_2": [
+    "Terms of Payment",
+    "Payment shall be made",
+    "Term of Payment",
+    "Условия платежа",
+    "Оплата"
+  ],
+  "CONTRACT_3": [
+    "Legal addresses of the parties",
+    "Юридические адреса сторон",
+    "On behalf of the Buyer",
+    "On behalf of the Seller",
+    "От имени Покупателя",
+    "От имени Продавца",
+    "General director",
+    "Генеральный директор",
+    "Beneficiary's Bank",
+    "SWIFT"
+  ],
+  "FORM_A": [
+    "Form A"
+  ],
+  "EAV": [
+    "EAV"
+  ],
+  "CT-3": [
+    "CT-3"
+  ],
+  "T1": [
+    "T1",
+    "Transit Accompanying Document"
+  ]
+}

@@ -39,3 +39,10 @@ coverage/
 
 # Mock prompts
 app/mock_services/prompts/
+
+# Local archive
+local_archive/
+
+# Video assets
+test frontend/src/assets/demo_logos.mp4
+*.mp4

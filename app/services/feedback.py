@@ -26,8 +26,8 @@ MAX_MESSAGE_LENGTH = 3500
 MAX_CONTACT_LENGTH = 80
 CHUNK_SIZE = 1024 * 1024
 
-ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg"}
-ALLOWED_IMAGE_EXTS = {".png", ".jpg", ".jpeg"}
+ALLOWED_FEEDBACK_MIME_TYPES = {"image/png", "image/jpeg", "application/pdf"}
+ALLOWED_FEEDBACK_EXTS = {".png", ".jpg", ".jpeg", ".pdf"}
 ALLOWED_FEEDBACK_TYPES = {"problem", "improvement"}
 FEEDBACK_TYPE_LABELS = {
     "problem": "Проблема",
@@ -70,16 +70,16 @@ def _normalize_feedback_type(value: str | None) -> str:
     return cleaned
 
 
-def _is_allowed_image(upload: UploadFile) -> bool:
+def _is_allowed_feedback_file(upload: UploadFile) -> bool:
     content_type = (upload.content_type or "").lower()
-    if content_type in ALLOWED_IMAGE_TYPES:
+    if content_type in ALLOWED_FEEDBACK_MIME_TYPES:
         return True
     name = normalize_filename(upload.filename or "")
-    return Path(name).suffix.lower() in ALLOWED_IMAGE_EXTS
+    return Path(name).suffix.lower() in ALLOWED_FEEDBACK_EXTS
 
 
 async def _save_upload_file(upload: UploadFile, target_dir: Path) -> Tuple[Dict[str, Any], Path]:
-    if not _is_allowed_image(upload):
+    if not _is_allowed_feedback_file(upload):
         await upload.close()
         raise FeedbackValidationError("unsupported_file_type")
 
@@ -236,31 +236,51 @@ async def send_to_telegram(payload: Dict[str, Any], file_paths: List[Path]) -> b
             if not file_paths:
                 return True
 
-            media = []
-            files = []
-            handles = []
-            try:
-                for index, path in enumerate(file_paths):
-                    attach_name = f"file{index}"
-                    media.append({"type": "photo", "media": f"attach://{attach_name}"})
-                    handle = path.open("rb")
-                    handles.append(handle)
-                    files.append((attach_name, (path.name, handle, "application/octet-stream")))
-                media_response = await client.post(
-                    f"{base_url}/sendMediaGroup",
-                    data={
-                        "chat_id": chat_id,
-                        "media": json.dumps(media, ensure_ascii=False),
-                    },
-                    files=files,
-                )
-            finally:
-                for handle in handles:
-                    handle.close()
+            image_suffixes = {".png", ".jpg", ".jpeg"}
+            image_paths = [path for path in file_paths if path.suffix.lower() in image_suffixes]
+            other_paths = [path for path in file_paths if path not in image_paths]
 
-            if not media_response.is_success or not media_response.json().get("ok"):
-                logger.warning("Telegram sendMediaGroup failed: %s", media_response.text)
-                return False
+            if image_paths:
+                media = []
+                files = []
+                handles = []
+                try:
+                    for index, path in enumerate(image_paths):
+                        attach_name = f"file{index}"
+                        media.append({"type": "photo", "media": f"attach://{attach_name}"})
+                        handle = path.open("rb")
+                        handles.append(handle)
+                        files.append((attach_name, (path.name, handle, "application/octet-stream")))
+                    media_response = await client.post(
+                        f"{base_url}/sendMediaGroup",
+                        data={
+                            "chat_id": chat_id,
+                            "media": json.dumps(media, ensure_ascii=False),
+                        },
+                        files=files,
+                    )
+                finally:
+                    for handle in handles:
+                        handle.close()
+
+                if not media_response.is_success or not media_response.json().get("ok"):
+                    logger.warning("Telegram sendMediaGroup failed: %s", media_response.text)
+                    return False
+
+            for path in other_paths:
+                try:
+                    with path.open("rb") as handle:
+                        doc_response = await client.post(
+                            f"{base_url}/sendDocument",
+                            data={"chat_id": chat_id},
+                            files={"document": (path.name, handle, "application/pdf")},
+                        )
+                    if not doc_response.is_success or not doc_response.json().get("ok"):
+                        logger.warning("Telegram sendDocument failed: %s", doc_response.text)
+                        return False
+                except Exception:
+                    logger.warning("Telegram sendDocument failed for %s", path.name, exc_info=True)
+                    return False
     except Exception as exc:
         logger.exception("Telegram feedback send failed: %s", exc)
         return False

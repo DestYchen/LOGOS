@@ -1170,8 +1170,8 @@ GROUP_EQUALITY_RULES: List[GroupEqualityRule] = [
         rule_id="container_number_alignment",
         description="Номер контейнера должен быть одинаковый среди инвойса, ветеринарного сертификата, сертификата качества, серфтификата происхождения и коноссамента",
         refs=[
-            _ref("INVOICE", "container_no"),
             _ref("VETERINARY_CERTIFICATE", "container_no"),
+            _ref("INVOICE", "container_no"),
             _ref("QUALITY_CERTIFICATE", "container_no"),
             _ref("CERTIFICATE_OF_ORIGIN", "container_no"),
             _ref("BILL_OF_LANDING", "container_no"),
@@ -1398,7 +1398,7 @@ def _apply_date_rules(context: ValidationContext, validations: List[ValidationMe
                 ValidationMessage(
                     rule_id=f"{rule.rule_id}_availability",
                     severity=ValidationSeverity.WARN,
-                    message=f"{rule.description}: missing or invalid inputs for date comparison",
+                    message=f"{rule.description}: отсутствуют или некорректны данные для сравнения дат",
                     refs=merged_refs,
                 )
             )
@@ -1508,7 +1508,7 @@ def _apply_anchored_equality_rules(context: ValidationContext, validations: List
                 ValidationMessage(
                     rule_id=f"{rule.rule_id}_availability",
                     severity=ValidationSeverity.WARN,
-                    message=f"{rule.description}: missing or invalid inputs for comparison",
+                    message=f"{rule.description}: отсутствуют или некорректны данные для сравнения",
                     refs=merged_refs,
                 )
             )
@@ -1560,7 +1560,7 @@ def _apply_group_equality_rules(context: ValidationContext, validations: List[Va
             return _normalize_date
         return lambda v: _normalize_value(v, kind)
 
-    def _gather(ref: FieldRef, kind: str) -> Tuple[List[Dict[str, Any]], List[FieldValueRecord], bool]:
+    def _gather(ref: FieldRef, kind: str, *, include_missing: bool = True) -> Tuple[List[Dict[str, Any]], List[FieldValueRecord], bool]:
         coll = context.collect(ref, _norm_kind(kind))
         refs: List[Dict[str, Any]] = []
         has_valid = False
@@ -1568,8 +1568,9 @@ def _apply_group_equality_rules(context: ValidationContext, validations: List[Va
             refs.append(_build_ref(doc_id=uuid.UUID(int=0), field_key=ref.field_key, present=False, note="unknown_doc_type", doc_type=ref.doc_type))
         if coll.doc_type_missing:
             refs.append(_build_ref(doc_id=uuid.UUID(int=0), field_key=ref.field_key, present=False, note="missing_doc_type", doc_type=ref.doc_type))
-        for doc in coll.missing_docs:
-            refs.append(_build_ref(doc_id=doc.id, field_key=ref.field_key, present=False, note="missing_field", doc_type=ref.doc_type))
+        if include_missing:
+            for doc in coll.missing_docs:
+                refs.append(_build_ref(doc_id=doc.id, field_key=ref.field_key, present=False, note="missing_field", doc_type=ref.doc_type))
         for rec in coll.records:
             refs.append(_ref_from_field(rec.document, rec.field, normalized=rec.normalized))
             has_valid = True
@@ -1610,8 +1611,14 @@ def _apply_group_equality_rules(context: ValidationContext, validations: List[Va
         all_refs: List[Dict[str, Any]] = []
         groups: Dict[Any, List[FieldValueRecord]] = {}
         has_any_valid = False
+        suppress_missing = False
+        if rule.rule_id == "container_number_alignment":
+            invoice_ref = next((ref for ref in rule.refs if ref.doc_type == "INVOICE"), None)
+            if invoice_ref is not None:
+                _, invoice_records, _ = _gather(invoice_ref, rule.value_kind, include_missing=True)
+                suppress_missing = len(invoice_records) == 0
         for ref in rule.refs:
-            rrefs, rrecs, rvalid = _gather(ref, rule.value_kind)
+            rrefs, rrecs, rvalid = _gather(ref, rule.value_kind, include_missing=not suppress_missing)
             all_refs.extend(rrefs)
             if rvalid:
                 has_any_valid = True
@@ -1621,17 +1628,43 @@ def _apply_group_equality_rules(context: ValidationContext, validations: List[Va
         merged_refs = _dedupe(all_refs)
 
         if not has_any_valid or len(groups) == 0:
-            validations.append(
-                ValidationMessage(
-                    rule_id=f"{rule.rule_id}_availability",
-                    severity=ValidationSeverity.WARN,
-                    message=f"{rule.description}: missing or invalid inputs for comparison",
-                    refs=merged_refs,
+            if not suppress_missing:
+                validations.append(
+                    ValidationMessage(
+                        rule_id=f"{rule.rule_id}_availability",
+                        severity=ValidationSeverity.WARN,
+                        message=f"{rule.description}: отсутствуют или некорректны данные для сравнения",
+                        refs=merged_refs,
+                    )
                 )
-            )
             continue
 
         if len(groups) > 1:
+            if suppress_missing:
+                total = sum(len(records) for records in groups.values())
+                majority_value = None
+                majority_count = 0
+                for value, records in groups.items():
+                    if len(records) > majority_count:
+                        majority_value = value
+                        majority_count = len(records)
+                if majority_value is not None and majority_count > (total / 2):
+                    outlier_refs: List[Dict[str, Any]] = []
+                    for value, records in groups.items():
+                        if value == majority_value:
+                            continue
+                        for rec in records:
+                            outlier_refs.append(_ref_from_field(rec.document, rec.field, normalized=rec.normalized))
+                    combined_refs = _dedupe(all_refs + outlier_refs)
+                    validations.append(
+                        ValidationMessage(
+                            rule_id=rule.rule_id,
+                            severity=rule.severity,
+                            message=f"{rule.description}: value differs from majority",
+                            refs=combined_refs,
+                        )
+                    )
+                    continue
             validations.append(
                 ValidationMessage(
                     rule_id=rule.rule_id,

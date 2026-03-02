@@ -20,6 +20,7 @@ _DOC_MAPPING: Dict[DocumentType, str] = {
     DocumentType.VETERINARY_CERTIFICATE: "veterinary_certificate_hints.json",
     DocumentType.PROFORMA: "proforma_hints.json",
     DocumentType.SPECIFICATION: "specification_hints.json",
+    DocumentType.CONTRACT: "contract.json",
     DocumentType.CMR: "cmr_hints.json",
     DocumentType.T1: "t1_hints.json",
 }

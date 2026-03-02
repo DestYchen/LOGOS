@@ -14,19 +14,28 @@ import { cn } from "../lib/utils";
 const MAX_FILES = 5;
 const MAX_FILE_SIZE_MB = 5;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
-const ACCEPTED_TYPES = ["image/png", "image/jpeg"];
-const ACCEPTED_EXT = [".png", ".jpg", ".jpeg"];
+const ACCEPTED_TYPES = ["image/png", "image/jpeg", "application/pdf"];
+const ACCEPTED_EXT = [".png", ".jpg", ".jpeg", ".pdf"];
+const IMAGE_EXT = [".png", ".jpg", ".jpeg"];
 
 type FeedbackLocationState = {
   from?: string;
 };
 
-function isAcceptedImage(file: File) {
+function isAcceptedFile(file: File) {
   if (ACCEPTED_TYPES.includes(file.type)) {
     return true;
   }
   const name = file.name.toLowerCase();
   return ACCEPTED_EXT.some((ext) => name.endsWith(ext));
+}
+
+function isImageFile(file: File) {
+  if (file.type.startsWith("image/")) {
+    return true;
+  }
+  const name = file.name.toLowerCase();
+  return IMAGE_EXT.some((ext) => name.endsWith(ext));
 }
 
 function FeedbackPage() {
@@ -49,7 +58,12 @@ function FeedbackPage() {
   }, [location.state]);
 
   const previews = useMemo(
-    () => files.map((file) => ({ file, url: URL.createObjectURL(file) })),
+    () =>
+      files.map((file) => ({
+        file,
+        url: URL.createObjectURL(file),
+        isImage: isImageFile(file),
+      })),
     [files],
   );
   const fileLimitReached = files.length >= MAX_FILES;
@@ -69,8 +83,8 @@ function FeedbackPage() {
         setError(`Можно прикрепить не больше ${MAX_FILES} файлов.`);
         break;
       }
-      if (!isAcceptedImage(file)) {
-        setError("Поддерживаются только файлы JPG или PNG.");
+      if (!isAcceptedFile(file)) {
+        setError("Поддерживаются только файлы JPG, PNG или PDF.");
         continue;
       }
       if (file.size > MAX_FILE_SIZE) {
@@ -135,7 +149,7 @@ function FeedbackPage() {
     <div className="mx-auto w-full max-w-3xl space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Обратная связь</h1>
-        <p className="text-muted-foreground">Опишите проблему и приложите скриншоты, если это поможет.</p>
+        <p className="text-muted-foreground">Опишите проблему и приложите скриншоты или PDF, если это поможет.</p>
       </header>
 
       {error ? <Alert variant="destructive">{error}</Alert> : null}
@@ -216,10 +230,10 @@ function FeedbackPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-medium">
-                  Скриншоты ({files.length}/{MAX_FILES})
+                  Файлы ({files.length}/{MAX_FILES})
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  До {MAX_FILES} изображений, JPG/PNG, до {MAX_FILE_SIZE_MB} МБ.
+                  До {MAX_FILES} файлов, JPG/PNG/PDF, до {MAX_FILE_SIZE_MB} МБ.
                 </div>
               </div>
               <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={fileLimitReached}>
@@ -228,7 +242,7 @@ function FeedbackPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/png,image/jpeg"
+                accept="image/png,image/jpeg,application/pdf"
                 multiple
                 className="hidden"
                 onChange={onFileChange}
@@ -240,7 +254,22 @@ function FeedbackPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 {previews.map((preview, index) => (
                   <div key={`${preview.file.name}-${preview.file.size}`} className="group relative overflow-hidden rounded-2xl border bg-muted/10">
-                    <img src={preview.url} alt="" className="h-44 w-full object-cover" />
+                    {preview.isImage ? (
+                      <img src={preview.url} alt="" className="h-44 w-full object-cover" />
+                    ) : (
+                      <div className="flex h-44 w-full flex-col items-center justify-center gap-2 px-4 text-sm text-muted-foreground">
+                        <div className="text-xs font-semibold uppercase tracking-wide">PDF</div>
+                        <div className="w-full truncate text-center text-foreground">{preview.file.name}</div>
+                        <a
+                          className="text-xs text-primary underline-offset-4 hover:underline"
+                          href={preview.url}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Открыть
+                        </a>
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={() => removeFile(index)}
@@ -256,7 +285,7 @@ function FeedbackPage() {
               </div>
             ) : (
               <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
-                Скриншоты еще не добавлены.
+                Файлы еще не добавлены.
               </div>
             )}
           </div>
