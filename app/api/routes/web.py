@@ -30,8 +30,15 @@ from sqlalchemy.orm import selectinload
 
 
 from app.api.dependencies import get_db
+from app.api.schemas import ConfirmPrepRequest
 
 from app.core.config import get_settings
+from app.core.document_profiles import (
+    DEFAULT_DOCUMENT_PROFILE,
+    get_document_profile,
+    get_document_profile_options,
+    get_expected_doc_types,
+)
 
 from app.core.enums import BatchStatus, DocumentStatus, DocumentType
 
@@ -281,6 +288,7 @@ async def upload_batch_documents(
 async def confirm_batch_prep(
 
     batch_id: uuid.UUID,
+    payload: ConfirmPrepRequest | None = Body(default=None),
 
     session: AsyncSession = Depends(get_db),
 
@@ -308,6 +316,7 @@ async def confirm_batch_prep(
 
     meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
 
+    meta["document_profile"] = payload.document_profile or get_document_profile(meta) or DEFAULT_DOCUMENT_PROFILE
     meta["prep_complete"] = True
 
     if batch.status in (BatchStatus.NEW, BatchStatus.PREPARED):
@@ -606,6 +615,9 @@ async def get_batch_details(
 
 
     processed_meta = batch.meta or {}
+    document_profile = get_document_profile(processed_meta)
+    expected_doc_types = get_expected_doc_types(document_profile)
+    document_profile_options = get_document_profile_options()
 
     warnings_raw = processed_meta.get("processing_warnings") if isinstance(processed_meta, dict) else []
 
@@ -706,6 +718,9 @@ async def get_batch_details(
             "documents_count": len(documents_payload),
 
             "doc_types": [doc_type.value for doc_type in DocumentType if doc_type not in _INTERNAL_DOC_TYPES],
+            "document_profile": document_profile,
+            "document_profile_options": document_profile_options,
+            "expected_doc_types": expected_doc_types,
 
             "pending_total": pending_total,
 

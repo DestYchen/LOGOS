@@ -12,9 +12,16 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.document_profiles import (
+    get_active_document_type_values,
+    get_active_document_types,
+    get_document_profile,
+    get_field_matrix_doc_type_map,
+    get_field_matrix_doc_types,
+)
 from app.core.enums import DocumentType, ValidationSeverity
 from app.core.schema import get_schema
-from app.models import Document, FilledField, Validation
+from app.models import Batch, Document, FilledField, Validation
 from datetime import datetime, date
 
 
@@ -1227,6 +1234,94 @@ _register_field_comparison_rules()
 # Product-level group equality checks disabled (handled by per-product matcher)
 
 
+def _normalized_doc_type_name(doc_type_name: Optional[str]) -> Optional[str]:
+    if not doc_type_name:
+        return None
+    resolved = _resolve_doc_type(doc_type_name)
+    if resolved is None:
+        return None
+    return resolved.value
+
+
+def _doc_type_is_active(doc_type_name: Optional[str], active_doc_type_values: set[str]) -> bool:
+    normalized = _normalized_doc_type_name(doc_type_name)
+    return normalized in active_doc_type_values if normalized else False
+
+
+def _filter_date_rule(rule: DateRule, active_doc_type_values: set[str]) -> Optional[DateRule]:
+    if not _doc_type_is_active(rule.anchor.doc_type, active_doc_type_values):
+        return None
+    comparisons = [
+        comparison for comparison in rule.comparisons if _doc_type_is_active(comparison.other.doc_type, active_doc_type_values)
+    ]
+    if not comparisons:
+        return None
+    return DateRule(
+        rule_id=rule.rule_id,
+        description=rule.description,
+        anchor=rule.anchor,
+        comparisons=comparisons,
+        severity=rule.severity,
+    )
+
+
+def _filter_anchored_equality_rule(
+    rule: AnchoredEqualityRule, active_doc_type_values: set[str]
+) -> Optional[AnchoredEqualityRule]:
+    if not _doc_type_is_active(rule.anchor.doc_type, active_doc_type_values):
+        return None
+    targets = [target for target in rule.targets if _doc_type_is_active(target.doc_type, active_doc_type_values)]
+    if not targets:
+        return None
+    return AnchoredEqualityRule(
+        rule_id=rule.rule_id,
+        description=rule.description,
+        anchor=rule.anchor,
+        targets=targets,
+        value_kind=rule.value_kind,
+        severity=rule.severity,
+    )
+
+
+def _filter_group_equality_rule(
+    rule: GroupEqualityRule, active_doc_type_values: set[str]
+) -> Optional[GroupEqualityRule]:
+    refs = [ref for ref in rule.refs if _doc_type_is_active(ref.doc_type, active_doc_type_values)]
+    if len(refs) < 2:
+        return None
+    return GroupEqualityRule(
+        rule_id=rule.rule_id,
+        description=rule.description,
+        refs=refs,
+        value_kind=rule.value_kind,
+        severity=rule.severity,
+    )
+
+
+def _filtered_field_comparison_rules(active_doc_type_values: set[str]) -> Dict[str, List[FieldComparisonRule]]:
+    filtered: Dict[str, List[FieldComparisonRule]] = defaultdict(list)
+    for field_key, rules in FIELD_COMPARISON_RULES.items():
+        for rule in rules:
+            anchor_doc = _normalized_doc_type_name(rule.anchor_doc)
+            if anchor_doc is None or anchor_doc not in active_doc_type_values:
+                continue
+            targets: List[str] = []
+            for target_doc in rule.target_docs:
+                normalized = _normalized_doc_type_name(target_doc)
+                if normalized is None or normalized not in active_doc_type_values or normalized in targets:
+                    continue
+                targets.append(normalized)
+            if not targets:
+                continue
+            filtered[field_key].append(FieldComparisonRule(anchor_doc=anchor_doc, target_docs=targets))
+    return filtered
+
+
+def _field_matrix_config(document_profile: str) -> Tuple[List[str], Dict[str, str]]:
+    doc_type_map = get_field_matrix_doc_type_map(document_profile)
+    return get_field_matrix_doc_types(document_profile), doc_type_map
+
+
 def _collect_records_for_rule(
     context: ValidationContext,
     ref: FieldRef,
@@ -1334,7 +1429,11 @@ def _format_value(value: Any) -> str:
     return str(value)
 
 
-def _apply_date_rules(context: ValidationContext, validations: List[ValidationMessage]) -> None:
+def _apply_date_rules(
+    context: ValidationContext,
+    validations: List[ValidationMessage],
+    active_doc_type_values: set[str],
+) -> None:
     def _gather_refs(ref: FieldRef) -> Tuple[List[Dict[str, Any]], List[FieldValueRecord], bool]:
         coll = context.collect(ref, _normalize_date)
         refs: List[Dict[str, Any]] = []
@@ -1380,7 +1479,10 @@ def _apply_date_rules(context: ValidationContext, validations: List[ValidationMe
                     key_map[k] = r
         return list(key_map.values())
 
-    for rule in DATE_RULES:
+    for source_rule in DATE_RULES:
+        rule = _filter_date_rule(source_rule, active_doc_type_values)
+        if rule is None:
+            continue
         anchor_refs, anchor_recs, anchor_valid = _gather_refs(rule.anchor)
         all_refs: List[Dict[str, Any]] = list(anchor_refs)
         any_other_valid = False
@@ -1437,7 +1539,11 @@ def _apply_date_rules(context: ValidationContext, validations: List[ValidationMe
             )
 
 
-def _apply_anchored_equality_rules(context: ValidationContext, validations: List[ValidationMessage]) -> None:
+def _apply_anchored_equality_rules(
+    context: ValidationContext,
+    validations: List[ValidationMessage],
+    active_doc_type_values: set[str],
+) -> None:
     def _norm_kind(kind: str):
         if kind == "date":
             return _normalize_date
@@ -1489,7 +1595,10 @@ def _apply_anchored_equality_rules(context: ValidationContext, validations: List
                     key_map[k] = r
         return list(key_map.values())
 
-    for rule in ANCHORED_EQUALITY_RULES:
+    for source_rule in ANCHORED_EQUALITY_RULES:
+        rule = _filter_anchored_equality_rule(source_rule, active_doc_type_values)
+        if rule is None:
+            continue
         all_refs: List[Dict[str, Any]] = []
         anchor_refs, anchor_recs, anchor_valid = _gather(rule.anchor, rule.value_kind)
         all_refs.extend(anchor_refs)
@@ -1554,7 +1663,11 @@ def _apply_anchored_equality_rules(context: ValidationContext, validations: List
             )
 
 
-def _apply_group_equality_rules(context: ValidationContext, validations: List[ValidationMessage]) -> None:
+def _apply_group_equality_rules(
+    context: ValidationContext,
+    validations: List[ValidationMessage],
+    active_doc_type_values: set[str],
+) -> None:
     def _norm_kind(kind: str):
         if kind == "date":
             return _normalize_date
@@ -1607,7 +1720,10 @@ def _apply_group_equality_rules(context: ValidationContext, validations: List[Va
                     key_map[k] = r
         return list(key_map.values())
 
-    for rule in GROUP_EQUALITY_RULES:
+    for source_rule in GROUP_EQUALITY_RULES:
+        rule = _filter_group_equality_rule(source_rule, active_doc_type_values)
+        if rule is None:
+            continue
         all_refs: List[Dict[str, Any]] = []
         groups: Dict[Any, List[FieldValueRecord]] = {}
         has_any_valid = False
@@ -1707,8 +1823,12 @@ def _matrix_values_equal(anchor_value: str, other_value: str) -> bool:
 
 
 def _build_field_matrix_snapshot(
-    documents: List[Document], fields_by_doc: Dict[uuid.UUID, Dict[str, FilledField]]
+    documents: List[Document],
+    fields_by_doc: Dict[uuid.UUID, Dict[str, FilledField]],
+    document_profile: str,
 ) -> Dict[str, Any]:
+    field_matrix_doc_types, field_matrix_doc_type_map = _field_matrix_config(document_profile)
+    field_comparison_rules = _filtered_field_comparison_rules(get_active_document_type_values(document_profile))
     doc_type_lookup: Dict[str, List[Dict[str, FilledField]]] = {}
     for document in documents:
         doc_type_value = getattr(document.doc_type, "value", str(document.doc_type))
@@ -1752,9 +1872,9 @@ def _build_field_matrix_snapshot(
         ("дата документа", DOCUMENT_DATE_FIELDS),
     ):
         row: Dict[str, Any] = {"FieldKey": label}
-        statuses: Dict[str, Optional[str]] = {doc: None for doc in FIELD_MATRIX_DOC_TYPES}
-        for display_doc in FIELD_MATRIX_DOC_TYPES:
-            actual_doc_type = FIELD_MATRIX_DOC_TYPE_MAP.get(display_doc, display_doc)
+        statuses: Dict[str, Optional[str]] = {doc: None for doc in field_matrix_doc_types}
+        for display_doc in field_matrix_doc_types:
+            actual_doc_type = field_matrix_doc_type_map.get(display_doc, display_doc)
             value = ""
             if actual_doc_type:
                 value = _get_mapped_value(actual_doc_type, mapping)
@@ -1764,12 +1884,12 @@ def _build_field_matrix_snapshot(
 
     for field_key, aliases in FIELD_MATRIX_FIELDS:
         row: Dict[str, Any] = {"FieldKey": field_key}
-        statuses: Dict[str, Optional[str]] = {doc: None for doc in FIELD_MATRIX_DOC_TYPES}
+        statuses: Dict[str, Optional[str]] = {doc: None for doc in field_matrix_doc_types}
         value_cache: Dict[str, Tuple[str, bool]] = {}
         actual_to_display: Dict[str, str] = {}
 
-        for display_doc in FIELD_MATRIX_DOC_TYPES:
-            actual_doc_type = FIELD_MATRIX_DOC_TYPE_MAP.get(display_doc, display_doc)
+        for display_doc in field_matrix_doc_types:
+            actual_doc_type = field_matrix_doc_type_map.get(display_doc, display_doc)
             value = ""
             present = False
             if actual_doc_type:
@@ -1778,7 +1898,7 @@ def _build_field_matrix_snapshot(
                 actual_to_display[actual_doc_type] = display_doc
             row[display_doc] = value or ""
 
-        for rule in FIELD_COMPARISON_RULES.get(field_key, []):
+        for rule in field_comparison_rules.get(field_key, []):
             anchor_value, anchor_present = value_cache.get(rule.anchor_doc, ("", False))
             anchor_display = actual_to_display.get(rule.anchor_doc)
             if anchor_display:
@@ -1800,7 +1920,7 @@ def _build_field_matrix_snapshot(
 
         row["statuses"] = statuses
         rows.append(row)
-    return {"documents": FIELD_MATRIX_DOC_TYPES, "rows": rows}
+    return {"documents": field_matrix_doc_types, "rows": rows}
 
 
 DIFF_REDACTED_OPEN = "{redacted}"
@@ -1841,8 +1961,12 @@ def _diff_against_anchor(anchor_value: str, other_value: str) -> str:
 
 
 def _build_field_matrix_diff_snapshot(
-    documents: List[Document], fields_by_doc: Dict[uuid.UUID, Dict[str, FilledField]]
+    documents: List[Document],
+    fields_by_doc: Dict[uuid.UUID, Dict[str, FilledField]],
+    document_profile: str,
 ) -> Dict[str, Any]:
+    field_matrix_doc_types, field_matrix_doc_type_map = _field_matrix_config(document_profile)
+    field_comparison_rules = _filtered_field_comparison_rules(get_active_document_type_values(document_profile))
     doc_type_lookup: Dict[str, List[Dict[str, FilledField]]] = {}
     for document in documents:
         doc_type_value = getattr(document.doc_type, "value", str(document.doc_type))
@@ -1886,9 +2010,9 @@ def _build_field_matrix_diff_snapshot(
         ("дата документа", DOCUMENT_DATE_FIELDS),
     ):
         row: Dict[str, Any] = {"FieldKey": label}
-        statuses: Dict[str, Optional[str]] = {doc: None for doc in FIELD_MATRIX_DOC_TYPES}
-        for display_doc in FIELD_MATRIX_DOC_TYPES:
-            actual_doc_type = FIELD_MATRIX_DOC_TYPE_MAP.get(display_doc, display_doc)
+        statuses: Dict[str, Optional[str]] = {doc: None for doc in field_matrix_doc_types}
+        for display_doc in field_matrix_doc_types:
+            actual_doc_type = field_matrix_doc_type_map.get(display_doc, display_doc)
             value = ""
             if actual_doc_type:
                 value = _get_mapped_value(actual_doc_type, mapping)
@@ -1898,12 +2022,12 @@ def _build_field_matrix_diff_snapshot(
 
     for field_key, aliases in FIELD_MATRIX_FIELDS:
         row = {"FieldKey": field_key}
-        statuses: Dict[str, Optional[str]] = {doc: None for doc in FIELD_MATRIX_DOC_TYPES}
+        statuses: Dict[str, Optional[str]] = {doc: None for doc in field_matrix_doc_types}
         value_cache: Dict[str, Tuple[str, bool]] = {}
         actual_to_display: Dict[str, str] = {}
 
-        for display_doc in FIELD_MATRIX_DOC_TYPES:
-            actual_doc_type = FIELD_MATRIX_DOC_TYPE_MAP.get(display_doc, display_doc)
+        for display_doc in field_matrix_doc_types:
+            actual_doc_type = field_matrix_doc_type_map.get(display_doc, display_doc)
             value = ""
             present = False
             if actual_doc_type:
@@ -1912,7 +2036,7 @@ def _build_field_matrix_diff_snapshot(
                 actual_to_display[actual_doc_type] = display_doc
             row[display_doc] = value or ""
 
-        for rule in FIELD_COMPARISON_RULES.get(field_key, []):
+        for rule in field_comparison_rules.get(field_key, []):
             anchor_value, anchor_present = value_cache.get(rule.anchor_doc, ("", False))
             anchor_display = actual_to_display.get(rule.anchor_doc)
             if anchor_display:
@@ -1940,7 +2064,7 @@ def _build_field_matrix_diff_snapshot(
         row["statuses"] = statuses
         rows.append(row)
 
-    return {"documents": FIELD_MATRIX_DOC_TYPES, "rows": rows}
+    return {"documents": field_matrix_doc_types, "rows": rows}
 
 
 async def fetch_latest_fields(session: AsyncSession, batch_id: uuid.UUID) -> Dict[uuid.UUID, Dict[str, FilledField]]:
@@ -1955,10 +2079,26 @@ async def fetch_latest_fields(session: AsyncSession, batch_id: uuid.UUID) -> Dic
 
 
 async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[ValidationMessage]:
+    batch_stmt = select(Batch).where(Batch.id == batch_id)
+    batch_result = await session.execute(batch_stmt)
+    batch = batch_result.scalar_one_or_none()
+    if batch is None:
+        return []
+
+    document_profile = get_document_profile(batch.meta)
+    active_document_types = get_active_document_types(document_profile)
+    active_doc_type_values = get_active_document_type_values(document_profile)
     fields_by_doc = await fetch_latest_fields(session, batch_id)
     doc_stmt = select(Document).where(Document.batch_id == batch_id)
     docs_result = await session.execute(doc_stmt)
-    documents = docs_result.scalars().all()
+    all_documents = docs_result.scalars().all()
+    documents = [document for document in all_documents if document.doc_type in active_document_types]
+    active_doc_ids = {document.id for document in documents}
+    fields_by_doc = {
+        doc_id: fields
+        for doc_id, fields in fields_by_doc.items()
+        if doc_id in active_doc_ids
+    }
 
     validations: List[ValidationMessage] = []
 
@@ -1994,9 +2134,9 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
                 )
 
     context = ValidationContext(documents, fields_by_doc)
-    _apply_date_rules(context, validations)
-    _apply_anchored_equality_rules(context, validations)
-    _apply_group_equality_rules(context, validations)
+    _apply_date_rules(context, validations, active_doc_type_values)
+    _apply_anchored_equality_rules(context, validations, active_doc_type_values)
+    _apply_group_equality_rules(context, validations, active_doc_type_values)
 
     invoice_numbers = {
         doc_id: _collect_value(fields.get("invoice_no"))
@@ -2075,7 +2215,7 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
             )
         )
 
-    field_matrix = _build_field_matrix_snapshot(documents, fields_by_doc)
+    field_matrix = _build_field_matrix_snapshot(documents, fields_by_doc, document_profile)
     validations.append(
         ValidationMessage(
             rule_id="document_matrix",
@@ -2084,7 +2224,7 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
             refs=[field_matrix],
         )
     )
-    field_matrix_diff = _build_field_matrix_diff_snapshot(documents, fields_by_doc)
+    field_matrix_diff = _build_field_matrix_diff_snapshot(documents, fields_by_doc, document_profile)
     validations.append(
         ValidationMessage(
             rule_id="document_matrix_diff",

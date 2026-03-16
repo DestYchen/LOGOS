@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.config import get_settings
+from app.core.document_profiles import DEFAULT_DOCUMENT_PROFILE
 from app.core.enums import BatchStatus, DocumentStatus
 from app.core.storage import batch_dir, ensure_base_dir, unique_filename
 from app.models import Batch, Document
@@ -290,7 +291,11 @@ async def create_batch(session: AsyncSession, created_by: Optional[str], title: 
         meta = batch.meta if isinstance(batch.meta, dict) else {}
         batch.meta = {**meta, "title": normalized_title}
     meta = batch.meta if isinstance(batch.meta, dict) else {}
-    batch.meta = {**meta, "prep_complete": False}
+    batch.meta = {
+        **meta,
+        "prep_complete": False,
+        "document_profile": DEFAULT_DOCUMENT_PROFILE,
+    }
     session.add(batch)
     await session.flush()
     batch_paths = batch_dir(str(batch.id))

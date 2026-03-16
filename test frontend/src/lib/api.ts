@@ -2,6 +2,7 @@ import {
   type ApiMessageResponse,
   type BatchDetailsResponse,
   type BatchesResponse,
+  type DocumentProfileKey,
   type FeedbackResponse,
   type UploadResponse,
 } from "../types/api";
@@ -84,9 +85,19 @@ export async function fetchBatchDetails(batchId: string): Promise<BatchDetailsRe
   return request<BatchDetailsResponse>(`${API_JSON_BASE}/batches/${batchId}`);
 }
 
-export async function confirmBatchPrep(batchId: string): Promise<ApiMessageResponse> {
+export async function confirmBatchPrep(
+  batchId: string,
+  documentProfile?: DocumentProfileKey | null,
+): Promise<ApiMessageResponse> {
+  const body = documentProfile ? JSON.stringify({ document_profile: documentProfile }) : undefined;
   return request<ApiMessageResponse>(`${API_JSON_BASE}/batches/${batchId}/confirm-prep`, {
     method: "POST",
+    headers: body
+      ? {
+          "Content-Type": "application/json",
+        }
+      : undefined,
+    body,
   });
 }
 

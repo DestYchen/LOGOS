@@ -10,9 +10,15 @@ import { confirmBatchPrep, deleteDocument, fetchBatchDetails, rotateDocument } f
 import { cn, mapBatchStatus } from "../lib/utils";
 import { Alert } from "../components/ui/alert";
 import { Button } from "../components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Spinner } from "../components/ui/spinner";
 import { StatusPill } from "../components/status/StatusPill";
-import type { BatchDetails, DocumentPayload } from "../types/api";
+import type { BatchDetails, DocumentPayload, DocumentProfileKey } from "../types/api";
+
+const DEFAULT_PROFILE_OPTIONS = [
+  { key: "standard", label: "Стандартно" },
+  { key: "china_sea", label: "Китайские документы" },
+] as const;
 
 type PreviewZoomProps = {
   src: string | null;
@@ -107,6 +113,8 @@ function QueuePage() {
   const [elapsedSeconds, setElapsedSeconds] = useState<number | null>(null);
   const [estimatedTotalSeconds, setEstimatedTotalSeconds] = useState<number | null>(null);
   const [lastProgressPercent, setLastProgressPercent] = useState(0);
+  const [documentProfile, setDocumentProfile] = useState<DocumentProfileKey>("standard");
+  const [profileBatchId, setProfileBatchId] = useState<string | null>(null);
 
   const batchId = searchParams.get("batch");
 
@@ -128,10 +136,23 @@ function QueuePage() {
   useEffect(() => {
     if (!batchId) {
       setBatch(null);
+      setDocumentProfile("standard");
+      setProfileBatchId(null);
       return;
     }
     void fetchBatch();
   }, [batchId, fetchBatch]);
+
+  useEffect(() => {
+    if (!batch) {
+      return;
+    }
+    if (profileBatchId === batch.id) {
+      return;
+    }
+    setDocumentProfile(batch.document_profile ?? "standard");
+    setProfileBatchId(batch.id);
+  }, [batch, profileBatchId]);
 
   useEffect(() => {
     if (!batchId || !batch || !batch.prep_complete) {
@@ -223,14 +244,14 @@ function QueuePage() {
     setPrepSubmitting(true);
     setError(null);
     try {
-      await confirmBatchPrep(batchId);
+      await confirmBatchPrep(batchId, documentProfile);
       await fetchBatch();
     } catch (err) {
       setError(err as Error);
     } finally {
       setPrepSubmitting(false);
     }
-  }, [batchId, fetchBatch]);
+  }, [batchId, documentProfile, fetchBatch]);
 
   const isPrepStage = Boolean(batch && !batch.prep_complete);
   const documents = batch?.documents ?? [];
@@ -269,6 +290,7 @@ function QueuePage() {
       : null;
   const estimateLabel = remainingDisplaySeconds !== null ? formatElapsedTime(remainingDisplaySeconds) : "ожидание";
   const processButtonLabel = remainingDisplaySeconds !== null ? `Осталось: ${estimateLabel}` : "Ожидание";
+  const profileOptions = batch?.document_profile_options?.length ? batch.document_profile_options : DEFAULT_PROFILE_OPTIONS;
 
   const stepsCompletedForStages = totalSteps > 0 ? completedSteps : derivedStepsCompleted;
   const safeStepsCompleted = Math.max(0, stepsCompletedForStages);
@@ -350,9 +372,30 @@ function QueuePage() {
                       Проверьте страницы, удалите лишнее и поверните PDF перед запуском обработки.
                     </p>
                   </div>
-                  <Button onClick={handleConfirmPrep} disabled={prepSubmitting || loading || documents.length === 0}>
-                    {prepSubmitting ? "Запускаем обработку..." : "Готово"}
-                  </Button>
+                  <div className="flex w-full flex-col gap-3 md:w-auto md:min-w-[300px]">
+                    <div className="space-y-1">
+                      <div className="text-sm font-medium">Профиль пакета</div>
+                      <Select
+                        value={documentProfile}
+                        onValueChange={(value) => setDocumentProfile(value as DocumentProfileKey)}
+                        disabled={prepSubmitting || loading}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Выберите профиль" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {profileOptions.map((option) => (
+                            <SelectItem key={option.key} value={option.key}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <Button onClick={handleConfirmPrep} disabled={prepSubmitting || loading || documents.length === 0}>
+                      {prepSubmitting ? "Запускаем обработку..." : "Готово"}
+                    </Button>
+                  </div>
                 </div>
                 {prepList.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border border-dashed p-10">

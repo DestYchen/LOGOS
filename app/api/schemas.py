@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +20,10 @@ class BatchCreateResponse(BaseModel):
 
 class BatchUploadResponse(BaseModel):
     saved: List[str]
+
+
+class ConfirmPrepRequest(BaseModel):
+    document_profile: Literal["standard", "china_sea"] | None = None
 
 
 class DocumentSummary(BaseModel):

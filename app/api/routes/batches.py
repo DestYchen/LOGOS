@@ -13,6 +13,7 @@ from app.api.schemas import (
     BatchSummary,
     BatchCreateRequest,
     BatchCreateResponse,
+    ConfirmPrepRequest,
     BatchReportResponse,
     BatchUploadResponse,
     ReportDocument,
@@ -25,6 +26,7 @@ from app.api.schemas import (
     ValidationResult,
 )
 from app.core.config import get_settings
+from app.core.document_profiles import DEFAULT_DOCUMENT_PROFILE, get_document_profile
 from app.core.enums import BatchStatus, DocumentStatus, DocumentType
 from app.services import batches as batch_service
 from app.services import deletion
@@ -121,6 +123,7 @@ async def process_batch(batch_id: uuid.UUID, session: AsyncSession = Depends(get
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="batch_empty")
         # Backwards compatibility: explicit process call confirms prep.
         meta["prep_complete"] = True
+        meta["document_profile"] = get_document_profile(meta) or DEFAULT_DOCUMENT_PROFILE
         if batch.status in (BatchStatus.NEW, BatchStatus.PREPARED):
             run_meta = meta.get("processing_run")
             if not isinstance(run_meta, dict) or run_meta.get("mode") != "initial_upload":
@@ -137,7 +140,11 @@ async def process_batch(batch_id: uuid.UUID, session: AsyncSession = Depends(get
 
 
 @router.post("/{batch_id}/confirm-prep", status_code=status.HTTP_202_ACCEPTED)
-async def confirm_prep(batch_id: uuid.UUID, session: AsyncSession = Depends(get_db)) -> Dict[str, Any]:
+async def confirm_prep(
+    batch_id: uuid.UUID,
+    payload: ConfirmPrepRequest | None = None,
+    session: AsyncSession = Depends(get_db),
+) -> Dict[str, Any]:
     batch = await batch_service.get_batch(session, batch_id)
     if batch is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="batch_not_found")
@@ -148,6 +155,7 @@ async def confirm_prep(batch_id: uuid.UUID, session: AsyncSession = Depends(get_
     if meta.get("prep_complete"):
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="prep_locked")
 
+    meta["document_profile"] = payload.document_profile or get_document_profile(meta) or DEFAULT_DOCUMENT_PROFILE
     meta["prep_complete"] = True
     if batch.status in (BatchStatus.NEW, BatchStatus.PREPARED):
         run_meta = meta.get("processing_run")

@@ -8,6 +8,19 @@ export type ApiMessageResponse = {
   [key: string]: unknown;
 };
 
+export type DocumentProfileKey = "standard" | "china_sea";
+
+export type DocumentProfileOption = {
+  key: DocumentProfileKey;
+  label: string;
+};
+
+export type ExpectedDocType = {
+  display_key: string;
+  label: string;
+  actual_type: string | null;
+};
+
 export type UploadResponse = {
   status: string;
   batch_id: string;
@@ -150,6 +163,9 @@ export type BatchDetails = {
   documents: DocumentPayload[];
   documents_count: number;
   doc_types: string[];
+  document_profile: DocumentProfileKey;
+  document_profile_options: DocumentProfileOption[];
+  expected_doc_types: ExpectedDocType[];
   pending_total: number;
   awaiting_processing: boolean;
   can_complete: boolean;

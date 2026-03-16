@@ -17,7 +17,7 @@ import { confirmField, fetchBatchDetails, updateField, uploadDocumentsToBatch } 
 import { cn, formatDateTime, mapBatchStatus, statusLabel } from "../lib/utils";
 import { formatPacketTimestamp } from "../lib/packet";
 import { DOCUMENT_PREVIEW_CALIBRATION } from "../lib/preview-calibration";
-import type { BatchDetails, DocumentPayload, FieldState, ProductColumn, ProductRow } from "../types/api";
+import type { BatchDetails, DocumentPayload, ExpectedDocType, FieldState, ProductColumn, ProductRow } from "../types/api";
 
 type ValidationRef = {
   doc_id?: string;
@@ -63,7 +63,7 @@ type MatrixPreviewTarget = {
 
 type DocPresenceItem = {
   docType: string;
-  actualType: string;
+  actualType: string | null;
   label: string;
   present: boolean;
   filenames: string[];
@@ -304,55 +304,44 @@ const MATRIX_STATUS_LABELS: Record<string, string> = {
 };
 
 
-const EXPECTED_DOC_TYPES = [
-  { key: "CONTRACT", label: "Контракт" },
-  { key: "ADDENDUM", label: "Доп. соглашение" },
-  { key: "PROFORMA", label: "Проформа" },
-  { key: "INVOICE", label: "Инвойс" },
-  { key: "BILL_OF_LADING", label: "Коносамент" },
-  { key: "CMR", label: "CMR" },
-  { key: "PACKING_LIST", label: "Пак-лист" },
-  { key: "PRICE_LIST_1", label: "Прайс-лист 1" },
-  { key: "PRICE_LIST_2", label: "Прайс-лист 2" },
-  { key: "QUALITY_CERTIFICATE", label: "Сертификат качества" },
-  { key: "VETERINARY_CERTIFICATE", label: "Вет. сертификат" },
-  { key: "EXPORT_DECLARATION", label: "Экспортная декларация" },
-  { key: "SPECIFICATION", label: "Спецификация" },
-  { key: "CERTIFICATE_OF_ORIGIN", label: "Сертификат происхождения" },
-  { key: "FORM_A", label: "FORM A" },
-  { key: "EAV", label: "EAV" },
-  { key: "CT-3", label: "CT-3" },
-  { key: "T1", label: "T1" },
+const LEGACY_EXPECTED_DOC_TYPES: ExpectedDocType[] = [
+  { display_key: "CONTRACT", label: "Контракт", actual_type: "CONTRACT" },
+  { display_key: "ADDENDUM", label: "Доп. соглашение", actual_type: null },
+  { display_key: "PROFORMA", label: "Проформа", actual_type: "PROFORMA" },
+  { display_key: "INVOICE", label: "Инвойс", actual_type: "INVOICE" },
+  { display_key: "BILL_OF_LADING", label: "Коносамент", actual_type: "BILL_OF_LANDING" },
+  { display_key: "CMR", label: "CMR", actual_type: "CMR" },
+  { display_key: "PACKING_LIST", label: "Пак-лист", actual_type: "PACKING_LIST" },
+  { display_key: "PRICE_LIST_1", label: "Прайс-лист 1", actual_type: "PRICE_LIST_1" },
+  { display_key: "PRICE_LIST_2", label: "Прайс-лист 2", actual_type: "PRICE_LIST_2" },
+  { display_key: "QUALITY_CERTIFICATE", label: "Сертификат качества", actual_type: "QUALITY_CERTIFICATE" },
+  { display_key: "VETERINARY_CERTIFICATE", label: "Вет. сертификат", actual_type: "VETERINARY_CERTIFICATE" },
+  { display_key: "EXPORT_DECLARATION", label: "Экспортная декларация", actual_type: "EXPORT_DECLARATION" },
+  { display_key: "SPECIFICATION", label: "Спецификация", actual_type: "SPECIFICATION" },
+  { display_key: "CERTIFICATE_OF_ORIGIN", label: "Сертификат происхождения", actual_type: "CERTIFICATE_OF_ORIGIN" },
+  { display_key: "FORM_A", label: "FORM A", actual_type: "FORM_A" },
+  { display_key: "EAV", label: "EAV", actual_type: "EAV" },
+  { display_key: "CT-3", label: "CT-3", actual_type: "CT-3" },
+  { display_key: "T1", label: "T1", actual_type: "T1" },
 ];
 
-const DOC_TYPE_LABELS: Record<string, string> = EXPECTED_DOC_TYPES.reduce(
+const DOC_TYPE_LABELS: Record<string, string> = LEGACY_EXPECTED_DOC_TYPES.reduce(
   (acc, entry) => {
-    acc[entry.key] = entry.label;
+    acc[entry.display_key] = entry.label;
     return acc;
   },
   {} as Record<string, string>,
 );
 
-const FIELD_MATRIX_DOC_TYPE_MAP: Record<string, string> = {
-  CONTRACT: "CONTRACT",
-  ADDENDUM: "ADDENDUM",
-  PROFORMA: "PROFORMA",
-  INVOICE: "INVOICE",
-  BILL_OF_LADING: "BILL_OF_LANDING",
-  CMR: "CMR",
-  PACKING_LIST: "PACKING_LIST",
-  PRICE_LIST_1: "PRICE_LIST_1",
-  PRICE_LIST_2: "PRICE_LIST_2",
-  QUALITY_CERTIFICATE: "QUALITY_CERTIFICATE",
-  VETERINARY_CERTIFICATE: "VETERINARY_CERTIFICATE",
-  EXPORT_DECLARATION: "EXPORT_DECLARATION",
-  SPECIFICATION: "SPECIFICATION",
-  CERTIFICATE_OF_ORIGIN: "CERTIFICATE_OF_ORIGIN",
-  FORM_A: "FORM_A",
-  EAV: "EAV",
-  "CT-3": "CT-3",
-  T1: "T1",
-};
+const FIELD_MATRIX_DOC_TYPE_MAP: Record<string, string> = LEGACY_EXPECTED_DOC_TYPES.reduce(
+  (acc, entry) => {
+    if (entry.actual_type) {
+      acc[entry.display_key] = entry.actual_type;
+    }
+    return acc;
+  },
+  {} as Record<string, string>,
+);
 
 const FIELD_MATRIX_ACTUAL_TO_DISPLAY: Record<string, string> = Object.entries(FIELD_MATRIX_DOC_TYPE_MAP).reduce(
   (acc, [display, actual]) => {
@@ -1298,6 +1287,10 @@ function SummaryTablePage() {
     });
     return set;
   }, [presentDocInfo]);
+  const expectedDocTypes = useMemo(
+    () => (batch?.expected_doc_types?.length ? batch.expected_doc_types : LEGACY_EXPECTED_DOC_TYPES),
+    [batch],
+  );
 
   const buildFieldMatrixView = useCallback(
     (matrix: unknown) => {
@@ -1388,14 +1381,14 @@ function SummaryTablePage() {
     const remaining = new Map(presentDocInfo);
     const rows: DocPresenceItem[] = [];
 
-    EXPECTED_DOC_TYPES.forEach((item) => {
-      const actualType = toActualDocType(item.key);
-      const info = remaining.get(actualType);
-      if (info) {
+    expectedDocTypes.forEach((item) => {
+      const actualType = item.actual_type;
+      const info = actualType ? remaining.get(actualType) : null;
+      if (actualType && info) {
         remaining.delete(actualType);
       }
       rows.push({
-        docType: item.key,
+        docType: item.display_key,
         actualType,
         label: item.label,
         present: Boolean(info),
@@ -1421,7 +1414,7 @@ function SummaryTablePage() {
       });
 
     return rows;
-  }, [batch, presentDocInfo]);
+  }, [batch, expectedDocTypes, presentDocInfo]);
 
   const resolveDocField = useCallback(
     (displayDoc: string, fieldKey: string) => {
