@@ -164,6 +164,7 @@ const PRODUCT_FIELD_LABELS: Record<string, string> = {
   price_per_unit: "Цена за единицу",
   total_price: "Сумма",
   currency: "Валюта",
+  date_of_production: "Дата производства",
 };
 
 const FIELD_LABELS_RU: Record<string, string> = {
@@ -201,6 +202,7 @@ const VALIDATION_RULE_MESSAGES: Record<string, string> = {
   date_price_list_2_between_proforma_invoice: "Дата прайс листа 2 должна быть позже даты профомы и не позжедаты инвойса",
   date_quality_certificate_after_bol: "Дата сертификатат качества должна быть позже или равна дате коноссамента",
   date_veterinary_certificate_before_bol: "Дата ветеринарного сертификата должна быть раньше чем дата коноссамента",
+  vet_cert_not_before_production_date: "Дата ветеринарного сертификата не может быть раньше даты производства товара",
   date_export_declaration_after_bol: "Дата экспортной декларации должна быть позже или равна даты коноссамента",
   date_specification_not_after_invoice: "Дата спецификации должна быть не позже, чем дата инвойса",
   date_certificate_origin_after_invoice: "Дата сертификата происхождения должна быть позже или равно дате инвойса",
@@ -245,6 +247,7 @@ const VALIDATION_RULE_ORDER = [
   "date_price_list_2_between_proforma_invoice",
   "date_quality_certificate_after_bol",
   "date_veterinary_certificate_before_bol",
+  "vet_cert_not_before_production_date",
   "date_export_declaration_after_bol",
   "date_specification_not_after_invoice",
   "date_certificate_origin_after_invoice",
@@ -376,6 +379,21 @@ function productFieldLabel(field: string): string {
     return PRODUCT_FIELD_LABELS[normalized];
   }
   return field.replace(/[_\.]/g, " ");
+}
+
+function formatNestedProductFieldLabel(fieldKey: string): string | null {
+  const match = /^products\.product_(\d+)\.(.+)$/.exec(fieldKey);
+  if (!match) {
+    return null;
+  }
+
+  const [, productNumber, nestedFieldKey] = match;
+  const baseLabel =
+    PRODUCT_FIELD_LABELS[nestedFieldKey.toLowerCase()] ??
+    FIELD_LABELS_RU[nestedFieldKey] ??
+    nestedFieldKey.replace(/[_\.]/g, " ");
+
+  return `${baseLabel} (продукт ${productNumber})`;
 }
 
 function matrixStatusClass(status: string | null | undefined): string {
@@ -844,6 +862,10 @@ function formatFieldLabel(fieldKey: string | undefined, fallback?: string): stri
   const mapped = FIELD_LABELS_RU[fieldKey];
   if (mapped) {
     return mapped;
+  }
+  const nestedProductLabel = formatNestedProductFieldLabel(fieldKey);
+  if (nestedProductLabel) {
+    return nestedProductLabel;
   }
   return fieldKey.replace(/[_\.]/g, " ");
 }

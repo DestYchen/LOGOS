@@ -1433,7 +1433,10 @@ def _apply_date_rules(
     context: ValidationContext,
     validations: List[ValidationMessage],
     active_doc_type_values: set[str],
+    date_rules: Optional[List[DateRule]] = None,
 ) -> None:
+    rules = DATE_RULES if date_rules is None else date_rules
+
     def _gather_refs(ref: FieldRef) -> Tuple[List[Dict[str, Any]], List[FieldValueRecord], bool]:
         coll = context.collect(ref, _normalize_date)
         refs: List[Dict[str, Any]] = []
@@ -1479,7 +1482,7 @@ def _apply_date_rules(
                     key_map[k] = r
         return list(key_map.values())
 
-    for source_rule in DATE_RULES:
+    for source_rule in rules:
         rule = _filter_date_rule(source_rule, active_doc_type_values)
         if rule is None:
             continue
@@ -2133,8 +2136,37 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
                     )
                 )
 
+    dynamic_date_rules: List[DateRule] = list(DATE_RULES)
+    production_date_keys: set[str] = set()
+    for document in documents:
+        if document.doc_type not in {DocumentType.PACKING_LIST, DocumentType.VETERINARY_CERTIFICATE}:
+            continue
+        for field_key in fields_by_doc.get(document.id, {}):
+            if not field_key.startswith("products.") or not field_key.endswith(".date_of_production"):
+                continue
+            parts = field_key.split(".")
+            if len(parts) < 3 or parts[1] == "product_template":
+                continue
+            production_date_keys.add(field_key)
+
+    comparisons: List[DateComparison] = []
+    for field_key in sorted(production_date_keys):
+        comparisons.append(DateComparison(">=", _ref("PACKING_LIST", field_key)))
+        comparisons.append(DateComparison(">=", _ref("VETERINARY_CERTIFICATE", field_key)))
+
+    if comparisons:
+        dynamic_date_rules.append(
+            DateRule(
+                rule_id="vet_cert_not_before_production_date",
+                description="Дата ветеринарного сертификата не может быть раньше даты производства товара",
+                anchor=VET_CERT_DATE,
+                comparisons=comparisons,
+                severity=ValidationSeverity.ERROR,
+            )
+        )
+
     context = ValidationContext(documents, fields_by_doc)
-    _apply_date_rules(context, validations, active_doc_type_values)
+    _apply_date_rules(context, validations, active_doc_type_values, dynamic_date_rules)
     _apply_anchored_equality_rules(context, validations, active_doc_type_values)
     _apply_group_equality_rules(context, validations, active_doc_type_values)
 
