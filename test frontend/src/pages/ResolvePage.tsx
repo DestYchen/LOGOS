@@ -309,8 +309,6 @@ function shortDocTypeLabel(docType: string): string {
   return parts.map((part) => part[0]).join("").slice(0, 4);
 }
 
-
-
 function DocumentViewer({
 
   previews,
@@ -1721,27 +1719,27 @@ const goToDocument = (index: number) => {
 
         </span>
 
-        <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-wrap items-end gap-4">
           {documents.map((doc, index) => {
             const isActive = index === activeIndex;
             const shortLabel = shortDocTypeLabel(doc.doc_type);
             return (
-              <div key={doc.id} className="flex flex-col items-center gap-1">
+              <div key={doc.id} className="flex flex-col items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => goToDocument(index)}
                   className={cn(
-                    "h-4 w-4 rounded-full border-2 transition-colors",
+                    "h-7 w-7 rounded-full border-[3px] shadow-sm transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2",
                     isActive
-                      ? "border-primary bg-primary"
-                      : "border-muted-foreground/40 bg-muted-foreground/30 hover:border-primary hover:bg-primary/50",
+                      ? "border-primary bg-primary shadow-primary/20"
+                      : "border-muted-foreground/50 bg-muted-foreground/25 hover:border-primary hover:bg-primary/40",
                   )}
-                  aria-label={`Документ ${index + 1}: ${doc.doc_type}`}
-                  title={doc.doc_type}
+                  aria-label={`Документ ${index + 1}: ${shortLabel}`}
+                  title={shortLabel}
                 />
                 <span
                   className={cn(
-                    "text-[10px] font-medium tracking-wide text-muted-foreground",
+                    "text-xs font-semibold tracking-wide text-muted-foreground",
                     isActive && "text-primary",
                   )}
                 >
