@@ -393,6 +393,7 @@ def _compare_products(
 
     anchor_ms, anchor_buckets = _build_product_multiset(anchor_rows)
     target_ms, target_buckets = _build_product_multiset(target_rows)
+    both_have_product_data = bool(anchor_ms) and bool(target_ms)
 
     # Normalizer used across all product comparisons
     def _value_for_compare(field_key: str, value: Optional[str]) -> Optional[str]:
@@ -402,10 +403,30 @@ def _compare_products(
             return _normalize_name_for_key(value)
         return value.strip()
 
+    def _summary_product_refs() -> List[Dict[str, Any]]:
+        return [
+            _build_ref(
+                doc_id=anchor_doc.id,
+                field_key="products",
+                value=str(sum(anchor_ms.values())),
+                normalized=sum(anchor_ms.values()),
+                present=True,
+            ),
+            _build_ref(
+                doc_id=target_doc.id,
+                field_key="products",
+                value=str(sum(target_ms.values())),
+                normalized=sum(target_ms.values()),
+                present=True,
+            ),
+        ]
+
     # Missing in target
+    missing_in_target = False
     for key, cnt in anchor_ms.items():
         delta = cnt - target_ms.get(key, 0)
         if delta > 0:
+            missing_in_target = True
             # Collect detailed refs for missing rows from anchor
             start_idx = target_ms.get(key, 0)
             detailed_refs: List[Dict[str, Any]] = []
@@ -449,11 +470,22 @@ def _compare_products(
                     refs=detailed_refs,
                 )
             )
+    if both_have_product_data and not missing_in_target:
+        validations.append(
+            ValidationMessage(
+                rule_id=f"products_missing_in_{target_doc.doc_type.name}",
+                severity=ValidationSeverity.OK,
+                message=f"No products missing in {target_doc.doc_type.name} compared to {anchor_doc.doc_type.name}",
+                refs=_summary_product_refs(),
+            )
+        )
 
     # Extra in target
+    extra_in_target = False
     for key, cnt in target_ms.items():
         delta = cnt - anchor_ms.get(key, 0)
         if delta > 0:
+            extra_in_target = True
             # Detailed refs for extra rows from target
             start_idx = anchor_ms.get(key, 0)
             detailed_refs: List[Dict[str, Any]] = []
@@ -494,13 +526,25 @@ def _compare_products(
                     severity=ValidationSeverity.WARN,
                     message=f"{delta} extra product(s) in {target_doc.doc_type.name} versus {anchor_doc.doc_type.name}",
                     refs=detailed_refs,
+                )
+            )
+    if both_have_product_data and not extra_in_target:
+        validations.append(
+            ValidationMessage(
+                rule_id=f"products_extra_in_{target_doc.doc_type.name}",
+                severity=ValidationSeverity.OK,
+                message=f"No extra products in {target_doc.doc_type.name} versus {anchor_doc.doc_type.name}",
+                refs=_summary_product_refs(),
             )
         )
 
     # Count mismatch where both have entries
-    for key in set(anchor_ms.keys()).intersection(set(target_ms.keys())):
+    matched_keys = set(anchor_ms.keys()).intersection(set(target_ms.keys()))
+    count_mismatch_found = False
+    for key in matched_keys:
         a, b = anchor_ms[key], target_ms[key]
         if a != b:
+            count_mismatch_found = True
             detailed_refs: List[Dict[str, Any]] = []
             # Include context for existing paired rows
             pairs = min(a, b)
@@ -554,6 +598,15 @@ def _compare_products(
                     refs=detailed_refs,
                 )
             )
+    if both_have_product_data and matched_keys and not count_mismatch_found:
+        validations.append(
+            ValidationMessage(
+                rule_id=f"products_count_mismatch_{target_doc.doc_type.name}",
+                severity=ValidationSeverity.OK,
+                message=f"Product counts match for matched keys in {target_doc.doc_type.name} versus {anchor_doc.doc_type.name}",
+                refs=_summary_product_refs(),
+            )
+        )
 
     # Detailed field comparison for matched pairs
     PRODUCT_COMPARE_FIELDS = [
@@ -568,9 +621,12 @@ def _compare_products(
         "total_price",
         "commodity_code",
     ]
+    field_compared: Dict[str, bool] = {fkey: False for fkey in PRODUCT_COMPARE_FIELDS}
+    field_mismatch_found: Dict[str, bool] = {fkey: False for fkey in PRODUCT_COMPARE_FIELDS}
+    field_compared_refs: Dict[str, List[Dict[str, Any]]] = {fkey: [] for fkey in PRODUCT_COMPARE_FIELDS}
 
 
-    for key in set(anchor_ms.keys()).intersection(set(target_ms.keys())):
+    for key in matched_keys:
         pairs = min(anchor_ms[key], target_ms[key])
         for idx in range(pairs):
             row_a = anchor_buckets[key][idx]
@@ -584,7 +640,26 @@ def _compare_products(
                     continue
                 va = _value_for_compare(fkey, av)
                 vb = _value_for_compare(fkey, bv)
+                refs = [
+                    _build_ref(
+                        doc_id=anchor_doc.id,
+                        field_key=f"products.{prod_id_a}.{fkey}",
+                        value=av,
+                        normalized=va,
+                        present=True,
+                    ),
+                    _build_ref(
+                        doc_id=target_doc.id,
+                        field_key=f"products.{prod_id_b}.{fkey}",
+                        value=bv,
+                        normalized=vb,
+                        present=True,
+                    ),
+                ]
+                field_compared[fkey] = True
+                field_compared_refs[fkey].extend(refs)
                 if va != vb:
+                    field_mismatch_found[fkey] = True
                     validations.append(
                         ValidationMessage(
                             rule_id=f"product_field_mismatch_{fkey}",
@@ -592,24 +667,20 @@ def _compare_products(
                             message=(
                                 f"Field '{fkey}' differs between {anchor_doc.doc_type.name} and {target_doc.doc_type.name}"
                             ),
-                            refs=[
-                                _build_ref(
-                                    doc_id=anchor_doc.id,
-                                    field_key=f"products.{prod_id_a}.{fkey}",
-                                    value=av,
-                                    normalized=va,
-                                    present=True,
-                                ),
-                                _build_ref(
-                                    doc_id=target_doc.id,
-                                    field_key=f"products.{prod_id_b}.{fkey}",
-                                    value=bv,
-                                    normalized=vb,
-                                    present=True,
-                                ),
-                            ],
+                            refs=refs,
                         )
                     )
+    if both_have_product_data:
+        for fkey in PRODUCT_COMPARE_FIELDS:
+            if field_compared[fkey] and not field_mismatch_found[fkey]:
+                validations.append(
+                    ValidationMessage(
+                        rule_id=f"product_field_mismatch_{fkey}",
+                        severity=ValidationSeverity.OK,
+                        message=f"Field '{fkey}' matches between {anchor_doc.doc_type.name} and {target_doc.doc_type.name}",
+                        refs=field_compared_refs[fkey],
+                    )
+                )
 
 
 def _field_label(field_key: str) -> str:
@@ -1540,6 +1611,15 @@ def _apply_date_rules(
                     refs=merged_refs,
                 )
             )
+        else:
+            validations.append(
+                ValidationMessage(
+                    rule_id=rule.rule_id,
+                    severity=ValidationSeverity.OK,
+                    message=rule.description,
+                    refs=merged_refs,
+                )
+            )
 
 
 def _apply_anchored_equality_rules(
@@ -1661,6 +1741,15 @@ def _apply_anchored_equality_rules(
                     rule_id=rule.rule_id,
                     severity=rule.severity,
                     message=f"{rule.description}: values are not consistent with anchor",
+                    refs=merged_refs,
+                )
+            )
+        else:
+            validations.append(
+                ValidationMessage(
+                    rule_id=rule.rule_id,
+                    severity=ValidationSeverity.OK,
+                    message=rule.description,
                     refs=merged_refs,
                 )
             )
@@ -1789,6 +1878,18 @@ def _apply_group_equality_rules(
                     rule_id=rule.rule_id,
                     severity=rule.severity,
                     message=f"{rule.description}: values are not equal across documents",
+                    refs=merged_refs,
+                )
+            )
+            continue
+
+        total_valid = sum(len(records) for records in groups.values())
+        if total_valid >= 2:
+            validations.append(
+                ValidationMessage(
+                    rule_id=rule.rule_id,
+                    severity=ValidationSeverity.OK,
+                    message=rule.description,
                     refs=merged_refs,
                 )
             )
@@ -2104,6 +2205,8 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
     }
 
     validations: List[ValidationMessage] = []
+    required_fields_failed = False
+    required_field_refs: List[Dict[str, Any]] = []
 
     for document in documents:
         schema = get_schema(document.doc_type)
@@ -2113,6 +2216,7 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
             if not field_schema.required:
                 continue
             if field is None or (field.value in (None, "")):
+                required_fields_failed = True
                 note = "missing_required" if field is None else "empty_required"
                 refs = [
                     _build_ref(
@@ -2135,6 +2239,28 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
                         refs=refs,
                     )
                 )
+            else:
+                required_field_refs.append(
+                    _build_ref(
+                        doc_id=document.id,
+                        field_key=key,
+                        value=field.value,
+                        normalized=None,
+                        present=True,
+                        page=getattr(field, "page", None),
+                        bbox=getattr(field, "bbox", None),
+                        token_refs=getattr(field, "token_refs", None),
+                    )
+                )
+    if not required_fields_failed:
+        validations.append(
+            ValidationMessage(
+                rule_id="required_fields",
+                severity=ValidationSeverity.OK,
+                message="All required fields are filled",
+                refs=required_field_refs,
+            )
+        )
 
     dynamic_date_rules: List[DateRule] = list(DATE_RULES)
     production_date_keys: set[str] = set()
@@ -2189,6 +2315,19 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
                 refs=refs,
             )
         )
+    else:
+        refs = [
+            {"doc_id": doc_id, "field_key": "invoice_no", "value": value}
+            for doc_id, value in invoice_numbers.items()
+        ]
+        validations.append(
+            ValidationMessage(
+                rule_id="invoice_no_alignment",
+                severity=ValidationSeverity.OK,
+                message="Invoice numbers match across documents",
+                refs=refs,
+            )
+        )
 
     # Global weight consistency check disabled; relying on per-product comparisons
     currency_values = {
@@ -2208,6 +2347,20 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
                 rule_id="currency_consistency",
                 severity=ValidationSeverity.WARN,
                 message="Currency values differ across documents",
+                refs=refs,
+            )
+        )
+    else:
+        refs = [
+            {"doc_id": doc_id, "field_key": "currency", "value": value}
+            for doc_id, value in currency_values.items()
+            if value
+        ]
+        validations.append(
+            ValidationMessage(
+                rule_id="currency_consistency",
+                severity=ValidationSeverity.OK,
+                message="Currency values match across documents",
                 refs=refs,
             )
         )
@@ -2243,6 +2396,20 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
                 rule_id="destination_alignment",
                 severity=ValidationSeverity.WARN,
                 message="Destination or discharge ports differ between documents",
+                refs=refs,
+            )
+        )
+    else:
+        refs = [
+            {"doc_id": doc_id, "field_key": field_key, "value": value}
+            for doc_id, field_key, value in destinations
+            if value
+        ]
+        validations.append(
+            ValidationMessage(
+                rule_id="destination_alignment",
+                severity=ValidationSeverity.OK,
+                message="Destination and discharge ports match between documents",
                 refs=refs,
             )
         )

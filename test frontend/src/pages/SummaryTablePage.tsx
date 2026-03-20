@@ -193,6 +193,7 @@ const FIELD_LABELS_RU: Record<string, string> = {
 };
 
 const VALIDATION_RULE_MESSAGES: Record<string, string> = {
+  required_fields: "Обязательные поля заполнены",
   date_proforma_earliest: "Дата проформы должна быть самой ранней среди связанных документов",
   date_invoice_not_too_early: "Дата инвойса не должна быть раньше даты отгрузки и даты сертификатов",
   date_bill_of_landing_after_sources: "Дата коноссамента должна быть позже дат проформы, инвойса и прайс листов",
@@ -213,6 +214,7 @@ const VALIDATION_RULE_MESSAGES: Record<string, string> = {
   country_of_origin_consistency:
     "Страна происхождения в ветеринарном сертификате должна совпадать с другими документами",
   total_price_consistency: "Общая стоимость в инвойсе должна совпадать с другими документами",
+  currency_consistency: "Валюта одинаковая во всех документах",
   producer_consistency: "Производитель в ветеринарном сертификате должен совпадать с другими документами",
   incoterms_consistency: "Условия доставки из инвойса должны совпадать с другими документами",
   terms_of_payment_consistency: "Условия оплаты из инвойса должны совпадать с другими документами",
@@ -222,6 +224,7 @@ const VALIDATION_RULE_MESSAGES: Record<string, string> = {
     "Получатель из контракта должен совпадать с импортёрами в транспортных документах",
   proforma_number_consistency: "Номер проформы должен совпадать в инвойсе и экспортной декларации",
   invoice_number_consistency: "Номер инвойса должен совпадать с другими документами",
+  invoice_no_alignment: "Номер инвойса совпадает с другими документами",
   veterinary_seal_consistency:
     "Ветеринарная пломба в ветеринарном сертификате должна совпадать с другими документами",
   linear_seal_consistency: "Линейная прлобма в коноссаменте должна совпадать с другими документами",
@@ -235,9 +238,15 @@ const VALIDATION_RULE_MESSAGES: Record<string, string> = {
     "Транспорт доставки должен быть одинаковый среди инвойса, ветеринарного сертификата, серфтификата качества и коноссамента",
   importer_alignment:
     "Импортер должен быть одинаковым у коноссамента и сертификата происхождения",
+  destination_alignment: "Место назначения совпадает во всех документах",
+  products_missing_in: "Проверка отсутствующих товаров",
+  products_extra_in: "Проверка лишних товаров",
+  products_count_mismatch: "Проверка количества товаров",
+  product_field_mismatch: "Проверка совпадения полей товаров",
 };
 
 const VALIDATION_RULE_ORDER = [
+  "required_fields",
   "date_proforma_earliest",
   "date_invoice_not_too_early",
   "date_bill_of_landing_after_sources",
@@ -257,6 +266,7 @@ const VALIDATION_RULE_ORDER = [
   "additional_agreements_alignment",
   "country_of_origin_consistency",
   "total_price_consistency",
+  "currency_consistency",
   "producer_consistency",
   "incoterms_consistency",
   "terms_of_payment_consistency",
@@ -265,6 +275,7 @@ const VALIDATION_RULE_ORDER = [
   "recipient_matches_contract_buyer",
   "proforma_number_consistency",
   "invoice_number_consistency",
+  "invoice_no_alignment",
   "veterinary_seal_consistency",
   "linear_seal_consistency",
   "buyer_alignment",
@@ -272,6 +283,11 @@ const VALIDATION_RULE_ORDER = [
   "container_number_alignment",
   "vessel_alignment",
   "importer_alignment",
+  "destination_alignment",
+  "products_missing_in",
+  "products_extra_in",
+  "products_count_mismatch",
+  "product_field_mismatch",
 ];
 
 const FIELD_DOC_LABELS: Record<string, string> = {
@@ -394,6 +410,64 @@ function formatNestedProductFieldLabel(fieldKey: string): string | null {
     nestedFieldKey.replace(/[_\.]/g, " ");
 
   return `${baseLabel} (продукт ${productNumber})`;
+}
+
+function validationDocTypeLabel(docType: string): string {
+  const directLabel = DOC_TYPE_LABELS[docType];
+  if (directLabel) {
+    return directLabel;
+  }
+  const displayDocType = toDisplayDocType(docType);
+  return DOC_TYPE_LABELS[displayDocType] ?? displayDocType;
+}
+
+function resolveValidationRule(baseRuleId: string): { lookupId: string; message: string | null } {
+  const exactMessage = VALIDATION_RULE_MESSAGES[baseRuleId];
+  if (exactMessage) {
+    return { lookupId: baseRuleId, message: exactMessage };
+  }
+
+  const missingProductsMatch = /^products_missing_in_(.+)$/.exec(baseRuleId);
+  if (missingProductsMatch) {
+    const lookupId = "products_missing_in";
+    const baseMessage = VALIDATION_RULE_MESSAGES[lookupId];
+    return {
+      lookupId,
+      message: baseMessage ? `${baseMessage}: ${validationDocTypeLabel(missingProductsMatch[1])}` : null,
+    };
+  }
+
+  const extraProductsMatch = /^products_extra_in_(.+)$/.exec(baseRuleId);
+  if (extraProductsMatch) {
+    const lookupId = "products_extra_in";
+    const baseMessage = VALIDATION_RULE_MESSAGES[lookupId];
+    return {
+      lookupId,
+      message: baseMessage ? `${baseMessage}: ${validationDocTypeLabel(extraProductsMatch[1])}` : null,
+    };
+  }
+
+  const countMismatchMatch = /^products_count_mismatch_(.+)$/.exec(baseRuleId);
+  if (countMismatchMatch) {
+    const lookupId = "products_count_mismatch";
+    const baseMessage = VALIDATION_RULE_MESSAGES[lookupId];
+    return {
+      lookupId,
+      message: baseMessage ? `${baseMessage}: ${validationDocTypeLabel(countMismatchMatch[1])}` : null,
+    };
+  }
+
+  const productFieldMatch = /^product_field_mismatch_(.+)$/.exec(baseRuleId);
+  if (productFieldMatch) {
+    const lookupId = "product_field_mismatch";
+    const baseMessage = VALIDATION_RULE_MESSAGES[lookupId];
+    return {
+      lookupId,
+      message: baseMessage ? `${baseMessage}: ${productFieldLabel(productFieldMatch[1])}` : null,
+    };
+  }
+
+  return { lookupId: baseRuleId, message: null };
 }
 
 function matrixStatusClass(status: string | null | undefined): string {
@@ -832,6 +906,9 @@ function MatrixDocumentPreview({
 
 function severityClass(severity: string): string {
   const normalized = severity.toLowerCase();
+  if (normalized === "ok") {
+    return "text-green-600";
+  }
   if (normalized === "error" || normalized === "critical") {
     return "text-destructive";
   }
@@ -843,6 +920,9 @@ function severityClass(severity: string): string {
 
 function severityLabel(severity: string): string {
   const normalized = severity.toLowerCase();
+  if (normalized === "ok") {
+    return "Пройдено";
+  }
   if (normalized === "error" || normalized === "critical") {
     return "Ошибка";
   }
@@ -1482,14 +1562,14 @@ function SummaryTablePage() {
         if (ruleId === "document_matrix" || ruleId === "document_matrix_diff") {
           return null;
         }
-        const baseRuleId = ruleId.endsWith("_availability") ? ruleId.replace(/_availability$/, "") : ruleId;
-        const baseMessage = VALIDATION_RULE_MESSAGES[baseRuleId];
+        const rawBaseRuleId = ruleId.endsWith("_availability") ? ruleId.replace(/_availability$/, "") : ruleId;
+        const { lookupId, message: baseMessage } = resolveValidationRule(rawBaseRuleId);
         if (!baseMessage) {
           return null;
         }
         const severity = typeof severityValue === "string" ? severityValue : "info";
         const messageSuffix = ruleId.endsWith("_availability")
-          ? baseRuleId.startsWith("date_")
+          ? lookupId.startsWith("date_")
             ? "пропущены даты или значения невалидны"
             : "пропущены данные или значения невалидны"
           : "";
@@ -1527,7 +1607,7 @@ function SummaryTablePage() {
           message,
           severity,
           rows,
-          baseRuleId,
+          baseRuleId: lookupId,
         } as ValidationRuleView;
       })
       .filter((entry): entry is ValidationRuleView => entry !== null)
