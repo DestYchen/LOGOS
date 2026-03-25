@@ -9,9 +9,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.document_profiles import get_document_profile
 from app.core.enums import BatchStatus, DocumentType
 from app.core.storage import batch_dir
 from app.models import Batch, Document, FilledField, Validation
+from app.services import product_matrix
 
 _INTERNAL_DOC_TYPES = {
     DocumentType.CONTRACT_1,
@@ -109,6 +111,7 @@ def _round_confidence(value: Optional[float]) -> Optional[float]:
 async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[str, Any]:
     batch = await load_batch_with_fields(session, batch_id)
     validations = await fetch_validations(session, batch_id)
+    document_profile = get_document_profile(batch.meta)
 
     documents_payload: List[Dict[str, Any]] = []
     doc_fields_index: Dict[uuid.UUID, Dict[str, Dict[str, Any]]] = {}
@@ -201,6 +204,11 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
             }
         )
 
+    product_matrix_columns, product_matrix_rows = product_matrix.build_product_matrix(
+        documents_payload,
+        document_profile=document_profile,
+    )
+
     payload = {
         "batch_id": str(batch.id),
         "status": batch.status.value,
@@ -209,6 +217,8 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
         "validations": validations_payload,
         "meta": batch.meta or {},
         "product_comparisons": product_comparisons,
+        "product_matrix_columns": product_matrix_columns,
+        "product_matrix": product_matrix_rows,
     }
 
     report_path = batch_dir(str(batch_id)).report

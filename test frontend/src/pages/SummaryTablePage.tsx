@@ -1,5 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import type { ChangeEvent } from "react";
+import { Fragment } from "react";
 import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useNavigate, useParams } from "react-router-dom";
@@ -17,7 +18,17 @@ import { confirmField, fetchBatchDetails, updateField, uploadDocumentsToBatch } 
 import { cn, formatDateTime, mapBatchStatus, statusLabel } from "../lib/utils";
 import { formatPacketTimestamp } from "../lib/packet";
 import { DOCUMENT_PREVIEW_CALIBRATION } from "../lib/preview-calibration";
-import type { BatchDetails, DocumentPayload, ExpectedDocType, FieldState, ProductColumn, ProductRow } from "../types/api";
+import type {
+  BatchDetails,
+  DocumentPayload,
+  ExpectedDocType,
+  FieldState,
+  ProductColumn,
+  ProductMatrixCell,
+  ProductMatrixColumn,
+  ProductMatrixRow,
+  ProductRow,
+} from "../types/api";
 
 type ValidationRef = {
   doc_id?: string;
@@ -81,10 +92,17 @@ type FieldMatrixRowView = {
   cells: Record<string, FieldMatrixCell>;
 };
 
-type DocumentProductTable = {
+type ProductMatrixView = {
+  columns: ProductMatrixColumn[];
+  rows: ProductMatrixRow[];
+};
+
+type ExpandedProductTableView = {
   id: string;
+  doc: DocumentPayload;
   title: string;
   filename: string;
+  matrixRow: ProductMatrixRow;
   columns: ProductColumn[];
   rows: ProductRow[];
 };
@@ -160,12 +178,26 @@ const PRODUCT_FIELD_LABELS: Record<string, string> = {
   quantity: "Количество",
   weight: "Вес",
   net_weight: "Масса нетто",
+  net_weight_with_glaze: "Нетто с глазурью",
+  net_weight_with_ice: "Нетто со льдом",
+  net_weight_with_glaze_and_pack: "Нетто с глазурью и упаковкой",
   gross_weight: "Масса брутто",
   price_per_unit: "Цена за единицу",
   total_price: "Сумма",
   currency: "Валюта",
   date_of_production: "Дата производства",
 };
+
+const PRODUCT_SUM_FIELD_KEYS = [
+  "packages",
+  "net_weight",
+  "net_weight_with_glaze",
+  "net_weight_with_ice",
+  "net_weight_with_glaze_and_pack",
+  "gross_weight",
+] as const;
+
+const PRODUCT_IDENTITY_FIELD_KEYS = ["name_product", "latin_name", "size_product", "unit_box"] as const;
 
 const FIELD_LABELS_RU: Record<string, string> = {
   proforma_date: "Дата проформы",
@@ -395,6 +427,27 @@ function productFieldLabel(field: string): string {
     return PRODUCT_FIELD_LABELS[normalized];
   }
   return field.replace(/[_\.]/g, " ");
+}
+
+function orderProductColumns(columns: ProductColumn[]): ProductColumn[] {
+  const remaining = new Map(columns.map((column) => [column.key, column]));
+  const ordered: ProductColumn[] = [];
+  [...PRODUCT_IDENTITY_FIELD_KEYS, ...PRODUCT_SUM_FIELD_KEYS].forEach((key) => {
+    const column = remaining.get(key);
+    if (!column) {
+      return;
+    }
+    ordered.push(column);
+    remaining.delete(key);
+  });
+  columns.forEach((column) => {
+    if (!remaining.has(column.key)) {
+      return;
+    }
+    ordered.push(column);
+    remaining.delete(column.key);
+  });
+  return ordered;
 }
 
 function formatNestedProductFieldLabel(fieldKey: string): string | null {
@@ -1050,6 +1103,7 @@ function SummaryTablePage() {
   const [showPreviewBoxes, setShowPreviewBoxes] = useState(true);
   const [expandedRules, setExpandedRules] = useState<Record<string, boolean>>({});
   const [expandedProductTables, setExpandedProductTables] = useState<Record<string, boolean>>({});
+  const [focusedProductColumns, setFocusedProductColumns] = useState<Record<string, string | null>>({});
   const matrixBodyRef = useRef<HTMLDivElement | null>(null);
   const matrixTableScrollRef = useRef<HTMLDivElement | null>(null);
   const matrixTableRef = useRef<HTMLTableElement | null>(null);
@@ -1058,6 +1112,7 @@ function SummaryTablePage() {
   const [previewSlices, setPreviewSlices] = useState<Record<string, PreviewSlice>>({});
   const [previewSlicePending, setPreviewSlicePending] = useState<Record<string, boolean>>({});
   const previewImageCache = useRef(new Map<string, Promise<HTMLImageElement>>());
+  const productColumnRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
 
   const markSlicePending = useCallback((key: string | null, pending: boolean) => {
     if (!key) {
@@ -1378,8 +1433,25 @@ function SummaryTablePage() {
     setExpandedRules((prev) => ({ ...prev, [ruleId]: !prev[ruleId] }));
   }, []);
   const toggleProductTable = useCallback((tableId: string) => {
-    setExpandedProductTables((prev) => ({ ...prev, [tableId]: !prev[tableId] }));
+    setExpandedProductTables((prev) => {
+      const nextExpanded = !prev[tableId];
+      return { ...prev, [tableId]: nextExpanded };
+    });
+    setFocusedProductColumns((prev) => ({
+      ...prev,
+      [tableId]: prev[tableId] ?? null,
+    }));
   }, []);
+  const handleProductMatrixCellClick = useCallback((docId: string, fieldKey: string, supported: boolean) => {
+    setExpandedProductTables((prev) => ({ ...prev, [docId]: true }));
+    setFocusedProductColumns((prev) => ({ ...prev, [docId]: supported ? fieldKey : null }));
+  }, []);
+  const setProductColumnRef = useCallback(
+    (docId: string, fieldKey: string) => (node: HTMLTableCellElement | null) => {
+      productColumnRefs.current[`${docId}:${fieldKey}`] = node;
+    },
+    [],
+  );
 
   const presentDocTypes = useMemo(() => {
     const set = new Set<string>();
@@ -1469,6 +1541,80 @@ function SummaryTablePage() {
     [batch, buildFieldMatrixView],
   );
   const activeMatrix = diffMode && fieldMatrixDiff ? fieldMatrixDiff : fieldMatrix;
+
+  const buildProductMatrixView = useCallback((columnsRaw: unknown, rowsRaw: unknown): ProductMatrixView | null => {
+    const rawColumns = Array.isArray(columnsRaw) ? columnsRaw : [];
+    const columns = rawColumns
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return null;
+        }
+        const data = entry as Record<string, unknown>;
+        const key = typeof data.key === "string" ? data.key : null;
+        if (!key) {
+          return null;
+        }
+        return {
+          key,
+          label: typeof data.label === "string" && data.label.trim().length > 0 ? data.label : key,
+        } satisfies ProductMatrixColumn;
+      })
+      .filter((entry): entry is ProductMatrixColumn => entry !== null);
+    if (columns.length === 0) {
+      return null;
+    }
+
+    const rawRows = Array.isArray(rowsRaw) ? rowsRaw : [];
+    const rows = rawRows
+      .map((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return null;
+        }
+        const data = entry as Record<string, unknown>;
+        const docId = typeof data.doc_id === "string" && data.doc_id.trim().length > 0 ? data.doc_id : null;
+        if (!docId) {
+          return null;
+        }
+        const rawCells = data.cells && typeof data.cells === "object" ? (data.cells as Record<string, unknown>) : {};
+        const cells: Record<string, ProductMatrixCell> = {};
+        columns.forEach((column) => {
+          const rawCell = rawCells[column.key];
+          if (!rawCell || typeof rawCell !== "object") {
+            cells[column.key] = {
+              value: null,
+              normalized_value: null,
+              status: null,
+              supported: false,
+            };
+            return;
+          }
+          const cell = rawCell as Record<string, unknown>;
+          cells[column.key] = {
+            value: normalizeText(cell.value),
+            normalized_value: normalizeText(cell.normalized_value),
+            status: typeof cell.status === "string" ? cell.status : null,
+            supported: Boolean(cell.supported),
+          };
+        });
+        return {
+          doc_id: docId,
+          doc_type: typeof data.doc_type === "string" ? data.doc_type : null,
+          filename: typeof data.filename === "string" ? data.filename : null,
+          cells,
+        } satisfies ProductMatrixRow;
+      })
+      .filter((entry): entry is ProductMatrixRow => entry !== null);
+
+    if (rows.length === 0) {
+      return null;
+    }
+    return { columns, rows };
+  }, []);
+
+  const productMatrix = useMemo(
+    () => buildProductMatrixView(batch?.report?.product_matrix_columns, batch?.report?.product_matrix),
+    [batch, buildProductMatrixView],
+  );
 
   useEffect(() => {
     if (!fieldMatrixDiff && diffMode) {
@@ -1627,28 +1773,49 @@ function SummaryTablePage() {
       });
   }, [batch, documentMap]);
 
-  const documentProductTables = useMemo(() => {
-    if (documents.length === 0) {
+  const documentFieldMaps = useMemo(() => {
+    const maps = new Map<string, Map<string, FieldState>>();
+    documents.forEach((doc) => {
+      maps.set(
+        doc.id,
+        new Map(doc.fields.map((field) => [field.field_key, field])),
+      );
+    });
+    return maps;
+  }, [documents]);
+
+  const expandedProductTablesData = useMemo(() => {
+    if (!productMatrix) {
       return [];
     }
-    return documents
-      .map((doc) => {
-        const columns = doc.products?.columns ?? [];
-        const rows = doc.products?.rows ?? [];
-        if (columns.length === 0 || rows.length === 0) {
+    return productMatrix.rows
+      .map((matrixRow) => {
+        const doc = documentMap.get(matrixRow.doc_id);
+        if (!doc) {
           return null;
         }
+        const columns = orderProductColumns(doc.products?.columns ?? []);
+        const rows = doc.products?.rows ?? [];
         const title = DOC_TYPE_LABELS[toDisplayDocType(doc.doc_type)] ?? doc.doc_type;
         return {
           id: doc.id,
+          doc,
           title,
-          filename: doc.filename,
+          filename: doc.filename ?? matrixRow.filename,
+          matrixRow,
           columns,
           rows,
-        };
+        } satisfies ExpandedProductTableView;
       })
-      .filter((table): table is DocumentProductTable => table !== null);
-  }, [documents]);
+      .filter((table): table is ExpandedProductTableView => table !== null);
+  }, [documentMap, productMatrix]);
+  const expandedProductTableMap = useMemo(() => {
+    const map = new Map<string, ExpandedProductTableView>();
+    expandedProductTablesData.forEach((table) => {
+      map.set(table.id, table);
+    });
+    return map;
+  }, [expandedProductTablesData]);
 
   const handleSave = async () => {
     if (!matrixPopover || matrixPopover.mode !== "edit") return;
@@ -1714,6 +1881,16 @@ function SummaryTablePage() {
   }, [previewDoc]);
 
   const previewDocLabel = previewDoc ? DOC_TYPE_LABELS[toDisplayDocType(previewDoc.doc_type)] ?? previewDoc.doc_type : null;
+
+  useEffect(() => {
+    Object.entries(focusedProductColumns).forEach(([docId, fieldKey]) => {
+      if (!fieldKey || !expandedProductTables[docId]) {
+        return;
+      }
+      const node = productColumnRefs.current[`${docId}:${fieldKey}`];
+      node?.scrollIntoView({ block: "nearest", inline: "center" });
+    });
+  }, [expandedProductTables, expandedProductTablesData, focusedProductColumns]);
 
   const getMatrixScrollContainer = useCallback((): HTMLElement | Window => {
     const body = matrixBodyRef.current;
@@ -2240,76 +2417,149 @@ function SummaryTablePage() {
         </CardContent>
       </Card>
 
-      {documentProductTables.length === 0 ? (
-        <Card className="rounded-3xl border bg-background">
-          <CardHeader>
-            <CardTitle>Товары</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Alert variant="info">Нет товаров.</Alert>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {documentProductTables.map((table) => (
-            <Card key={table.id} className="rounded-3xl border bg-background">
-              <CardHeader className="space-y-1">
-                <button
-                  type="button"
-                  onClick={() => toggleProductTable(table.id)}
-                  className="flex w-full items-start justify-between gap-3 text-left"
-                  aria-label="Toggle products"
-                  aria-expanded={Boolean(expandedProductTables[table.id])}
-                >
-                  <div className="space-y-1">
-                    <CardTitle>{table.title}</CardTitle>
-                    {table.filename ? (
-                      <p className="text-sm text-muted-foreground">{table.filename}</p>
-                    ) : null}
-                  </div>
-                  <span className="mt-1 text-muted-foreground">
-                    {expandedProductTables[table.id] ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                  </span>
-                </button>
-              </CardHeader>
-              {expandedProductTables[table.id] ? (
-                <CardContent>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Поле</TableHead>
-                          {table.rows.map((row, index) => (
-                            <TableHead key={row.key}>{`Продукт ${index + 1}`}</TableHead>
-                          ))}
+      <Card className="rounded-3xl border bg-background">
+        <CardHeader>
+          <CardTitle>Товары</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!productMatrix ? (
+            <Alert variant="info">Нет товарных документов.</Alert>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Документ</TableHead>
+                    {productMatrix.columns.map((column) => (
+                      <TableHead key={column.key}>{productFieldLabel(column.key)}</TableHead>
+                    ))}
+                    <TableHead className="w-12 text-right"> </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {productMatrix.rows.map((row) => {
+                    const table = expandedProductTableMap.get(row.doc_id);
+                    const isExpanded = Boolean(expandedProductTables[row.doc_id]);
+                    const title =
+                      table?.title ??
+                      (row.doc_type ? DOC_TYPE_LABELS[toDisplayDocType(row.doc_type)] ?? row.doc_type : "Документ");
+                    return (
+                      <Fragment key={row.doc_id}>
+                        <TableRow key={`${row.doc_id}-summary`}>
+                          <TableCell className="min-w-[260px]">
+                            <div className="space-y-1">
+                              <div className="font-medium">{title}</div>
+                              {row.filename ? (
+                                <div className="text-xs text-muted-foreground break-words">{row.filename}</div>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          {productMatrix.columns.map((column) => {
+                            const cell = row.cells[column.key];
+                            const displayValue = cell?.supported ? cell.value ?? "—" : "—";
+                            return (
+                              <TableCell
+                                key={`${row.doc_id}-${column.key}`}
+                                className={cn(
+                                  "align-top text-sm cursor-pointer",
+                                  cell?.supported && matrixStatusClass(cell.status),
+                                )}
+                                onClick={() =>
+                                  handleProductMatrixCellClick(row.doc_id, column.key, Boolean(cell?.supported))
+                                }
+                              >
+                                <span className="whitespace-pre-wrap break-words">{displayValue}</span>
+                              </TableCell>
+                            );
+                          })}
+                          <TableCell className="text-right">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              aria-label="Toggle products"
+                              aria-expanded={isExpanded}
+                              onClick={() => toggleProductTable(row.doc_id)}
+                            >
+                              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            </Button>
+                          </TableCell>
                         </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {table.columns.map((column) => (
-                          <TableRow key={`${table.id}-${column.key}`}>
-                            <TableCell className="font-medium">{column.label}</TableCell>
-                            {table.rows.map((row, index) => {
-                              const field = row.cells[column.key] ?? { value: null, confidence: null };
-                              return (
-                                <TableCell key={`${table.id}-${column.key}-${row.key}-${index}`} className="align-top text-sm">
-                                  <div>{field.value ?? "-"}</div>
-                                  {field.confidence != null ? (
-                                    <div className="text-xs text-muted-foreground">({field.confidence.toFixed(2)})</div>
-                                  ) : null}
-                                </TableCell>
-                              );
-                            })}
+                        {isExpanded ? (
+                          <TableRow key={`${row.doc_id}-details`} className="hover:bg-transparent">
+                            <TableCell colSpan={productMatrix.columns.length + 2} className="bg-muted/10 p-0">
+                              <div className="space-y-3 border-t bg-muted/5 p-4">
+                                <div className="text-sm font-medium">{title}</div>
+                                {table && table.rows.length > 0 ? (
+                                  <div className="overflow-x-auto">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead className="min-w-[120px]">Продукт</TableHead>
+                                          {table.columns.map((column) => {
+                                            const isFocused = focusedProductColumns[table.id] === column.key;
+                                            return (
+                                              <TableHead
+                                                key={`${table.id}-${column.key}-head`}
+                                                ref={setProductColumnRef(table.id, column.key)}
+                                                className={cn(isFocused && "bg-amber-50 text-foreground")}
+                                              >
+                                                {productFieldLabel(column.key)}
+                                              </TableHead>
+                                            );
+                                          })}
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {table.rows.map((productRow, index) => (
+                                          <TableRow key={`${table.id}-${productRow.key}`}>
+                                            <TableCell className="font-medium">{`Продукт ${index + 1}`}</TableCell>
+                                            {table.columns.map((column) => {
+                                              const productCell = productRow.cells[column.key] ?? { value: null, confidence: null };
+                                              const fieldKey = `${productRow.key}.${column.key}`;
+                                              const fieldState = documentFieldMaps.get(table.doc.id)?.get(fieldKey) ?? null;
+                                              const isFocused = focusedProductColumns[table.id] === column.key;
+                                              return (
+                                                <TableCell
+                                                  key={`${table.id}-${productRow.key}-${column.key}`}
+                                                  className={cn(
+                                                    "align-top text-sm bg-background whitespace-pre-wrap break-words",
+                                                    fieldState && "cursor-pointer",
+                                                    isFocused && "bg-amber-50/70",
+                                                  )}
+                                                  onMouseEnter={(event) =>
+                                                    fieldState ? handleCellHover(event, table.doc, fieldState) : undefined
+                                                  }
+                                                  onMouseLeave={hidePreview}
+                                                  onClick={(event) =>
+                                                    fieldState ? handleCellClick(event, table.doc, fieldState) : undefined
+                                                  }
+                                                >
+                                                  {productCell.value ?? "—"}
+                                                </TableCell>
+                                              );
+                                            })}
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                ) : (
+                                  <Alert variant="info">Нет извлечённых товарных строк.</Alert>
+                                )}
+                              </div>
+                            </TableCell>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              ) : null}
-            </Card>
-          ))}
-        </div>
-      )}
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="rounded-3xl border bg-background">
         <CardHeader>

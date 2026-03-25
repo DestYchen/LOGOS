@@ -84,6 +84,25 @@ export type ProductTable = {
   rows: ProductRow[];
 };
 
+export type ProductMatrixColumn = {
+  key: string;
+  label: string;
+};
+
+export type ProductMatrixCell = {
+  value: string | null;
+  normalized_value: string | null;
+  status: string | null;
+  supported: boolean;
+};
+
+export type ProductMatrixRow = {
+  doc_id: string;
+  doc_type: string | null;
+  filename: string | null;
+  cells: Record<string, ProductMatrixCell>;
+};
+
 export type ReportDocumentEntry = {
   doc_id: string | null;
   filename: string | null;
@@ -135,8 +154,8 @@ export type ReportSection = {
   documents: ReportDocumentEntry[];
   validations: ReportValidationEntry[];
   product_comparisons: Record<string, unknown>[];
-  product_matrix_columns: Record<string, string>[];
-  product_matrix: Record<string, unknown>[];
+  product_matrix_columns: ProductMatrixColumn[];
+  product_matrix: ProductMatrixRow[];
   validation_matrix_columns: Record<string, string>[];
   validation_matrix: Record<string, unknown>[];
   raw_json: string | null;

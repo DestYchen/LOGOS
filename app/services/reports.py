@@ -202,6 +202,7 @@ def export_report_excel(report: Dict[str, Any]) -> io.BytesIO:
         ws_validations.append([""] + values)
 
     _write_products_sheet(wb, report)
+    _write_product_sums_sheet(wb, report, status_colors)
 
     buffer = io.BytesIO()
     wb.save(buffer)
@@ -303,3 +304,55 @@ def _write_products_sheet(wb: Workbook, report: Dict[str, Any]) -> None:
                 row.append(_format_product_entry(entry))
             ws.append(row)
         ws.append([])
+
+
+def _write_product_sums_sheet(
+    wb: Workbook,
+    report: Dict[str, Any],
+    status_colors: Dict[str, PatternFill],
+) -> None:
+    columns = report.get("product_matrix_columns") or []
+    rows = report.get("product_matrix") or []
+    if not columns or not rows:
+        return
+
+    field_keys: List[str] = []
+    headers = ["Document Type", "Filename"]
+    for column in columns:
+        if not isinstance(column, dict):
+            continue
+        key = column.get("key")
+        label = column.get("label")
+        if not isinstance(key, str) or not key:
+            continue
+        field_keys.append(key)
+        headers.append(label if isinstance(label, str) and label else key)
+
+    if not field_keys:
+        return
+
+    ws = wb.create_sheet("Product Sums")
+    ws.append(headers)
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        cells = row.get("cells") if isinstance(row.get("cells"), dict) else {}
+        values = [row.get("doc_type"), row.get("filename")]
+        for field_key in field_keys:
+            cell_payload = cells.get(field_key) if isinstance(cells, dict) else None
+            if isinstance(cell_payload, dict):
+                values.append(cell_payload.get("value") or "")
+            else:
+                values.append("")
+        ws.append(values)
+        current_row = ws.max_row
+        for column_index, field_key in enumerate(field_keys, start=3):
+            cell_payload = cells.get(field_key) if isinstance(cells, dict) else None
+            if not isinstance(cell_payload, dict):
+                continue
+            status = cell_payload.get("status")
+            if not isinstance(status, str):
+                continue
+            fill = status_colors.get(status)
+            if fill:
+                ws.cell(row=current_row, column=column_index).fill = fill

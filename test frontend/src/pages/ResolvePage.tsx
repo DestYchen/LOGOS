@@ -1207,7 +1207,10 @@ function ResolvePage() {
     // stale DB fields that aren't in the current schema as reason === "extra".
     // Filter those out so the UI reflects docs_json_2-only fields.
     const visibleFields = currentDoc.fields.filter(
-      (field) => !HIDDEN_FIELD_KEYS.has(field.field_key) && field.reason !== "extra"
+      (field) =>
+        !HIDDEN_FIELD_KEYS.has(field.field_key) &&
+        !field.field_key.startsWith("products.") &&
+        field.reason !== "extra"
     );
     const required = visibleFields.filter((field) => field.reason === "missing");
 

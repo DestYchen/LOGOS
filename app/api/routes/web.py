@@ -586,6 +586,8 @@ async def get_batch_details(
     report_available = False
 
     product_comparisons: List[Dict[str, Any]] = []
+    product_matrix_columns: List[Dict[str, Any]] = []
+    product_matrix: List[Dict[str, Any]] = []
 
 
 
@@ -601,14 +603,11 @@ async def get_batch_details(
         report_available = True
 
         product_comparisons = _build_product_comparisons(report_payload)
+        product_matrix_columns, product_matrix = _extract_product_matrix(report_payload)
 
     except FileNotFoundError:
 
         report_payload = None
-
-
-
-    product_matrix_columns, product_matrix = _build_product_comparison_matrix(product_comparisons)
 
     validation_matrix_columns, validation_matrix = _build_validation_matrix(report_payload, documents_payload)
 
@@ -1704,6 +1703,12 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
 
     for key, field_schema in schema.fields.items():
 
+        processed_keys.add(key)
+
+        if field_schema.children:
+
+            continue
+
         field = latest_fields.get(key)
 
         value = field.value if field else None
@@ -1778,11 +1783,49 @@ def _build_field_states(document: Document) -> Tuple[List[Dict[str, Any]], int]:
 
             )
 
-    # Filter out any stored fields not present in the current schema
-    latest_fields = {k: v for k, v in latest_fields.items() if k in schema.fields}
-    processed_keys.add(key)
+    products_schema = schema.fields.get("products")
+    product_template = None
+    if products_schema and products_schema.children:
+        product_template = products_schema.children.get("product_template")
 
+    if product_template and product_template.children:
+        product_keys: List[str] = []
+        seen_product_keys: set[str] = set()
+        for field_key in latest_fields:
+            if not field_key.startswith("products."):
+                continue
+            parts = field_key.split(".")
+            if len(parts) < 3:
+                continue
+            product_key = parts[1]
+            if product_key == "product_template" or product_key in seen_product_keys:
+                continue
+            seen_product_keys.add(product_key)
+            product_keys.append(product_key)
 
+        def _product_order_key(product_key: str) -> Tuple[int, str]:
+            match = re.search(r"\d+", product_key)
+            if match:
+                return int(match.group(0)), product_key
+            return 1_000_000_000, product_key
+
+        for product_key in sorted(product_keys, key=_product_order_key):
+            row_prefix = f"products.{product_key}"
+            for child_key in product_template.children:
+                field_key = f"{row_prefix}.{child_key}"
+                processed_keys.add(field_key)
+                field = latest_fields.get(field_key)
+                confidence = float(field.confidence) if field and field.confidence is not None else None
+                add_field(
+                    field_key=field_key,
+                    value=field.value if field else None,
+                    confidence=confidence,
+                    required=False,
+                    reason="product",
+                    actionable=False,
+                    editable=True,
+                    source=field,
+                )
 
     for key, field in latest_fields.items():
 
@@ -1832,13 +1875,21 @@ def _build_product_comparisons(report_payload: Optional[Dict[str, Any]]) -> List
 
 
 
-def _build_product_comparison_matrix(
+def _extract_product_matrix(
 
-    product_comparisons: List[Dict[str, Any]],
+    report_payload: Optional[Dict[str, Any]],
 
-) -> Tuple[List[Dict[str, str]], List[Dict[str, Any]]]:
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
 
-    return [], []
+    if not report_payload:
+
+        return [], []
+
+    raw_columns = report_payload.get("product_matrix_columns")
+    raw_rows = report_payload.get("product_matrix")
+    columns = list(raw_columns) if isinstance(raw_columns, list) else []
+    rows = list(raw_rows) if isinstance(raw_rows, list) else []
+    return columns, rows
 
 
 
