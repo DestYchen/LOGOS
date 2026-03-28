@@ -1727,28 +1727,21 @@ const goToDocument = (index: number) => {
             const isActive = index === activeIndex;
             const shortLabel = shortDocTypeLabel(doc.doc_type);
             return (
-              <div key={doc.id} className="flex flex-col items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => goToDocument(index)}
-                  className={cn(
-                    "h-7 w-7 rounded-full border-[3px] shadow-sm transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2",
-                    isActive
-                      ? "border-primary bg-primary shadow-primary/20"
-                      : "border-muted-foreground/50 bg-muted-foreground/25 hover:border-primary hover:bg-primary/40",
-                  )}
+              <button
+                key={doc.id}
+                type="button"
+                onClick={() => goToDocument(index)}
+                className={cn(
+                  "flex h-10 w-12 items-center justify-center rounded-md border-[3px] text-[10px] font-bold uppercase shadow-sm transition-all hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/35 focus-visible:ring-offset-2",
+                  isActive
+                    ? "border-primary bg-primary text-primary-foreground shadow-primary/20"
+                    : "border-muted-foreground/50 bg-muted-foreground/25 text-muted-foreground hover:border-primary hover:bg-primary/40 hover:text-primary",
+                )}
                   aria-label={`Документ ${index + 1}: ${shortLabel}`}
                   title={shortLabel}
-                />
-                <span
-                  className={cn(
-                    "text-xs font-semibold tracking-wide text-muted-foreground",
-                    isActive && "text-primary",
-                  )}
                 >
                   {shortLabel}
-                </span>
-              </div>
+                </button>
             );
           })}
         </div>
