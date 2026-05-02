@@ -1,445 +1,940 @@
-# ТЗ (единый файл): внутренний сервис сверки внешнеторговых документов
+# LOGOS / SupplyHub Specification
 
-## 0) Резюме (с учётом всех правок)
-Внутренний веб-сервис для офиса. Сотрудники загружают **партию** файлов поставки (PDF/PNG/JPG/DOCX/XLSX). Система:
-1) извлекает текст (**локальная модель** `dots.ocr` как отдельный HTTP-сервис для сканов; парсер для Office);
-2) классифицирует документ (декларация/инвойс/PL/коносамент и т.д.);
-3) вызывает **локальный** API-сервис `json-filler` (LLM, развёрнутая на сервере) для заполнения целевого JSON (значения, ссылки на OCR-токены/ячейки, bbox);
-4) рассчитывает **уверенность поля только на основе OCR** (`token.conf` из `dots.ocr` + проверки формата/якорей);
-5) даёт пользователю экран **ревью до валидации** для правки полей с низкой уверенностью;
-6) валидирует кросс-согласованность всех документов в партии;
-7) формирует финальный отчёт и публикует его в **Архиве поставок**;
-8) **Показывает занятость системы**: другие пользователи видят, что сервис обрабатывает документы (очередь/активные задачи/занятость воркеров).
+This file describes the project as it exists in the repository today. It is an
+implementation spec, not an aspirational product brief. When there is a
+disagreement, the current source code under `app/`, `tests/`, and
+`test frontend/` is the source of truth.
 
-Хранение — **локальные директории** на сервере. Фронтэнд — без «красоты»: REST + простые HTML/JSON-страницы.
+The codebase uses both names:
 
----
+- `SupplyHub` is the backend package and default FastAPI app name.
+- `LOGOS` is the user-facing product name in the current frontend copy.
 
-## 1) Цели и границы
-- Приём партий документов, извлечение данных, заполнение унифицированных JSON, ручная правка, валидация и отчёт.
-- Минимальная инфраструктура и безопасность (внутренняя сеть, локальные каталоги, без S3).
-- Масштабирование в рамках одного сервера (при росте — вынести сервисы в контейнеры).
+## 1. Product Purpose
 
-**Не цели:** сложный UI, облачные сервисы, внешние хранилища.
+LOGOS is an internal document-processing tool for logistics and foreign-trade
+document packages. A user uploads the files for one shipment/package, the system
+extracts text, classifies each document, fills normalized JSON fields, compares
+those fields across documents, and produces a reviewable report.
 
----
+The core business goal is to replace manual cross-checking of shipment document
+sets with a repeatable workflow:
 
-## 2) Технологический стек
-- **Backend/API:** Python 3.11+, FastAPI
-- **Очереди:** Celery + Redis
-- **БД:** PostgreSQL 15+ (jsonb)
-- **OCR:** **локально установленная модель** `dots.ocr` (HTTP API), поддержка zh/en/ru, выдаёт `tokens{text,bbox,conf,id}`
-- **LLM JSON Filler:** **локальная LLM** за сервисом `json-filler` (HTTP API), возвращает **только** `value` + `token_refs`/`bbox`, **без** confidence
-- **Парсинг DOCX/XLSX:** python-docx, openpyxl
-- **PDF превью:** PyMuPDF (fitz) → PNG (для подсветки bbox на canvas)
-- **Фронтэнд:** простые HTML/JSON страницы (Jinja2/HTMX или чистый REST + примитивные шаблоны)
-- **Мониторинг (опц.):** Prometheus + Grafana
-- **Деплой:** Docker Compose (по мере необходимости)
-- **Онлайн-статусы:** Server-Sent Events (SSE) или поллинг для «система занята/очередь/прогресс»
+1. Create a packet/batch.
+2. Upload documents.
+3. Preview, rotate, delete, and confirm the upload set.
+4. Run OCR/text extraction, classification, JSON filling, confidence scoring,
+   validation, and report generation.
+5. Review low-confidence or missing values with document previews.
+6. Re-run validation/reporting after corrections.
+7. Export the final matrix/report as JSON or XLSX.
 
----
+The service is intended for an internal office network. It currently has no
+authentication or role model.
 
-## 3) Локальное хранение (без S3)
+## 2. Current Status
+
+Implemented and active:
+
+- Batch creation, upload, listing, deletion, and history.
+- Upload preprocessing for PDF, image, DOCX, XLSX/XLSM, and text-like files.
+- PDF/image preview generation and PDF page rotation before processing.
+- Multi-page PDF splitting into one `Document` row per page.
+- Celery workers with local async fallback when Celery dispatch fails.
+- In-process `dots.ocr` adapter that talks to a vLLM/OpenAI-compatible endpoint.
+- Optional HTTP OCR endpoint override.
+- Regex and optional LLM document classification.
+- Local JSON filler HTTP adapter plus remote filler router.
+- Optional OpenRouter-backed remote JSON filler with JSON repair/retry logic.
+- Field versioning for automated and manual values.
+- Review screens for missing/low-confidence fields and manual corrections.
+- Cross-document validation, document matrix, product matrix, JSON report, and
+  XLSX export.
+- React/Vite frontend served from FastAPI when built.
+- Local archive mode for raw uploads and filler request/response logging.
+- Feedback form with local ticket storage and Telegram forwarding.
+- Daily Telegram summary task scheduled by Celery beat.
+
+Known gaps and risks:
+
+- No authentication, authorization, audit trail, tenant isolation, or rate
+  limiting.
+- No Alembic migration workflow in use; `app.scripts.init_db` creates tables
+  directly.
+- `/files` serves the configured storage root through `StaticFiles`.
+- OCR and filler quality depend on external/local model runtime configuration.
+- Automated tests currently cover only selected document profile, validation
+  profile, and product matrix behavior.
+- Some documentation and source comments are stale compared with the current
+  implementation.
+- Several user-facing strings are Russian, while the project documentation is
+  mixed English/Russian.
+- Feedback Telegram credentials must be kept out of source code before any
+  production deployment.
+
+## 3. Technology Stack
+
+Backend:
+
+- Python 3.11+
+- FastAPI
+- SQLAlchemy async ORM
+- PostgreSQL 15+
+- Redis
+- Celery and Celery beat
+- Pydantic v2 / pydantic-settings
+- httpx and requests
+- PyMuPDF (`fitz`) for PDF handling and previews
+- LibreOffice (`soffice`) for DOCX/XLSX to PDF conversion
+- python-docx and openpyxl for direct text extraction
+- Pillow and numpy/scikit-learn for OCR adapter support
+- OpenAI SDK for vLLM/OpenRouter-compatible APIs
+
+Frontend:
+
+- React 18
+- Vite
+- TypeScript
+- React Router
+- Tailwind CSS
+- Radix UI primitives
+- lucide-react icons
+
+Deployment:
+
+- Dockerfile installs the editable Python package.
+- `docker-compose.yml` provisions Postgres, Redis, API, worker, beat, init-db,
+  doc-classifier, and remote-json-filler services.
+- Shared storage is mounted at `SUPPLYHUB_BASE_DIR`, `/data/storage` in compose.
+
+## 4. Repository Layout
+
+```text
+app/
+  api/                  FastAPI route modules and Pydantic schemas
+  core/                 config, storage helpers, enums, schemas, DB wiring
+  mock_services/        classifier/filler adapters, hints, templates, samples
+  services/             pipeline, OCR, filler, review, validation, reporting
+  templates/            legacy/minimal Jinja pages
+  workers/              Celery app and task definitions
+docs/                   short architecture overview
+tests/                  focused pytest coverage
+test frontend/          React frontend source and build config
+test_ocr/               OCR/filler smoke test assets
+local_archive/          optional local request/response archive
+SPEC.md                 this file
+README.md               current-state backend overview
 ```
-/srv/supplyhub/
+
+## 5. Runtime Configuration
+
+Settings live in `app/core/config.py` and use the `SUPPLYHUB_` environment
+prefix.
+
+Important settings:
+
+- `SUPPLYHUB_DATABASE_URL`
+- `SUPPLYHUB_REDIS_URL`
+- `SUPPLYHUB_CELERY_BROKER_URL`
+- `SUPPLYHUB_CELERY_RESULT_BACKEND`
+- `SUPPLYHUB_BASE_DIR`
+- `SUPPLYHUB_BLOCKED_DOC_PATTERNS_PATH`
+- `SUPPLYHUB_OCR_ENDPOINT`
+- `SUPPLYHUB_JSON_FILLER_ENDPOINT`
+- `SUPPLYHUB_REMOTE_JSON_FILLER_ENDPOINT`
+- `SUPPLYHUB_REMOTE_JSON_FILLER_PROVIDER`
+- `SUPPLYHUB_REMOTE_JSON_FILLER_TYPES_PATH`
+- `SUPPLYHUB_DOC_CLASSIFIER_ENDPOINT`
+- `SUPPLYHUB_LOW_CONF_THRESHOLD`
+- `SUPPLYHUB_LOCAL_ARCHIVE_MODE`
+- `SUPPLYHUB_LOCAL_ARCHIVE_DIR`
+- `SUPPLYHUB_USE_STUB_SERVICES`
+- `SUPPLYHUB_TELEGRAM_BOT_TOKEN`
+- `SUPPLYHUB_TELEGRAM_CHAT_ID`
+
+OCR adapter settings are read directly from `DOTS_OCR_*` environment variables,
+including `DOTS_OCR_REPO`, `DOTS_OCR_VLLM_BASE`, `DOTS_OCR_VLLM_HOST`,
+`DOTS_OCR_VLLM_PORT`, model names, token budgets, preprocessing options, and
+debug controls.
+
+OpenRouter/remote filler settings are read from `OPENROUTER_*`,
+`SUPPLYHUB_OPENROUTER_API_KEY`, and
+`SUPPLYHUB_REMOTE_JSON_FILLER_API_KEY*`.
+
+## 6. Domain Model
+
+ORM models are in `app/models.py`.
+
+### Batch
+
+Represents one uploaded document packet.
+
+Fields:
+
+- `id`
+- `created_at`
+- `updated_at`
+- `created_by`
+- `status`
+- `meta`
+- `documents`
+- `validations`
+
+Important `meta` keys currently used:
+
+- `title`
+- `prep_complete`
+- `document_profile`
+- `processing_run`
+- `processing_warnings`
+- `active_tasks`
+- `cancel_info`
+
+### Document
+
+Represents one stored file inside a batch. A multi-page PDF is split into
+separate documents during upload.
+
+Fields:
+
+- `id`
+- `batch_id`
+- `filename`
+- `mime`
+- `pages`
+- `doc_type`
+- `status`
+- `ocr_path`
+- `filled_path`
+- timestamps
+- `fields`
+
+### FilledField
+
+Represents one extracted or manually edited field value. Fields are versioned:
+old values are retained and only one row per `doc_id + field_key` is marked
+`latest=True`.
+
+Fields:
+
+- `field_key`
+- `value`
+- `page`
+- `bbox`
+- `token_refs`
+- `confidence`
+- `source`
+- `version`
+- `latest`
+- `edited_by`
+- `edited_at`
+
+### Validation
+
+Represents one validation result for a batch.
+
+Fields:
+
+- `rule_id`
+- `severity`: `ok`, `warn`, or `error`
+- `message`
+- `refs`
+
+### SystemStatusSnapshot
+
+Stores cached worker/queue/load values used by `/system/status`.
+
+## 7. Status Model
+
+Batch statuses:
+
+```text
+NEW
+PREPARED
+TEXT_READY
+CLASSIFIED
+FILLED_AUTO
+FILLED_REVIEWED
+VALIDATED
+DONE
+FAILED
+CANCEL_REQUESTED
+CANCELLED
+```
+
+Document statuses:
+
+```text
+NEW
+TEXT_READY
+CLASSIFIED
+FILLED_AUTO
+FILLED_REVIEWED
+FAILED
+```
+
+Current lifecycle:
+
+1. `POST /batches` or `/web/upload` creates `NEW` batch with
+   `prep_complete=false`.
+2. Uploading files stores document rows and normally sets batch `PREPARED`.
+3. Confirming preparation sets `prep_complete=true`, stores the selected
+   document profile, creates `processing_run` metadata, and enqueues processing.
+4. Processing performs OCR/text extraction, classification, optional document
+   merging, JSON filling, confidence scoring, and field persistence.
+5. If all documents fail, batch becomes `FAILED`; otherwise it becomes
+   `FILLED_AUTO`.
+6. The pipeline currently auto-runs validation/reporting after successful
+   processing, so a batch can move to `VALIDATED` and then `DONE` without an
+   explicit review-complete action.
+7. Manual field edits, type changes, and refills run validation/reporting again.
+8. Completing review marks documents and batch `FILLED_REVIEWED`, then enqueues
+   validation/reporting.
+9. Deletion marks `CANCEL_REQUESTED`, cancels local/Celery tasks when possible,
+   removes DB rows, removes batch files, and leaves the operation as deleted.
+
+## 8. Storage Layout
+
+Storage is rooted at `settings.base_dir`, default `/srv/supplyhub`.
+
+```text
+{base_dir}/
   batches/{batch_id}/
-    raw/                       # исходники
+    raw/
+      uploaded and generated source files
     derived/{doc_id}/
-      ocr.json                 # ответ dots.ocr
-      filled.json              # ответ json-filler + добавленный confidence
-    preview/{doc_id}/page_{n}.png
-    report/report.json         # финальный отчёт партии
+      ocr.json
+      filled.json
+    preview/{doc_id}/
+      page_1.png
+      page_2.png
+      ...
+    report/
+      report.json
+  feedback/
+    pending/{ticket_id}/
+      payload.json
+      files/
+    sent/
 ```
-FastAPI монтирует `/srv/supplyhub` через `StaticFiles` как `/files` (read-only). Архив и отчёты доступны всем сотрудникам в офисной сети.
 
----
+FastAPI mounts the entire base directory as `/files`.
 
-## 4) Доменные сущности
-- **Batch (Партия)** — единица поставки (набор файлов).  
-- **Document** — файл внутри партии (определяется тип).  
-- **Filled JSON** — унифицированный JSON документа (поля, bbox, ссылки на токены, источники).  
-- **Validation Report** — результаты кросс-сверки по партии.
+When `SUPPLYHUB_LOCAL_ARCHIVE_MODE=1`, additional copies of raw files and filler
+request/response payloads are written under `SUPPLYHUB_LOCAL_ARCHIVE_DIR`.
 
----
+## 9. Upload and Preparation
 
-## 5) Жизненный цикл и статусы
-Поток:
+Upload handling lives primarily in `app/services/batches.py`.
+
+Accepted inputs by current implementation:
+
+- PDF
+- PNG/JPG/JPEG
+- DOCX
+- XLSX/XLSM
+- plain text-like files handled by the parser path, including TXT, CSV, TSV,
+  JSON, and Markdown
+
+Upload behavior:
+
+- Filenames are normalized to a filesystem-safe basename.
+- Name collisions are resolved with numeric suffixes.
+- Images are converted to PDF using PyMuPDF.
+- DOCX/XLSX/XLSM files are converted to PDF with LibreOffice when possible.
+- Multi-page PDFs are split into one-page PDF files, each represented as a
+  separate `Document`.
+- Single-page PDFs get a preview PNG.
+- Uploads can be added to an existing batch unless the batch is cancelled.
+- Adding files to a processed batch resets `prep_complete=false`; confirming
+  again runs the delta pipeline for newly added documents.
+- Before prep confirmation, PDFs can be rotated and documents can be deleted.
+
+## 10. Document Profiles
+
+Profiles live in `app/core/document_profiles.py`.
+
+Current profiles:
+
+- `standard`
+- `china_sea`
+
+`standard` expected document display order:
+
+```text
+CONTRACT
+ADDENDUM
+PROFORMA
+INVOICE
+BILL_OF_LADING
+CMR
+PACKING_LIST
+PRICE_LIST_1
+PRICE_LIST_2
+QUALITY_CERTIFICATE
+VETERINARY_CERTIFICATE
+EXPORT_DECLARATION
+SPECIFICATION
+CERTIFICATE_OF_ORIGIN
+FORM_A
+EAV
+CT-3
+T1
 ```
-NEW → PREPARED → TEXT_READY → CLASSIFIED → FILLED_AUTO → FILLED_REVIEWED → VALIDATED → DONE
-                                   \                                           \
-                                    \-------------------------(ошибка)----------> FAILED
+
+`china_sea` expected document display order:
+
+```text
+CONTRACT
+ADDENDUM
+PROFORMA
+BILL_OF_LADING
+PACKING_LIST
+INVOICE
+PRICE_LIST_1
+PRICE_LIST_2
+VETERINARY_CERTIFICATE
+QUALITY_CERTIFICATE
+CERTIFICATE_OF_ORIGIN
+EXPORT_DECLARATION
+SPECIFICATION
 ```
-- `PREPARED` — файлы сохранены в `/raw`
-- `TEXT_READY` — извлечён текст (OCR/парсер) → `/derived/.../ocr.json`
-- `CLASSIFIED` — определён тип документа
-- `FILLED_AUTO` — вызван `json-filler`, получен черновой filled.json; рассчитан confidence (см. п.9)
-- `FILLED_REVIEWED` — пользователь исправил/подтвердил поля < порога
-- `VALIDATED` — отработали правила сверки
-- `DONE` — отчёт готов и в архиве
 
-**Видимость занятости:** параллельно система публикует состояние нагрузки: активные задачи, длина очереди, занятость воркеров.
+`ADDENDUM` is a display placeholder and currently has no real `DocumentType`.
+Profile selection affects the expected-document UI, field matrix order, and
+which validation rules are active.
 
----
+## 11. Document Types
 
-## 6) Типы документов и поля (минимум)
-### EXPORT_DECLARATION
-- `export_declaration_no` (req)
-- `export_declaration_date` (req)
-- `country_of_origin` (req)
-- `destination` (req)
-- `name_product` (req)
-- `net_weight` (req)
-- `gross_weight` (opt)
-- `producer` (opt)
-- `buyer` (opt)
-- `seller` (opt)
-- `exporter` (opt)
-- `latin_name` (opt)
-- `unit_box` (opt)
-- `size_product` (opt)
-- `packages` (opt)
-- `incoterms` (opt)
-- `total_price` (opt)
+Current `DocumentType` values:
 
-### INVOICE
-- `invoice_no` (req)
-- `invoice_date` (req)
-- `seller` (req)
-- `buyer` (req)
-- `currency` (req)
-- `total_price` (req)
-- `incoterms` (opt)
-- `items[]` (opt: name, qty, unit, unit_price, amount)
+```text
+UNKNOWN
+EXPORT_DECLARATION
+INVOICE
+PACKING_LIST
+BILL_OF_LANDING
+PROFORMA
+SPECIFICATION
+PRICE_LIST_1
+PRICE_LIST_2
+QUALITY_CERTIFICATE
+CERTIFICATE_OF_ORIGIN
+VETERINARY_CERTIFICATE
+CMR
+CONTRACT
+CONTRACT_1
+CONTRACT_2
+CONTRACT_3
+FORM_A
+EAV
+CT-3
+T1
+```
 
-### PACKING_LIST
-- `packages` (req)
-- `net_weight` (req)
-- `gross_weight` (req)
-- `items[]` (opt: name/size/qty/boxes)
+`CONTRACT_1`, `CONTRACT_2`, and `CONTRACT_3` are internal intermediate types.
+When all three are present and OCR is complete, the pipeline merges them into
+one public `CONTRACT` document and removes the intermediate rows/files.
 
-### BILL_OF_LADING
-- `bl_no` (req)
-- `vessel` (req)
-- `voyage` (opt)
-- `shipper` (req)
-- `consignee` (req)
-- `port_of_loading` (req)
-- `port_of_discharge` (req)
-- `container_no` (opt)
-- `packages` (opt)
-- `gross_weight` (opt)
+Multiple `VETERINARY_CERTIFICATE` parts are similarly merged into one
+`VETERINARY_CERTIFICATE` document before filling.
 
-> Схемы расширяемы: `required/optional`, словари меток (zh/en/ru), регулярки форматов.
+## 12. Schema and Fields
 
----
+Schemas live in `app/core/schema.py` and are the source of truth for expected
+fields. A schema is a `DocumentSchema` containing `FieldSchema` entries:
 
-## 7) База данных (PostgreSQL)
-**batches**
-- `id` uuid PK
-- `created_at` timestamptz
-- `created_by` text
-- `status` text
-- `meta` jsonb
+- `key`
+- `required`
+- `label`
+- `dtype`
+- `fmt`
+- `anchors`
+- optional nested `children`
 
-**documents**
-- `id` uuid PK
-- `batch_id` uuid FK
-- `filename` text
-- `mime` text
-- `pages` int
-- `doc_type` text (nullable до классификации)
-- `status` text
-- `ocr_path` text
-- `filled_path` text
+Many document types contain a nested `products` field. During persistence,
+nested product fields are flattened:
 
-**filled_fields**
-- `id` uuid PK
-- `doc_id` uuid FK
-- `field_key` text
-- `value` text
-- `page` int null
-- `bbox` jsonb   // [x0,y0,x1,y1]
-- `token_refs` jsonb // ["t_…"]
-- `confidence` float   // рассчитано из OCR
-- `source` text  // ocr|parser|llm|llm+ocr|user
-- `version` int
-- `latest` bool
-- `edited_by` text
-- `edited_at` timestamptz
+```text
+products.product_1.name_product
+products.product_1.latin_name
+products.product_1.size_product
+products.product_1.packages
+...
+```
 
-**validations**
-- `id` uuid PK
-- `batch_id` uuid FK
-- `rule_id` text
-- `severity` text // ok|warn|error
-- `message` text
-- `refs` jsonb // [{doc_id, field_key, page, bbox}]
+Common product fields include:
 
-**system_status** (опц. + кэш)
-- `ts` timestamptz
-- `workers_busy` int
-- `workers_total` int
-- `queue_depth` int
-- `active_batches` int
-- `active_docs` int
+- `name_product`
+- `latin_name`
+- `size_product`
+- `unit_box`
+- `packages`
+- `net_weight`
+- `net_weight_with_glaze`
+- `net_weight_with_ice`
+- `net_weight_with_glaze_and_pack`
+- `gross_weight`
+- `price_per_unit`
+- `price_per_KG`
+- `total_price`
+- `factory_number`
+- `date_of_production`
+- `seal_number`
 
----
+The report field matrix currently compares these top-level aliases:
 
-## 8) Очереди (Celery + Redis) и видимость занятости
-Задачи:
-- `process_batch(batch_id)` → по документам: `ocr_or_parse` → `classify` → `fill_json` → `score_confidence`
-- затем: ожидание ревью → `validate_batch` → `render_report`
+```text
+proforma_date
+proforma_no
+invoice_date
+invoice_no
+country_of_origin
+producer
+buyer
+seller
+exporter
+importer
+incoterms
+terms_of_payment
+bank_details
+total_price
+destination
+vessel
+container_no
+veterinary_seal
+linear_seal
+veterinary_certificate_no
+veterinary_certificate_date
+HS_code / commodity_code
+```
 
-**Идемпотентность:** проверка/пропуск уже готовых артефактов.
+## 13. OCR and Text Extraction
 
-**Публикация занятости:**
-- Celery-мониторинг собирает busy/queued раз в N сек;
-- API `GET /system/status` отдаёт:
+Text extraction is split between parser extraction and OCR.
+
+Parser path:
+
+- Non-image documents are parsed with `python-docx`, `openpyxl`, or direct text
+  reading.
+- Parser text is converted into a synthetic token with confidence `1.0` when no
+  OCR tokens exist.
+
+OCR path:
+
+- PDF, PNG, JPG, and JPEG require OCR.
+- `app/services/ocr.py` calls either:
+  - an optional HTTP OCR endpoint from `SUPPLYHUB_OCR_ENDPOINT`, or
+  - the in-process `DotsOCRAdapter` from `app/services/dots_ocr_adapter.py`.
+- The in-process adapter expects a local `dots.ocr` repo and a vLLM-compatible
+  endpoint.
+- It renders PDF pages/images, calls vLLM, parses layout JSON, refines empty
+  text regions when configured, saves preview images, and emits flat tokens.
+
+Normalized OCR token shape:
+
 ```json
 {
-  "workers_busy": 2,
-  "workers_total": 4,
-  "queue_depth": 7,
-  "active_batches": 3,
-  "active_docs": 12
+  "id": "p0_t12",
+  "text": "INVOICE",
+  "conf": 0.94,
+  "bbox": [10, 20, 110, 42],
+  "page": 1,
+  "category": "Text"
 }
 ```
-- UI (простая страница/поллинг/SSE) показывает баннер «Система занята: X из Y воркеров активны, в очереди: Z».
-- В карточке партии: `position_in_queue` (эвристика по незапущенным задачам).
 
----
+`ocr.json` shape:
 
-## 9) Источник уверенности (ТОЛЬКО dots.ocr) и формула
-- Собираем токены по `token_refs`; если их нет, но есть `bbox` → токены в bbox; если ничего → 0.0.
-- `ocr_conf = mean(token.conf)`
-- `anchor_bonus` (0..0.1): рядом найден якорь для поля (словарь по типу/полю).
-- `format_bonus` (+0.1 / −0.15): валидность формата (дата/валюта+число/вес+ед.).
-- `table_bonus` (0..0.05): корректная колонка таблицы (если распознана).
-```
-field_confidence = clamp( ocr_conf * 0.85 + anchor_bonus + format_bonus + table_bonus , 0, 1 )
-```
-DOCX/XLSX: `ocr_conf := 1.0` (парсинг), но штраф при невалидном формате.  
-Порог ревью: `low_conf_threshold = 0.75` (конфиг).
-
----
-
-## 10) Классификация документа
-- Правила и regex по ключевым терминам (zh/en/ru), при споре — лёгкая локальная модель.
-- Результат: `doc_type` + `documents.status=CLASSIFIED`.
-
----
-
-## 11) Контракты локальных сервисов
-
-### 11.1 `dots.ocr` (локальная модель, HTTP API)
-`POST /ocr`
 ```json
 {
   "doc_id": "uuid",
-  "file_path": "/srv/supplyhub/batches/{batch_id}/raw/file.pdf",
-  "langs": ["zh","en","ru"],
-  "options": {"layout": true, "tables": true}
-}
-```
-**Response**
-```json
-{
-  "doc_id": "uuid",
-  "pages": [{
-    "page": 1, "width": 2480, "height": 3508,
-    "tokens": [
-      {"id":"t_1001","text":"净重","bbox":[x0,y0,x1,y1],"conf":0.92},
-      {"id":"t_1002","text":"1021.4","bbox":[...],"conf":0.96},
-      {"id":"t_1003","text":"千克","bbox":[...],"conf":0.91}
-    ],
-    "lines": [...],
-    "tables": [{
-      "bbox":[...],
-      "cells":[{"r":0,"c":0,"text":"商品编号","bbox":[...], "token_ids":["t_…"]}]
-    }]
-  }]
-}
-```
-> **Обязательны** стабильные `token.id` и `conf` на токенах.
-
-### 11.2 `json-filler` (локальная LLM, HTTP API)
-`POST /v1/fill`
-```json
-{
-  "doc_id": "uuid",
-  "doc_type": "EXPORT_DECLARATION",
-  "schema_version": "1.0.0",
-  "doc_text": "<plain or html-like text>",
-  "pages": [{
-    "page": 1,
-    "width": 2480, "height": 3508,
-    "tables": [...],
-    "lines":  [...]
-  }],
-  "target_schema": { "fields": { "net_weight": {"type":"string"}, "...":{}}, "required": ["..."] },
-  "hints": {
-    "anchors": {"net_weight": ["净重","Net Weight"]},
-    "normalization": {"date":"YYYY-MM-DD","weight_unit_default":"kg"}
-  }
-}
-```
-**Response (без confidence):**
-```json
-{
-  "doc_id": "uuid",
-  "doc_type": "EXPORT_DECLARATION",
-  "schema_version": "1.0.0",
-  "fields": {
-    "export_declaration_no": {
-      "value": "422020240000042699",
-      "token_refs": ["t_210","t_211"],
-      "bbox": [1583,169,2088,194],
-      "page": 1,
-      "source": "llm"
-    },
-    "net_weight": {
-      "value": "1021.4 kg",
-      "token_refs": ["t_1002","t_1003"],
-      "page": 1,
-      "source": "llm"
-    }
-  },
-  "meta": {"hs_code":"0307119000"}
+  "tokens": []
 }
 ```
 
----
+## 14. Classification
 
-## 12) Backend REST (минимум)
-- `POST /batches` → `{batch_id}` — создать партию
-- `POST /batches/{id}/upload` → `{saved:[/files/...raw/…]}` — загрузка файлов
-- `POST /batches/{id}/process` — запустить пайплайн до `FILLED_AUTO`
-- `GET  /batches/{id}/review` — список полей (value, bbox, token_refs, **confidence**, source, required)
-- `POST /documents/{doc_id}/fields/{field_key}` — ручная правка `{value, bbox?}` → `source=user, confidence=1.0`
-- `POST /batches/{id}/review/complete` — завершить ревью → запуск валидации
-- `GET  /batches/{id}/report` — финальный отчёт (json)
-- `GET  /archive` — список партий + статусы + ссылки
-- `GET  /system/status` — **видимость занятости системы** (busy/queue/активные)
-- `GET  /files/...` — статика из `/srv/supplyhub`
+Classification lives in `app/services/classification.py`.
 
----
+Current logic:
 
-## 13) Ревью до валидации
-- Страница ревью: таблица полей, сортировка по `confidence`, фильтр «< threshold», инлайн-правка.
-- Ховер по полю — подсветка bbox на превью (PNG) с учётом масштаба.
-- Кнопка «Продолжить» активна, когда все поля ниже порога подтверждены/исправлены.
+- Priority regexes handle strong signals such as proforma invoice, commercial
+  invoice headers, packing list, specification, price list type, CMR, export
+  declaration, T1, veterinary certificate, and contract parts.
+- Price list documents are split into `PRICE_LIST_1` and `PRICE_LIST_2` based
+  on per-kg vs per-pack price signals.
+- Contract part classification detects `CONTRACT_1`, `CONTRACT_2`, and
+  `CONTRACT_3`.
+- If `SUPPLYHUB_DOC_CLASSIFIER_ENDPOINT` is configured, an external classifier
+  can be called after the priority checks.
+- Remaining classification falls back to keyword scoring over OCR tokens and
+  full document text.
+- `UNKNOWN` documents are marked failed by the processing pipeline.
 
----
+## 15. JSON Filling
 
-## 14) Валидация партии (примеры правил)
-- **Даты:** proforma ≤ invoice ≤ BL; декларация не позже BL.
-- **Номера:** invoice_no совпадает между инвойсом и документами, где он указан.
-- **Массы:** нетто/брутто согласованы между PL/инвойсом/декларацией (с допусками).
-- **Суммы/валюты:** итоговая сумма/валюта согласованы (где применимо).
-- **Страны/порты:** происхождение/назначение/порты согласованы.
-→ `validations[]` с `ok|warn|error` и `refs` на конкретные поля (doc_id, field_key, page, bbox).
+The pipeline sends document text and OCR tokens to a JSON filler and expects a
+JSON object with fields.
 
----
+Local filler:
 
-## 15) Отчёт и Архив
-- `/report/report.json` — итог (сводка правил + матрица полей/документов).
-- «Архив поставок» — общая страница/JSON-лист: все партии, статусы, ссылки на отчёты и файлы.
-- Доступен всем сотрудникам во внутренней сети.
+- Implemented in `app/services/json_filler.py`.
+- Sends HTTP requests to `SUPPLYHUB_JSON_FILLER_ENDPOINT`.
+- Includes `doc_id`, `doc_type`, `doc_text`, optional `file_name`, and optional
+  `tokens`.
+- Filters Cyrillic-heavy tokens for `SPECIFICATION`.
+- Has a stub mode when `SUPPLYHUB_USE_STUB_SERVICES=1`.
 
----
+Remote filler routing:
 
-## 16) Безопасность/операционка (минимум)
-- Доступ к сайту только из офисной сети.
-- `/srv/supplyhub` — раздаётся read-only; запись — сервисом.
-- Имена файлов нормализуются (basename).
-- Бэкап: nightly `rsync` и дампы БД.
-- Логи — структурные JSON; базовые метрики.
+- Implemented in `app/services/json_filler_router.py`.
+- `app/remote_filler_types.txt` lists document types routed to remote filler.
+- Current remote types in the file are:
 
----
-
-## 17) Эскизы реализаций
-
-### 17.1 FastAPI (фрагменты)
-```python
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
-import os, uuid
-
-BASE_DIR = "/srv/supplyhub"
-app = FastAPI()
-app.mount("/files", StaticFiles(directory=BASE_DIR), name="files")
-
-def batch_dir(bid): return os.path.join(BASE_DIR, "batches", bid)
-
-@app.post("/batches")
-def create_batch():
-    bid = str(uuid.uuid4())
-    for sub in ("raw","derived","preview","report"):
-        os.makedirs(os.path.join(batch_dir(bid), sub), exist_ok=True)
-    return {"batch_id": bid}
-
-@app.post("/batches/{bid}/upload")
-async def upload(bid: str, files: list[UploadFile] = File(...)):
-    raw = os.path.join(batch_dir(bid), "raw")
-    if not os.path.isdir(raw): raise HTTPException(404, "batch not found")
-    saved = []
-    for uf in files:
-        fname = os.path.basename(uf.filename)
-        dest = os.path.join(raw, fname)
-        with open(dest, "wb") as f:
-            while chunk := await uf.read(1024*1024):
-                f.write(chunk)
-        saved.append(f"/files/batches/{bid}/raw/{fname}")
-    return {"saved": saved}
-
-@app.get("/system/status")
-def system_status():
-    # заглушка: реальные цифры берутся из celery/redis
-    return {
-        "workers_busy": 0,
-        "workers_total": 4,
-        "queue_depth": 0,
-        "active_batches": 0,
-        "active_docs": 0
-    }
+```text
+EXPORT_DECLARATION
+CONTRACT
+VETERINARY_CERTIFICATE
 ```
-### 17.2 Подсчёт confidence (идея)
-```python
-def score_field(field, ocr_pages, anchors):
-    tokens = []
-    if field.get("token_refs"):
-        idx = {t["id"]: t for p in ocr_pages for t in p["tokens"]}
-        tokens = [idx[t] for t in field["token_refs"] if t in idx]
-    elif field.get("bbox") and field.get("page"):
-        p = next((p for p in ocr_pages if p["page"] == field["page"]), None)
-        if p:
-            x0,y0,x1,y1 = field["bbox"]
-            for t in p["tokens"]:
-                tx0,ty0,tx1,ty1 = t["bbox"]
-                if not (tx1 < x0 or tx0 > x1 or ty1 < y0 or ty0 > y1):
-                    tokens.append(t)
-    ocr_conf = sum(t["conf"] for t in tokens)/len(tokens) if tokens else 0.0
-    anchor_bonus = 0.0  # проверка ближайших якорей anchors[field_key]
-    format_bonus = 0.1  if is_valid_format(field["value"], field_key=field["key"]) else -0.15
-    table_bonus  = 0.0
-    raw = ocr_conf * 0.85 + anchor_bonus + format_bonus + table_bonus
-    return max(0.0, min(1.0, raw))
+
+- Remote calls fall back to local filler on timeout, remote error, or remote
+  stub response.
+
+Remote filler providers:
+
+- `http`: call `SUPPLYHUB_REMOTE_JSON_FILLER_ENDPOINT`.
+- `openrouter`: build prompts from schema templates and hints, call OpenRouter
+  or compatible API, repair/extract JSON, and merge main/product outputs.
+
+The filler is not trusted for confidence. The pipeline computes confidence
+after filling.
+
+## 16. Confidence Scoring
+
+Confidence scoring lives in `app/services/confidence.py`.
+
+Current behavior:
+
+- If a filled field has `token_refs` and OCR tokens have matching IDs, confidence
+  is the average of referenced token `conf` values.
+- Numeric token-ref fallbacks are supported best effort.
+- If no usable refs or token confidences are available, confidence falls back to
+  `1.0`.
+- Scores are clamped to `[0.0, 1.0]`.
+- Manual user edits are stored with confidence `1.0` and source `user`.
+
+This is simpler than the older formula described in previous specs. It does not
+yet apply anchor, format, or table bonuses.
+
+## 17. Field Normalization and Persistence
+
+Pipeline filling logic:
+
+1. Load OCR tokens from `ocr.json` or parser text.
+2. Build `doc_text` from token text plus parser text.
+3. Send text/tokens to the selected JSON filler.
+4. Flatten nested field structures into dot-separated keys.
+5. Add default `bbox`, `token_refs`, and `source` where absent.
+6. Compute confidence.
+7. Derive missing `page` from token refs where possible.
+8. Derive missing `bbox` from referenced token boxes where possible.
+9. Write `derived/{doc_id}/filled.json`.
+10. Insert new `FilledField` versions and mark previous latest rows false.
+
+## 18. Review and Correction
+
+Review data is built from latest fields and document schema.
+
+Field states include:
+
+- `missing`
+- `low_confidence`
+- `ok`
+- `extra`
+- `product`
+- `unknown_type`
+
+Current threshold is `SUPPLYHUB_LOW_CONF_THRESHOLD`, default `0.75`.
+
+User actions:
+
+- Update a field value.
+- Confirm an existing field value.
+- Mark a field missing by saving an empty/null value.
+- Change document type and refill from existing OCR.
+- Refill a document using its current type.
+- Complete review when no pending fields remain.
+
+Manual updates and refills trigger validation/reporting again.
+
+## 19. Validation
+
+Validation lives in `app/services/validation.py`.
+
+Rule families:
+
+- Required field checks from `app/core/schema.py`.
+- Date ordering rules such as proforma before invoice, bill of landing after
+  sources, veterinary certificate before bill of landing, export declaration
+  after bill of landing, and profile-filtered transport rules.
+- Anchored equality rules for contract number, additional agreements, country
+  of origin, total price, producer, incoterms, payment terms, bank details,
+  exporter, recipient/buyer alignment, proforma number, invoice number,
+  veterinary seal, and linear seal.
+- Group equality rules for buyer, seller, container number, vessel, and
+  importer.
+- Invoice number alignment, currency consistency, and destination alignment.
+- Product row comparisons by product identity (`name_product`, `latin_name`,
+  `size_product`), missing/extra product rows, count mismatches, and selected
+  product field mismatches.
+- Field matrix and field matrix diff snapshots.
+
+Validation output is stored in the `validations` table, replacing previous
+results for the batch each run.
+
+## 20. Reporting
+
+Reporting lives in `app/services/reporting.py` and `app/services/reports.py`.
+
+`report/report.json` contains:
+
+- `batch_id`
+- `status`
+- `generated_at`
+- `documents`
+- latest field values with confidence, source, page, and bbox
+- `validations`
+- batch `meta`
+- `product_comparisons`
+- `product_matrix_columns`
+- `product_matrix`
+
+The frontend derives additional views:
+
+- field matrix
+- field matrix diff
+- validation matrix
+- product matrix
+- raw JSON view
+
+XLSX export is available at:
+
+```text
+GET /web/batches/{batch_id}/report.xlsx
 ```
----
 
-## 18) Роли/ответственности сервисов
-- **FastAPI (API-шлюз):** загрузка/статусы/ревью/архив/статическая раздача; эндпоинт `/system/status` для видимости занятости.
-- **Celery-воркер:** оркестрация пайплайна, вызовы `dots.ocr` и `json-filler`, подсчёт confidence, валидация, отчёт.
-- **dots.ocr (локальная модель):** OCR сканов, выдаёт токены с `conf`, таблицы, bbox — **единственный источник уверенности распознавания**.
-- **json-filler (локальная LLM):** заполняет поля целевого JSON по типу документа, возвращает `value` + `token_refs/bbox`, **без** confidence.
-- **PostgreSQL:** метаданные партий/доков/полей/валидаций/статусов.
+Report generation sets batch status to `DONE`.
 
----
+## 21. Product Matrix
 
-## 19) Ключевые принципы
-- **Уверенность поля = функция OCR** (token.conf, якоря, формат), *не* LLM.
-- **Ревью пользователя — до валидации.** Все поля ниже порога должны быть подтверждены/исправлены.
-- **Архив поставок — общий** для сотрудников.
-- **dots.ocr и json-filler — локальные сервисы/модели**.
-- **Видимость занятости**: пользователи видят, что система «занята», длину очереди и активные задачи.
+Product matrix logic lives in `app/services/product_matrix.py`.
+
+Compared aggregate fields:
+
+```text
+packages
+net_weight
+net_weight_with_glaze
+net_weight_with_ice
+net_weight_with_glaze_and_pack
+gross_weight
+```
+
+Behavior:
+
+- Only document types whose schema has matching product fields participate.
+- Rows are ordered by selected document profile and original batch order.
+- The first `PACKING_LIST` acts as the anchor when present.
+- Supported values are parsed as decimal sums, including semicolon-separated
+  per-row fragments.
+- Cell statuses are `anchor`, `match`, `mismatch`, `missing`, or null for
+  unsupported fields.
+
+## 22. API Surface
+
+### Public JSON API
+
+Mounted directly on the FastAPI app.
+
+```text
+GET  /ping
+GET  /batches/
+GET  /batches/{batch_id}
+POST /batches/
+POST /batches/{batch_id}/upload
+POST /batches/{batch_id}/process
+POST /batches/{batch_id}/confirm-prep
+GET  /batches/{batch_id}/review
+POST /batches/documents/{doc_id}/fields/{field_key}
+POST /batches/{batch_id}/review/complete
+GET  /batches/{batch_id}/report
+POST /batches/{batch_id}/delete
+GET  /archive
+GET  /system/status
+GET  /files/{path}
+```
+
+### Frontend API
+
+Mounted under `/web/api` and used by the React app.
+
+```text
+GET  /web/app
+GET  /web/app/{path}
+POST /web/upload
+POST /web/api/batches/{batch_id}/upload
+POST /web/api/batches/{batch_id}/confirm-prep
+GET  /web/api/doc_types
+GET  /web/api/batches
+GET  /web/api/batches/{batch_id}
+POST /web/api/feedback
+POST /web/api/batches/{batch_id}/complete
+POST /web/api/documents/{doc_id}/fields/{field_key}/update
+POST /web/api/documents/{doc_id}/fields/{field_key}/confirm
+POST /web/api/batches/{batch_id}/delete
+POST /web/api/documents/{doc_id}/set_type
+POST /web/api/documents/{doc_id}/refill
+POST /web/api/documents/{doc_id}/rotate
+POST /web/api/documents/{doc_id}/delete
+GET  /web/batches/{batch_id}/report.xlsx
+```
+
+The React API base defaults to `/web`; the JSON API base defaults to
+`/web/api`.
+
+## 23. Frontend Experience
+
+The React frontend lives in `test frontend/`.
+
+Routes:
+
+```text
+/new
+/queue
+/resolve/:batchId
+/resolve/:batchId/:docIndex
+/table/:batchId
+/history
+/feedback
+/feedback/instructions
+```
+
+Main screens:
+
+- New packet upload.
+- Queue/preparation screen with document previews, profile selection, rotate,
+  delete, and confirm.
+- Resolve/review screen with document navigation, type selection, refill,
+  missing/low-confidence field correction, and preview highlighting.
+- Summary table with field matrix, validation matrix, product matrix, preview
+  slices, add-documents flow, XLSX export, and links back to review.
+- History of previous batches.
+- Feedback form.
+- Instructions page with embedded demo video.
+
+The legacy Jinja templates still exist but the active richer UI is the React app
+served from `/web/app` when `test frontend/dist/index.html` exists.
+
+## 24. Worker and Task Behavior
+
+Celery tasks:
+
+```text
+supplyhub.process_batch
+supplyhub.process_batch_delta
+supplyhub.validate_batch
+supplyhub.send_daily_summary
+```
+
+Behavior:
+
+- API enqueue functions record active tasks in `Batch.meta.active_tasks`.
+- If Celery is unavailable, processing/validation runs as a local async task
+  inside the API process.
+- Batch deletion cancels local tasks, revokes Celery tasks best effort, clears
+  task metadata, deletes DB rows, and removes files.
+- Celery beat schedules the daily Telegram summary at 09:00 UTC.
+
+## 25. Blocklist
+
+`app/blocklist.txt` contains regex patterns for document text that should be
+dropped during processing. The pipeline evaluates extracted document text after
+OCR/classification token flattening. Matching documents are removed with their
+raw, derived, and preview assets.
+
+The current blocklist is aimed at removing boilerplate contract pages that do
+not need downstream extraction.
+
+## 26. Feedback
+
+Feedback handling lives in `app/services/feedback.py`.
+
+Supported feedback:
+
+- `problem`
+- `improvement`
+
+Limits:
+
+- subject: 120 characters
+- message: 3500 characters
+- contact: 80 characters
+- up to 5 files
+- each file up to 5 MB
+- allowed attachments: PNG, JPG/JPEG, PDF
+
+Tickets are stored under `feedback/pending/{ticket_id}`. If Telegram sending
+succeeds, the local pending directory is removed.
+
+## 27. Testing
+
+Current tests:
+
+- `tests/test_document_profiles.py`
+- `tests/test_validation_profiles.py`
+- `tests/test_product_matrix.py`
+
+Smoke/integration helpers also exist under `test_ocr/` and root-level test
+scripts. They are not a complete CI suite.
+
+The current automated test coverage is focused on:
+
+- document profile expected sets
+- profile-filtered validation rules
+- product matrix ordering, parsing, support detection, and report payload
+  persistence
+
+## 28. Implementation Principles
+
+Current implementation principles visible in the code:
+
+- Persist raw source files and derived artifacts on local disk.
+- Keep relational metadata in PostgreSQL.
+- Keep OCR/filler responses auditable through `ocr.json`, `filled.json`, and
+  optional local archive copies.
+- Treat LLM output as field candidates, not as a confidence source.
+- Keep field history by versioning instead of overwriting rows.
+- Make manual user edits authoritative with confidence `1.0`.
+- Keep processing resilient with Celery fallback and warning accumulation.
+- Recompute validation/report payloads after meaningful user corrections.
+
+## 29. Production Hardening Backlog
+
+Highest-priority hardening items:
+
+1. Add authentication, authorization, and audit logging.
+2. Replace direct schema creation with Alembic migrations.
+3. Lock down `/files` and avoid serving the whole storage root.
+4. Move all secrets and Telegram overrides to environment or a secret manager.
+5. Add integration tests for upload, processing, review, validation, report, and
+   delete flows.
+6. Add structured logs, metrics, tracing, and queue visibility beyond the
+   current status snapshot.
+7. Add OCR/filler retry policies, request size limits, and model-version
+   provenance.
+8. Improve confidence scoring with format/anchor/table heuristics or a tested
+   model.
+9. Normalize frontend source text encoding and settle the product name
+   convention (`LOGOS` vs `SupplyHub`).
+10. Document supported deployment topologies and required external services.

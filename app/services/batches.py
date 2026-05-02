@@ -327,7 +327,14 @@ async def save_documents(
     batch_title = extract_batch_title(batch)
     saved_urls: List[str] = []
 
-    async def _add_document(path: Path, mime: Optional[str]) -> None:
+    async def _add_document(
+        path: Path,
+        mime: Optional[str],
+        *,
+        source_group: Optional[str] = None,
+        page_index: Optional[int] = None,
+        page_count: Optional[int] = None,
+    ) -> None:
         document = Document(
             batch_id=batch.id,
             filename=path.name,
@@ -341,6 +348,16 @@ async def save_documents(
                 _generate_pdf_preview(path, batch_paths.preview_for(str(document.id)))
             except Exception:
                 logger.debug("Preview generation failed for %s", path, exc_info=True)
+        if source_group:
+            meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
+            source_pages = dict(meta.get("source_pages") or {})
+            source_pages[str(document.id)] = {
+                "source_group": source_group,
+                "page_index": page_index or 1,
+                "page_count": page_count or 1,
+            }
+            meta["source_pages"] = source_pages
+            batch.meta = meta
         saved_urls.append(f"/files/batches/{batch.id}/raw/{path.name}")
 
     for upload in files:
@@ -378,6 +395,8 @@ async def save_documents(
         if pdf_source and pdf_source.exists():
             created_paths = _split_pdf_file(pdf_source, batch_paths.raw, pdf_source.name)
             if created_paths:
+                source_group = Path(pdf_source.name).stem
+                page_count = len(created_paths)
                 try:
                     dest.unlink()
                 except FileNotFoundError:
@@ -387,8 +406,14 @@ async def save_documents(
                         pdf_source.unlink()
                     except FileNotFoundError:
                         pass
-                for page_path in created_paths:
-                    await _add_document(page_path, "application/pdf")
+                for index, page_path in enumerate(created_paths, start=1):
+                    await _add_document(
+                        page_path,
+                        "application/pdf",
+                        source_group=source_group,
+                        page_index=index,
+                        page_count=page_count,
+                    )
                 continue
 
             if pdf_source != dest:

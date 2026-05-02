@@ -297,6 +297,7 @@ class RuntimeConfig:
     max_pixels: Optional[int] = DEFAULT_MAX_PIXELS
     max_completion_tokens: int = DEFAULT_MAX_COMPLETION_TOKENS
     fitz_preprocess: bool = DEFAULT_FITZ_PREPROCESS
+    prompt_override: Optional[str] = None
 
 
 class DotsOCRAdapter:
@@ -413,6 +414,11 @@ class DotsOCRAdapter:
         if "fitz_preprocess" in options:
             cfg.fitz_preprocess = bool(options["fitz_preprocess"])
 
+        if "prompt_override" in options:
+            prompt = options.get("prompt_override")
+            if prompt is not None:
+                cfg.prompt_override = str(prompt)
+
         if cfg.max_pixels is not None:
             cfg.max_pixels = max(MIN_PIXELS, min(cfg.max_pixels, MAX_PIXELS))
         if cfg.min_pixels is not None:
@@ -489,7 +495,7 @@ class DotsOCRAdapter:
 
         # Build the prompt text directly (was parser.get_prompt). Default to the
         # provided text-only prompt unless an explicit override is set.
-        prompt = os.getenv("DOTS_OCR_PROMPT_OVERRIDE")
+        prompt = runtime_cfg.prompt_override or os.getenv("DOTS_OCR_PROMPT_OVERRIDE")
         if not prompt:
             prompt = PROMPT_WITHOUT_PICTURE
 
@@ -503,7 +509,11 @@ class DotsOCRAdapter:
             logger.debug("Failed to log OCR prompt", exc_info=True)
 
         # Only vLLM inference is supported
-        response, token_confidences = self._inference_with_confidences_vllm(working_image, prompt)
+        response, token_confidences = self._inference_with_confidences_vllm(
+            working_image,
+            prompt,
+            max_new_tokens=runtime_cfg.max_completion_tokens or DEFAULT_MAX_COMPLETION_TOKENS,
+        )
 
         # Optional raw dump and console log of model output for debugging JSON truncation issues
         try:

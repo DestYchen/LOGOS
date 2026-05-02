@@ -2,6 +2,5 @@
 # Example:
 # PRICE_LIST_1
 # CMR
-EXPORT_DECLARATION
-CONTRACT
-VETERINARY_CERTIFICATE
+# Keep this file empty to route every document type through the local
+# SUPPLYHUB_JSON_FILLER_ENDPOINT, which defaults to openclaw-json-filler.

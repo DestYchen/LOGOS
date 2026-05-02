@@ -53,7 +53,7 @@ from app.services import batches as batch_service
 from app.services import deletion
 
 from app.services import feedback as feedback_service
-from app.services import pipeline, reports, review
+from app.services import document_versions, pipeline, reports, review
 import fitz  # type: ignore import-not-found
 
 
@@ -474,6 +474,7 @@ async def get_batch_details(
 
     awaiting_processing = False
 
+    batch_meta = batch.meta if isinstance(batch.meta, dict) else {}
 
 
     for document in batch.documents:
@@ -565,6 +566,7 @@ async def get_batch_details(
 
                 "previews": previews,
                 "mime": document.mime,
+                "version": document_versions.document_version_entry(batch_meta, document.id),
                 "updated_at": document.updated_at.isoformat() if document.updated_at else None,
 
             }
@@ -580,6 +582,7 @@ async def get_batch_details(
     report_field_matrix: Optional[Dict[str, Any]] = None
     report_field_matrix_diff: Optional[Dict[str, Any]] = None
     report_documents: List[Dict[str, Any]] = []
+    report_alternative_documents: List[Dict[str, Any]] = []
 
     report_validations: List[Dict[str, Any]] = []
 
@@ -604,6 +607,7 @@ async def get_batch_details(
 
         product_comparisons = _build_product_comparisons(report_payload)
         product_matrix_columns, product_matrix = _extract_product_matrix(report_payload)
+        report_alternative_documents = list(report_payload.get("alternative_documents") or [])
 
     except FileNotFoundError:
 
@@ -740,6 +744,7 @@ async def get_batch_details(
                 "field_matrix_diff": report_field_matrix_diff,
 
                 "documents": report_documents,
+                "alternative_documents": report_alternative_documents,
 
                 "validations": report_validations,
 

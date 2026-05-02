@@ -39,8 +39,19 @@ services:
     environment:
       SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
       SUPPLYHUB_REDIS_URL: redis://redis:6379/0
-      SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:8002/v1/fill
-      SUPPLYHUB_DOC_CLASSIFIER_ENDPOINT: http://doc-classifier:8003/v1/classify
+      SUPPLYHUB_JSON_FILLER_ENDPOINT: ${SUPPLYHUB_JSON_FILLER_ENDPOINT-http://openclaw-json-filler:8013/v1/fill}
+      SUPPLYHUB_DOC_CLASSIFIER_ENDPOINT: ${SUPPLYHUB_DOC_CLASSIFIER_ENDPOINT-http://openclaw-doc-classifier:8012/v1/classify}
+      SUPPLYHUB_DOC_ASSEMBLER_ENDPOINT: ${SUPPLYHUB_DOC_ASSEMBLER_ENDPOINT-http://openclaw-doc-assembler:8014/v1/assemble}
+      SUPPLYHUB_DOC_ASSEMBLER_TIMEOUT: ${SUPPLYHUB_DOC_ASSEMBLER_TIMEOUT:-60}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_ENABLED: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_ENABLED:-1}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_TIMEOUT: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_TIMEOUT:-180}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_DPI: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_DPI:-300}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_MAX_PIXELS: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_MAX_PIXELS:-4000000}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_MAX_COMPLETION_TOKENS: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_MAX_COMPLETION_TOKENS:-24000}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_BASE_URL: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_BASE_URL:-http://host.docker.internal:18789/v1/responses}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_API_KEY: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_API_KEY:-${OPENCLAW_API_TOKEN:-}}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_MODEL: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_MODEL:-${OPENCLAW_MODEL:-openclaw/default}}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_TIMEOUT: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_TIMEOUT:-120}
       SUPPLYHUB_LOCAL_ARCHIVE_MODE: "1"
       SUPPLYHUB_LOCAL_ARCHIVE_DIR: /app/local_archive
       SUPPLYHUB_REMOTE_JSON_FILLER_PROVIDER: http
@@ -48,6 +59,7 @@ services:
       SUPPLYHUB_CELERY_BROKER_URL: redis://redis:6379/1
       SUPPLYHUB_CELERY_RESULT_BACKEND: redis://redis:6379/2
       SUPPLYHUB_BASE_DIR: /data/storage
+      SUPPLYHUB_OCR_ENDPOINT: ${SUPPLYHUB_OCR_ENDPOINT-http://openclaw-ocr:8011/v1/ocr}
       SUPPLYHUB_USE_STUB_SERVICES: "0"
       # vLLM-only OCR adapter configuration
       DOTS_OCR_REPO: /vendor/dots.ocr
@@ -86,9 +98,20 @@ services:
         condition: service_healthy
     environment:
       SUPPLYHUB_DATABASE_URL: postgresql+asyncpg://supplyhub:supplyhub@db:5432/supplyhub
-      SUPPLYHUB_JSON_FILLER_ENDPOINT: http://host.docker.internal:8002/v1/fill
+      SUPPLYHUB_JSON_FILLER_ENDPOINT: ${SUPPLYHUB_JSON_FILLER_ENDPOINT-http://openclaw-json-filler:8013/v1/fill}
       SUPPLYHUB_REDIS_URL: redis://redis:6379/0
-      SUPPLYHUB_DOC_CLASSIFIER_ENDPOINT: http://doc-classifier:8003/v1/classify
+      SUPPLYHUB_DOC_CLASSIFIER_ENDPOINT: ${SUPPLYHUB_DOC_CLASSIFIER_ENDPOINT-http://openclaw-doc-classifier:8012/v1/classify}
+      SUPPLYHUB_DOC_ASSEMBLER_ENDPOINT: ${SUPPLYHUB_DOC_ASSEMBLER_ENDPOINT-http://openclaw-doc-assembler:8014/v1/assemble}
+      SUPPLYHUB_DOC_ASSEMBLER_TIMEOUT: ${SUPPLYHUB_DOC_ASSEMBLER_TIMEOUT:-60}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_ENABLED: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_ENABLED:-1}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_TIMEOUT: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_TIMEOUT:-180}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_DPI: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_DPI:-300}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_MAX_PIXELS: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_MAX_PIXELS:-4000000}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_MAX_COMPLETION_TOKENS: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_DOTS_MAX_COMPLETION_TOKENS:-24000}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_BASE_URL: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_BASE_URL:-http://host.docker.internal:18789/v1/responses}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_API_KEY: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_API_KEY:-${OPENCLAW_API_TOKEN:-}}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_MODEL: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_MODEL:-${OPENCLAW_MODEL:-openclaw/default}}
+      SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_TIMEOUT: ${SUPPLYHUB_FIELD_BBOX_GROUNDING_OPENCLAW_TIMEOUT:-120}
       SUPPLYHUB_LOCAL_ARCHIVE_MODE: "1"
       SUPPLYHUB_LOCAL_ARCHIVE_DIR: /app/local_archive
       SUPPLYHUB_REMOTE_JSON_FILLER_PROVIDER: http
@@ -96,6 +119,7 @@ services:
       SUPPLYHUB_CELERY_BROKER_URL: redis://redis:6379/1
       SUPPLYHUB_CELERY_RESULT_BACKEND: redis://redis:6379/2
       SUPPLYHUB_BASE_DIR: /data/storage
+      SUPPLYHUB_OCR_ENDPOINT: ${SUPPLYHUB_OCR_ENDPOINT-http://openclaw-ocr:8011/v1/ocr}
       SUPPLYHUB_USE_STUB_SERVICES: "0"
       # vLLM-only OCR adapter configuration
       DOTS_OCR_REPO: /vendor/dots.ocr
@@ -161,6 +185,11 @@ services:
     ]
     volumes:
       - ./app:/app/app:ro
+    environment:
+      DOC_CLASSIFIER_BASE_URL: ${DOC_CLASSIFIER_BASE_URL:-http://10.0.0.247:1234/v1}
+      DOC_CLASSIFIER_API_KEY: ${DOC_CLASSIFIER_API_KEY:-}
+      DOC_CLASSIFIER_MODEL: ${DOC_CLASSIFIER_MODEL:-openai/gpt-oss-20b}
+      DOC_CLASSIFIER_MAX_TEXT_CHARS: ${DOC_CLASSIFIER_MAX_TEXT_CHARS:-20000}
     ports:
       - "8003:8003"
 
@@ -190,6 +219,97 @@ services:
       - ./local_archive:/app/local_archive
     ports:
       - "8004:8004"
+
+  openclaw-ocr:
+    build: .
+    restart: unless-stopped
+    command: [
+      "uvicorn",
+      "app.mock_services.openclaw_ocr:app",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8011"
+    ]
+    environment:
+      OPENCLAW_API_TOKEN: ${OPENCLAW_API_TOKEN:-}
+      OPENCLAW_BASE_URL: ${OPENCLAW_DOCKER_BASE_URL:-http://host.docker.internal:18789/v1/responses}
+      OPENCLAW_MODEL: ${OPENCLAW_MODEL:-openclaw/default}
+      OPENCLAW_TIMEOUT: ${OPENCLAW_TIMEOUT:-300}
+      OPENCLAW_OCR_PDF_DPI: ${OPENCLAW_OCR_PDF_DPI:-300}
+      OPENCLAW_OCR_MAX_PIXELS: ${OPENCLAW_OCR_MAX_PIXELS:-4000000}
+    volumes:
+      - ./app:/app/app:ro
+    ports:
+      - "8011:8011"
+
+  openclaw-doc-classifier:
+    build: .
+    restart: unless-stopped
+    command: [
+      "uvicorn",
+      "app.mock_services.openclaw_doc_classifier:app",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8012"
+    ]
+    environment:
+      OPENCLAW_API_TOKEN: ${OPENCLAW_API_TOKEN:-}
+      OPENCLAW_CLASSIFIER_BASE_URL: ${OPENCLAW_CLASSIFIER_DOCKER_BASE_URL:-http://host.docker.internal:18789/v1/responses}
+      OPENCLAW_CLASSIFIER_MODEL: ${OPENCLAW_CLASSIFIER_MODEL:-${OPENCLAW_MODEL:-openclaw/default}}
+      OPENCLAW_CLASSIFIER_TIMEOUT: ${OPENCLAW_CLASSIFIER_TIMEOUT:-120}
+      OPENCLAW_CLASSIFIER_MAX_TEXT_CHARS: ${OPENCLAW_CLASSIFIER_MAX_TEXT_CHARS:-20000}
+    volumes:
+      - ./app:/app/app:ro
+    ports:
+      - "8012:8012"
+
+  openclaw-json-filler:
+    build: .
+    restart: unless-stopped
+    command: [
+      "uvicorn",
+      "app.mock_services.openclaw_json_filler:app",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8013"
+    ]
+    environment:
+      OPENCLAW_API_TOKEN: ${OPENCLAW_API_TOKEN:-}
+      OPENCLAW_FILLER_BASE_URL: ${OPENCLAW_FILLER_DOCKER_BASE_URL:-http://host.docker.internal:18789/v1/responses}
+      OPENCLAW_FILLER_MODEL: ${OPENCLAW_FILLER_MODEL:-${OPENCLAW_MODEL:-openclaw/default}}
+      OPENCLAW_FILLER_TIMEOUT: ${OPENCLAW_FILLER_TIMEOUT:-180}
+      OPENCLAW_FILLER_MAX_TOKENS_CHARS: ${OPENCLAW_FILLER_MAX_TOKENS_CHARS:-200000}
+      OPENCLAW_FILLER_MAX_TEXT_CHARS: ${OPENCLAW_FILLER_MAX_TEXT_CHARS:-40000}
+      OPENCLAW_FILLER_MAX_TEMPLATE_CHARS: ${OPENCLAW_FILLER_MAX_TEMPLATE_CHARS:-100000}
+    volumes:
+      - ./app:/app/app:ro
+    ports:
+      - "8013:8013"
+
+  openclaw-doc-assembler:
+    build: .
+    restart: unless-stopped
+    command: [
+      "uvicorn",
+      "app.mock_services.openclaw_doc_assembler:app",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      "8014"
+    ]
+    environment:
+      OPENCLAW_API_TOKEN: ${OPENCLAW_API_TOKEN:-}
+      OPENCLAW_ASSEMBLER_BASE_URL: ${OPENCLAW_ASSEMBLER_DOCKER_BASE_URL:-http://host.docker.internal:18789/v1/responses}
+      OPENCLAW_ASSEMBLER_MODEL: ${OPENCLAW_ASSEMBLER_MODEL:-${OPENCLAW_MODEL:-openclaw/default}}
+      OPENCLAW_ASSEMBLER_TIMEOUT: ${OPENCLAW_ASSEMBLER_TIMEOUT:-120}
+      OPENCLAW_ASSEMBLER_MAX_PAGE_CHARS: ${OPENCLAW_ASSEMBLER_MAX_PAGE_CHARS:-5000}
+    volumes:
+      - ./app:/app/app:ro
+    ports:
+      - "8014:8014"
 
   init-db:
     build: .

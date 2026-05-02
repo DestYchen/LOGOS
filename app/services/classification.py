@@ -365,7 +365,28 @@ def _classify_document_llm(tokens: Iterable[Dict[str, str]], file_name: str | No
 
 
 def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = None) -> DocumentType:
-    token_texts = [token.get("text", "").lower() for token in tokens if token.get("text", "")]
+    token_list = list(tokens)
+    try:
+        llm_doc_type = _classify_document_llm(token_list, file_name=file_name)
+    except Exception:
+        logger.warning(
+            "Doc classifier request failed unexpectedly; falling back to regex for %s",
+            file_name or "<unknown>",
+            exc_info=True,
+        )
+        llm_doc_type = None
+
+    if llm_doc_type and llm_doc_type != DocumentType.UNKNOWN:
+        file_label = file_name or "<unknown>"
+        logger.info("Classification (LLM): file=%s doc_type=%s", file_label, llm_doc_type.value)
+        return llm_doc_type
+    if llm_doc_type == DocumentType.UNKNOWN:
+        logger.info(
+            "Classification (LLM): file=%s doc_type=UNKNOWN; falling back to regex",
+            file_name or "<unknown>",
+        )
+
+    token_texts = [token.get("text", "").lower() for token in token_list if token.get("text", "")]
     full_text = " ".join(token_texts)
     header_text = " ".join(token_texts[:80])
     invoice_header_strong = bool(_INVOICE_HEADER_STRONG_RE.search(header_text))
@@ -405,12 +426,6 @@ def classify_document(tokens: Iterable[Dict[str, str]], file_name: str | None = 
                 price_list_reason,
             )
         return price_list_type
-
-    llm_doc_type = _classify_document_llm(tokens, file_name=file_name)
-    if llm_doc_type and llm_doc_type != DocumentType.UNKNOWN:
-        file_label = file_name or "<unknown>"
-        logger.info("Classification (LLM): file=%s doc_type=%s", file_label, llm_doc_type.value)
-        return llm_doc_type
 
     scores: Counter[DocumentType] = Counter()
     matched_patterns: Dict[DocumentType, List[str]] = {}

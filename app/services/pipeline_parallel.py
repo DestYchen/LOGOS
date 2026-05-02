@@ -172,7 +172,23 @@ async def _run_remote_fill(input_data: RemoteFillInput, semaphore: asyncio.Semap
 
     base_pipeline._sync_field_pages(scored_fields, input_data.tokens, doc_id=input_data.doc_id)
     base_pipeline._apply_vet_cert_date_page_override(scored_fields, input_data.tokens, input_data.doc_type)
-    base_pipeline._sync_field_bboxes(scored_fields, input_data.tokens)
+    if base_pipeline.field_bbox_grounder.enabled():
+        paths = batch_dir(str(input_data.batch_id))
+        document_ref = Document(
+            id=input_data.doc_id,
+            batch_id=input_data.batch_id,
+            filename=input_data.file_name,
+            doc_type=input_data.doc_type,
+        )
+        await base_pipeline._apply_field_bbox_grounding(
+            input_data.batch_id,
+            paths,
+            document_ref,
+            scored_fields,
+            raw_file=paths.raw / input_data.file_name,
+        )
+    else:
+        base_pipeline._sync_field_bboxes(scored_fields, input_data.tokens)
 
     return RemoteFillResult(
         doc_id=input_data.doc_id,
@@ -264,12 +280,17 @@ async def run_batch_pipeline_parallel(batch_id: uuid.UUID) -> None:
             if await base_pipeline._is_cancelled(batch_id, batch.status):
                 return
 
-            await base_pipeline._merge_contract_parts(session, batch, batch_paths)
-            if await base_pipeline._is_cancelled(batch_id, batch.status):
-                return
-            await base_pipeline._merge_veterinary_certificate_parts(session, batch, batch_paths)
-            if await base_pipeline._is_cancelled(batch_id, batch.status):
-                return
+            if base_pipeline._doc_assembler_enabled():
+                await base_pipeline._assemble_documents(session, batch, batch_paths)
+                if await base_pipeline._is_cancelled(batch_id, batch.status):
+                    return
+            else:
+                await base_pipeline._merge_contract_parts(session, batch, batch_paths)
+                if await base_pipeline._is_cancelled(batch_id, batch.status):
+                    return
+                await base_pipeline._merge_veterinary_certificate_parts(session, batch, batch_paths)
+                if await base_pipeline._is_cancelled(batch_id, batch.status):
+                    return
 
             remote_types = json_filler_router.remote_doc_types()
             remote_inputs: List[RemoteFillInput] = []
@@ -293,6 +314,7 @@ async def run_batch_pipeline_parallel(batch_id: uuid.UUID) -> None:
                     local_docs.append(document)
 
             await session.flush()
+            await base_pipeline._mark_document_versions(session, batch)
             if await base_pipeline._is_cancelled(batch_id, batch.status):
                 return
 
@@ -375,6 +397,7 @@ async def run_batch_pipeline_parallel(batch_id: uuid.UUID) -> None:
         logger.info("Batch pipeline cancelled for %s", batch_id)
         raise
     finally:
+        await base_pipeline.field_bbox_grounder.cancel_batch_tasks(batch_id)
         await task_tracker.remove_task(batch_id, kind="process")
 
     if auto_validate:
@@ -511,6 +534,7 @@ async def run_batch_delta_pipeline_parallel(batch_id: uuid.UUID) -> None:
         logger.info("Delta batch pipeline cancelled for %s", batch_id)
         raise
     finally:
+        await base_pipeline.field_bbox_grounder.cancel_batch_tasks(batch_id)
         await task_tracker.remove_task(batch_id, kind="process_delta")
 
     if auto_validate:

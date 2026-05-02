@@ -16,6 +16,11 @@ import { Textarea } from "../components/ui/textarea";
 import { useHistoryContext } from "../contexts/history-context";
 import { confirmField, fetchBatchDetails, updateField, uploadDocumentsToBatch } from "../lib/api";
 import { cn, formatDateTime, mapBatchStatus, statusLabel } from "../lib/utils";
+import {
+  computeDisplayBBoxFrame,
+  detectBBoxCoordinateSpace,
+  type BBoxCoordinateSpace,
+} from "../lib/bbox-preview";
 import { formatPacketTimestamp } from "../lib/packet";
 import { DOCUMENT_PREVIEW_CALIBRATION } from "../lib/preview-calibration";
 import type {
@@ -578,6 +583,13 @@ function ensureBBox(input: unknown): RawBBox | null {
   return null;
 }
 
+function documentPageBBoxes(doc: DocumentPayload, page: number): RawBBox[] {
+  return doc.fields
+    .filter((field) => (field.page && field.page > 0 ? field.page : 1) === page)
+    .map((field) => ensureBBox(field.bbox))
+    .filter((bbox): bbox is RawBBox => Boolean(bbox));
+}
+
 function splitDiffSegments(value: string): Array<{ text: string; isDiff: boolean }> {
   const segments: Array<{ text: string; isDiff: boolean }> = [];
   let remaining = value;
@@ -657,35 +669,28 @@ function loadPreviewImage(
   return promise;
 }
 
-function computeOverlayFrame(bbox: RawBBox, metaWidth: number, metaHeight: number) {
+function computeOverlayFrame(
+  bbox: RawBBox,
+  metaWidth: number,
+  metaHeight: number,
+  coordinateSpace?: BBoxCoordinateSpace,
+) {
   if (metaWidth <= 0 || metaHeight <= 0) {
     return null;
   }
-  const [x1Raw, y1Raw, x2Raw, y2Raw] = bbox;
-  const x1 = Math.min(x1Raw, x2Raw);
-  const y1 = Math.min(y1Raw, y2Raw);
-  const x2 = Math.max(x1Raw, x2Raw);
-  const y2 = Math.max(y1Raw, y2Raw);
 
   const baseDisplayHeight = BASE_VIEWER_HEIGHT;
   const baseDisplayWidth = (baseDisplayHeight * metaWidth) / metaHeight;
-  const baseScaleX = baseDisplayWidth / metaWidth;
-  const baseScaleY = baseDisplayHeight / metaHeight;
-  const adjustedScaleX = baseScaleX * PREVIEW_CALIBRATION.scaleX;
-  const adjustedScaleY = baseScaleY * PREVIEW_CALIBRATION.scaleY;
-
-  const rawWidth = x2 - x1;
-  const rawHeight = y2 - y1;
-  if (rawWidth <= 0 || rawHeight <= 0) {
-    return null;
-  }
-
-  const baseWidth = rawWidth * adjustedScaleX;
-  const baseHeight = rawHeight * adjustedScaleY;
-  const baseLeft = x1 * adjustedScaleX + PREVIEW_CALIBRATION.offsetX;
-  const baseTop = y1 * adjustedScaleY + PREVIEW_CALIBRATION.offsetY;
-
-  if (!Number.isFinite(baseWidth) || !Number.isFinite(baseHeight) || baseWidth <= 0 || baseHeight <= 0) {
+  const frame = computeDisplayBBoxFrame({
+    bbox,
+    naturalWidth: metaWidth,
+    naturalHeight: metaHeight,
+    displayWidth: baseDisplayWidth,
+    displayHeight: baseDisplayHeight,
+    coordinateSpace: coordinateSpace ?? detectBBoxCoordinateSpace([bbox], metaWidth, metaHeight),
+    calibration: PREVIEW_CALIBRATION,
+  });
+  if (!frame) {
     return null;
   }
 
@@ -693,10 +698,10 @@ function computeOverlayFrame(bbox: RawBBox, metaWidth: number, metaHeight: numbe
   const imageWidth = baseDisplayWidth * scale;
   const imageHeight = TARGET_PREVIEW_HEIGHT;
 
-  const overlayWidth = baseWidth * scale;
-  const overlayHeight = baseHeight * scale;
-  const overlayLeft = baseLeft * scale;
-  const overlayTop = baseTop * scale;
+  const overlayWidth = frame.width * scale;
+  const overlayHeight = frame.height * scale;
+  const overlayLeft = frame.left * scale;
+  const overlayTop = frame.top * scale;
 
   const maxLeft = Math.max(imageWidth - MIN_FRAME_SIZE, 0);
   const maxTop = Math.max(imageHeight - MIN_FRAME_SIZE, 0);
@@ -722,7 +727,11 @@ function computeOverlayFrame(bbox: RawBBox, metaWidth: number, metaHeight: numbe
   };
 }
 
-function createPreviewSlice(image: HTMLImageElement, bbox: RawBBox): PreviewSlice | null {
+function createPreviewSlice(
+  image: HTMLImageElement,
+  bbox: RawBBox,
+  coordinateSpace?: BBoxCoordinateSpace,
+): PreviewSlice | null {
   if (typeof document === "undefined") {
     return null;
   }
@@ -730,7 +739,7 @@ function createPreviewSlice(image: HTMLImageElement, bbox: RawBBox): PreviewSlic
   if (!naturalWidth || !naturalHeight) {
     return null;
   }
-  const overlay = computeOverlayFrame(bbox, naturalWidth, naturalHeight);
+  const overlay = computeOverlayFrame(bbox, naturalWidth, naturalHeight, coordinateSpace);
   if (!overlay) {
     return null;
   }
@@ -811,6 +820,16 @@ function MatrixDocumentPreview({
     return () => observer.disconnect();
   }, [updateSizes, src]);
 
+  const coordinateSpace = useMemo(() => {
+    const pageBoxes = boxes
+      .filter((box) => (box.page && box.page > 0 ? box.page : 1) === currentPage)
+      .map((box) => box.bbox);
+    if (highlight && (highlight.page && highlight.page > 0 ? highlight.page : 1) === currentPage && highlight.bbox) {
+      pageBoxes.push(highlight.bbox);
+    }
+    return detectBBoxCoordinateSpace(pageBoxes, dims.naturalWidth, dims.naturalHeight);
+  }, [boxes, highlight, currentPage, dims.naturalWidth, dims.naturalHeight]);
+
   const createOverlay = useCallback(
     (
       fieldKey: string,
@@ -820,28 +839,29 @@ function MatrixDocumentPreview({
     ): MatrixPreviewRenderItem | null => {
       if (!bbox || bbox.length !== 4 || dims.naturalWidth === 0 || dims.naturalHeight === 0) return null;
       const padding = 6;
-      const [x1, y1, x2, y2] = bbox;
-      const baseScaleX = dims.width / dims.naturalWidth;
-      const baseScaleY = dims.height / dims.naturalHeight;
-      const adjustedScaleX = baseScaleX * PREVIEW_CALIBRATION.scaleX;
-      const adjustedScaleY = baseScaleY * PREVIEW_CALIBRATION.scaleY;
-      const width = Math.max((x2 - x1) * adjustedScaleX, 1.5);
-      const height = Math.max((y2 - y1) * adjustedScaleY, 1.5);
-      const left = x1 * adjustedScaleX + PREVIEW_CALIBRATION.offsetX;
-      const top = y1 * adjustedScaleY + PREVIEW_CALIBRATION.offsetY;
+      const frame = computeDisplayBBoxFrame({
+        bbox,
+        naturalWidth: dims.naturalWidth,
+        naturalHeight: dims.naturalHeight,
+        displayWidth: dims.width,
+        displayHeight: dims.height,
+        coordinateSpace,
+        calibration: PREVIEW_CALIBRATION,
+      });
+      if (!frame) return null;
       return {
         key: fieldKey,
         style: {
-          left: `${left - padding}px`,
-          top: `${top - padding}px`,
-          width: `${width + padding * 2}px`,
-          height: `${height + padding * 2}px`,
+          left: `${frame.left - padding}px`,
+          top: `${frame.top - padding}px`,
+          width: `${frame.width + padding * 2}px`,
+          height: `${frame.height + padding * 2}px`,
         },
         color,
         thickness,
       };
     },
-    [dims],
+    [dims, coordinateSpace],
   );
 
   const baseOverlays = useMemo(() => {
@@ -1153,7 +1173,11 @@ function SummaryTablePage() {
       }
       markSlicePending(sliceKey, true);
       loadPreview(previewUrl)
-        .then((image) => createPreviewSlice(image, bbox))
+        .then((image) => {
+          const pageBBoxes = documentPageBBoxes(doc, pageIndex + 1);
+          const coordinateSpace = detectBBoxCoordinateSpace(pageBBoxes.length ? pageBBoxes : [bbox], image.naturalWidth, image.naturalHeight);
+          return createPreviewSlice(image, bbox, coordinateSpace);
+        })
         .then((slice) => {
           if (slice) {
             setPreviewSlices((prev) => (prev[sliceKey] ? prev : { ...prev, [sliceKey]: slice }));
@@ -1615,6 +1639,7 @@ function SummaryTablePage() {
     () => buildProductMatrixView(batch?.report?.product_matrix_columns, batch?.report?.product_matrix),
     [batch, buildProductMatrixView],
   );
+  const alternativeDocuments = batch?.report?.alternative_documents ?? [];
 
   useEffect(() => {
     if (!fieldMatrixDiff && diffMode) {
@@ -2252,6 +2277,26 @@ function SummaryTablePage() {
           )}
         </CardContent>
       </Card>
+
+      {batch.report?.available ? (
+        <Alert
+          variant={alternativeDocuments.length > 0 ? "warning" : "success"}
+          className="rounded-2xl border px-5 py-4"
+        >
+          <div className="space-y-1">
+            <div className="text-sm font-semibold">
+              {alternativeDocuments.length > 0
+                ? "Обнаружены альтернативные версии документов"
+                : "Версии документов: всё в порядке"}
+            </div>
+            <div className="text-sm">
+              {alternativeDocuments.length > 0
+                ? "В сравнении используются только основные документы. Альтернативные версии не участвуют в валидации."
+                : "Альтернативные версии документов не обнаружены."}
+            </div>
+          </div>
+        </Alert>
+      ) : null}
 
       <Card className="rounded-3xl border bg-background">
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

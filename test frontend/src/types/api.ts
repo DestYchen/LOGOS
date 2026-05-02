@@ -115,6 +115,14 @@ export type ReportDocumentEntry = {
   page?: number | null;
 };
 
+export type AlternativeDocumentEntry = {
+  doc_id: string;
+  filename: string | null;
+  doc_type: string | null;
+  status: string | null;
+  version?: Record<string, unknown> | null;
+};
+
 export type ReportValidationRef = {
   doc_id?: string | null;
   doc_type?: string | null;
@@ -152,6 +160,7 @@ export type ReportSection = {
   field_matrix?: Record<string, unknown> | null;
   field_matrix_diff?: Record<string, unknown> | null;
   documents: ReportDocumentEntry[];
+  alternative_documents: AlternativeDocumentEntry[];
   validations: ReportValidationEntry[];
   product_comparisons: Record<string, unknown>[];
   product_matrix_columns: ProductMatrixColumn[];

@@ -18,6 +18,12 @@ $RequireVenv = $true
 
 $UvicornServices = @(
   @{
+    Name = "openclaw_ocr"
+    Args = @("app.mock_services.openclaw_ocr:app","--host","127.0.0.1","--port","8011","--log-level","info")
+    Log  = "uvicorn_openclaw_ocr.log"
+    Pid  = ".pids\openclaw_ocr.pid"
+  },
+  @{
     Name = "json_filler"
     Args = @("app.mock_services.chatgpt_json_filler:app","--host","127.0.0.1","--port","9002","--log-level","debug")
     Log  = "uvicorn_json_filler.log"
@@ -31,6 +37,23 @@ $FrontendPid = ".pids\frontend.pid"
 # -------- Helpers --------
 function Ensure-PidDir {
   if (-not (Test-Path ".pids")) { New-Item -ItemType Directory -Path ".pids" | Out-Null }
+}
+
+function Load-DotEnv {
+  param([string]$Path = ".env")
+  if (-not (Test-Path $Path)) { return }
+
+  Get-Content $Path | ForEach-Object {
+    $line = $_.Trim()
+    if (-not $line -or $line.StartsWith("#") -or -not $line.Contains("=")) { return }
+    $parts = $line -split "=", 2
+    $name = $parts[0].Trim()
+    $value = $parts[1].Trim()
+    if (($value.StartsWith('"') -and $value.EndsWith('"')) -or ($value.StartsWith("'") -and $value.EndsWith("'"))) {
+      $value = $value.Substring(1, $value.Length - 2)
+    }
+    [Environment]::SetEnvironmentVariable($name, $value, "Process")
+  }
 }
 
 function Is-Running([int]$processId) {
@@ -324,8 +347,9 @@ function Show-Status {
 
 # -------- Main --------
 try {
+  Load-DotEnv
   switch ($cmd) {
-    "start"   { Check-Docker; Start-Docker; Start-UvicornServices; Start-Frontend; Show-Status }
+    "start"   { Start-UvicornServices; Check-Docker; Start-Docker; Start-Frontend; Show-Status }
     "stop"    { Stop-Frontend; Stop-UvicornServices; Stop-Docker; Show-Status }
     "restart" { & $PSCommandPath stop; Start-Sleep -Seconds 2; & $PSCommandPath start }
     default   { Show-Status }

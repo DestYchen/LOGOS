@@ -15,10 +15,9 @@ from app.core.enums import DocumentType
 
 logger = logging.getLogger(__name__)
 
-# Base URL and API key: keep consistent with chatgpt_json_filler.py
-LLM_BASE_URL: str = "http://10.0.0.247:1234/v1"
-LLM_API_KEY: str = ""
-LLM_MODEL_MAIN: str = "openai/gpt-oss-20b"
+LLM_BASE_URL: str = os.getenv("DOC_CLASSIFIER_BASE_URL", "http://10.0.0.247:1234/v1")
+LLM_API_KEY: str = os.getenv("DOC_CLASSIFIER_API_KEY", "")
+LLM_MODEL_MAIN: str = os.getenv("DOC_CLASSIFIER_MODEL", "openai/gpt-oss-20b")
 
 MAX_TEXT_CHARS = int(os.getenv("DOC_CLASSIFIER_MAX_TEXT_CHARS", "20000"))
 HINTS_PATH = Path(__file__).resolve().parent / "classifier_hints.json"
@@ -279,106 +278,5 @@ async def classify(request: ClassifierRequest) -> ClassifierResponse:
     )
     raw = (resp.choices[0].message.content or "").strip()
     doc_type = _normalize_doc_type(raw)
-    proforma_signal = _looks_like_proforma(header_text, doc_text)
-    invoice_signal = _looks_like_invoice(header_text, doc_text)
-    specification_signal = _looks_like_specification(header_text, doc_text)
-    contract_hint_override = _pick_contract_part(doc_text)
-    contract_header_signal = bool(_CONTRACT_SIGNAL_RE.search(header_text))
-    contract_text_signal = bool(_CONTRACT_SIGNAL_RE.search(doc_text))
-    contract_signal = contract_header_signal or (contract_text_signal and contract_hint_override)
-    invoice_header_signal = bool(_INVOICE_SIGNAL_RE.search(header_text))
-    invoice_header_strong = bool(_INVOICE_HEADER_STRONG_RE.search(header_text))
-
-    if invoice_header_strong and not proforma_signal:
-        doc_type = DocumentType.INVOICE.value
-        logger.info(
-            "Doc classifier override: doc_id=%s doc_type=%s (invoice header)",
-            request.doc_id or "",
-            doc_type,
-        )
-        logger.info("Doc classifier result: doc_id=%s doc_type=%s", request.doc_id or "", doc_type)
-        return ClassifierResponse(doc_id=request.doc_id, doc_type=doc_type)
-
-    if contract_signal and not invoice_header_signal:
-        contract_messages = _build_contract_messages(header_text, doc_text)
-        contract_resp = client.chat.completions.create(
-            model=LLM_MODEL_MAIN,
-            messages=contract_messages,
-            temperature=0,
-        )
-        contract_raw = (contract_resp.choices[0].message.content or "").strip()
-        contract_type = _normalize_doc_type(contract_raw)
-        if contract_type != DocumentType.UNKNOWN.value:
-            doc_type = contract_type
-        else:
-            doc_type = DocumentType.CONTRACT.value
-
-        hint_override = contract_hint_override
-        if hint_override and doc_type in _CONTRACT_TYPES and hint_override != doc_type:
-            logger.info(
-                "Doc classifier override: doc_id=%s doc_type=%s -> %s (contract hints)",
-                request.doc_id or "",
-                doc_type,
-                hint_override,
-            )
-            doc_type = hint_override
-
-        logger.info(
-            "Doc classifier override: doc_id=%s doc_type=%s (contract header)",
-            request.doc_id or "",
-            doc_type,
-        )
-        logger.info("Doc classifier result: doc_id=%s doc_type=%s", request.doc_id or "", doc_type)
-        return ClassifierResponse(doc_id=request.doc_id, doc_type=doc_type)
-
-    if proforma_signal and doc_type != DocumentType.PROFORMA.value:
-        logger.info(
-            "Doc classifier override: doc_id=%s doc_type=%s -> %s (proforma signal)",
-            request.doc_id or "",
-            doc_type,
-            DocumentType.PROFORMA.value,
-        )
-        doc_type = DocumentType.PROFORMA.value
-    elif invoice_signal and doc_type != DocumentType.INVOICE.value:
-        logger.info(
-            "Doc classifier override: doc_id=%s doc_type=%s -> %s (invoice signal)",
-            request.doc_id or "",
-            doc_type,
-            DocumentType.INVOICE.value,
-        )
-        doc_type = DocumentType.INVOICE.value
-    elif specification_signal and doc_type != DocumentType.SPECIFICATION.value:
-        logger.info(
-            "Doc classifier override: doc_id=%s doc_type=%s -> %s (specification signal)",
-            request.doc_id or "",
-            doc_type,
-            DocumentType.SPECIFICATION.value,
-        )
-        doc_type = DocumentType.SPECIFICATION.value
-
-    if (not proforma_signal) and (not invoice_signal) and (not specification_signal) and (
-        doc_type in _CONTRACT_TYPES or _looks_like_contract(header_text, doc_text)
-    ):
-        contract_messages = _build_contract_messages(header_text, doc_text)
-        contract_resp = client.chat.completions.create(
-            model=LLM_MODEL_MAIN,
-            messages=contract_messages,
-            temperature=0,
-        )
-        contract_raw = (contract_resp.choices[0].message.content or "").strip()
-        contract_type = _normalize_doc_type(contract_raw)
-        if contract_type != DocumentType.UNKNOWN.value:
-            doc_type = contract_type
-
-        hint_override = contract_hint_override or _pick_contract_part(doc_text)
-        if hint_override and doc_type in _CONTRACT_TYPES and hint_override != doc_type:
-            logger.info(
-                "Doc classifier override: doc_id=%s doc_type=%s -> %s (contract hints)",
-                request.doc_id or "",
-                doc_type,
-                hint_override,
-            )
-            doc_type = hint_override
-
     logger.info("Doc classifier result: doc_id=%s doc_type=%s", request.doc_id or "", doc_type)
     return ClassifierResponse(doc_id=request.doc_id, doc_type=doc_type)

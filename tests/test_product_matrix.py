@@ -325,3 +325,57 @@ async def test_generate_report_persists_product_matrix_payload(tmp_path: Path, m
     assert stored["product_matrix_columns"]
     assert stored["product_matrix"]
     assert stored["product_matrix"][0]["cells"]["packages"]["status"] in {"anchor", "match", "mismatch", "missing"}
+
+
+@pytest.mark.asyncio
+async def test_generate_report_excludes_alternative_documents(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    primary_id = uuid4()
+    alternative_id = uuid4()
+    batch = Batch(
+        id=uuid4(),
+        status=BatchStatus.VALIDATED,
+        meta={
+            "document_profile": "standard",
+            "document_versions": {
+                str(primary_id): {"version_role": "primary", "duplicate_group_id": "invoice_1"},
+                str(alternative_id): {
+                    "version_role": "alternative",
+                    "primary_doc_id": str(primary_id),
+                    "duplicate_group_id": "invoice_1",
+                },
+            },
+        },
+    )
+
+    primary_doc = Document(
+        id=primary_id,
+        batch_id=batch.id,
+        filename="invoice_a.pdf",
+        doc_type=DocumentType.INVOICE,
+        status=DocumentStatus.FILLED_AUTO,
+    )
+    primary_doc.fields = [_field(primary_doc.id, "invoice_no", "INV-1")]
+    alternative_doc = Document(
+        id=alternative_id,
+        batch_id=batch.id,
+        filename="invoice_b.pdf",
+        doc_type=DocumentType.INVOICE,
+        status=DocumentStatus.FILLED_AUTO,
+    )
+    alternative_doc.fields = [_field(alternative_doc.id, "invoice_no", "INV-1")]
+    batch.documents = [primary_doc, alternative_doc]
+
+    async def fake_load_batch_with_fields(session, batch_id):
+        return batch
+
+    async def fake_fetch_validations(session, batch_id):
+        return []
+
+    monkeypatch.setattr(reporting, "load_batch_with_fields", fake_load_batch_with_fields)
+    monkeypatch.setattr(reporting, "fetch_validations", fake_fetch_validations)
+    monkeypatch.setattr(reporting, "batch_dir", lambda batch_id: BatchPaths(base=tmp_path / str(batch_id)))
+
+    payload = await reporting.generate_report(object(), batch.id)
+
+    assert [document["doc_id"] for document in payload["documents"]] == [str(primary_id)]
+    assert [document["doc_id"] for document in payload["alternative_documents"]] == [str(alternative_id)]

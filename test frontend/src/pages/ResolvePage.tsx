@@ -51,6 +51,7 @@ import {
 } from "../lib/api";
 
 import { cn, formatDateTime, mapBatchStatus } from "../lib/utils";
+import { computeDisplayBBoxFrame, detectBBoxCoordinateSpace, type PreviewBBox } from "../lib/bbox-preview";
 import { DOCUMENT_PREVIEW_CALIBRATION } from "../lib/preview-calibration";
 
 import { formatPacketTimestamp } from "../lib/packet";
@@ -409,23 +410,30 @@ function DocumentViewer({
 
       const padding = 6;
 
-      const [x1, y1, x2, y2] = bbox;
-
-      const baseScaleX = dims.width / dims.naturalWidth;
-
-      const baseScaleY = dims.height / dims.naturalHeight;
-
-      const adjustedScaleX = baseScaleX * calibration.scaleX;
-
-      const adjustedScaleY = baseScaleY * calibration.scaleY;
-
-      const width = Math.max((x2 - x1) * adjustedScaleX, 1.5);
-
-      const height = Math.max((y2 - y1) * adjustedScaleY, 1.5);
-
-      const left = x1 * adjustedScaleX + calibration.offsetX;
-
-      const top = y1 * adjustedScaleY + calibration.offsetY;
+      const pageBBoxes: Array<PreviewBBox | null> = [
+        ...boxes
+          .filter((box) => (box.page && box.page > 0 ? box.page : 1) === currentPage)
+          .map((box) => (box.bbox && box.bbox.length === 4 ? (box.bbox as PreviewBBox) : null)),
+        highlight && (highlight.page && highlight.page > 0 ? highlight.page : 1) === currentPage && highlight.bbox?.length === 4
+          ? (highlight.bbox as PreviewBBox)
+          : null,
+        bbox as PreviewBBox,
+      ];
+      const coordinateSpace = detectBBoxCoordinateSpace(
+        pageBBoxes,
+        dims.naturalWidth,
+        dims.naturalHeight,
+      );
+      const frame = computeDisplayBBoxFrame({
+        bbox: bbox as [number, number, number, number],
+        naturalWidth: dims.naturalWidth,
+        naturalHeight: dims.naturalHeight,
+        displayWidth: dims.width,
+        displayHeight: dims.height,
+        coordinateSpace,
+        calibration,
+      });
+      if (!frame) return null;
 
       return {
 
@@ -433,13 +441,13 @@ function DocumentViewer({
 
         style: {
 
-          left: `${left - padding}px`,
+          left: `${frame.left - padding}px`,
 
-          top: `${top - padding}px`,
+          top: `${frame.top - padding}px`,
 
-          width: `${width + padding * 2}px`,
+          width: `${frame.width + padding * 2}px`,
 
-          height: `${height + padding * 2}px`,
+          height: `${frame.height + padding * 2}px`,
 
         },
 
@@ -451,7 +459,7 @@ function DocumentViewer({
 
     },
 
-    [dims, calibration],
+    [dims, calibration, boxes, highlight, currentPage],
 
   );
 

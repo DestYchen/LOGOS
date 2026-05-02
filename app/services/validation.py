@@ -22,6 +22,7 @@ from app.core.document_profiles import (
 from app.core.enums import DocumentType, ValidationSeverity
 from app.core.schema import get_schema
 from app.models import Batch, Document, FilledField, Validation
+from app.services import document_versions
 from datetime import datetime, date
 
 
@@ -2196,7 +2197,12 @@ async def validate_batch(session: AsyncSession, batch_id: uuid.UUID) -> List[Val
     doc_stmt = select(Document).where(Document.batch_id == batch_id)
     docs_result = await session.execute(doc_stmt)
     all_documents = docs_result.scalars().all()
-    documents = [document for document in all_documents if document.doc_type in active_document_types]
+    alternative_doc_ids = document_versions.alternative_document_ids(batch.meta)
+    documents = [
+        document
+        for document in all_documents
+        if document.doc_type in active_document_types and document.id not in alternative_doc_ids
+    ]
     active_doc_ids = {document.id for document in documents}
     fields_by_doc = {
         doc_id: fields

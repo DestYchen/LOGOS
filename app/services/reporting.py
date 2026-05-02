@@ -13,7 +13,7 @@ from app.core.document_profiles import get_document_profile
 from app.core.enums import BatchStatus, DocumentType
 from app.core.storage import batch_dir
 from app.models import Batch, Document, FilledField, Validation
-from app.services import product_matrix
+from app.services import document_versions, product_matrix
 
 _INTERNAL_DOC_TYPES = {
     DocumentType.CONTRACT_1,
@@ -115,9 +115,12 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
 
     documents_payload: List[Dict[str, Any]] = []
     doc_fields_index: Dict[uuid.UUID, Dict[str, Dict[str, Any]]] = {}
+    alternative_doc_ids = document_versions.alternative_document_ids(batch.meta)
+    alternative_documents_payload: List[Dict[str, Any]] = []
     for document in batch.documents:
         if document.doc_type in _INTERNAL_DOC_TYPES:
             continue
+        version_entry = document_versions.document_version_entry(batch.meta, document.id)
         fields_payload = {
             field.field_key: {
                 "value": field.value,
@@ -129,15 +132,19 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
             for field in document.fields
             if field.latest
         }
-        documents_payload.append(
-            {
-                "doc_id": str(document.id),
-                "filename": document.filename,
-                "doc_type": document.doc_type.value,
-                "status": document.status.value,
-                "fields": fields_payload,
-            }
-        )
+        document_payload = {
+            "doc_id": str(document.id),
+            "filename": document.filename,
+            "doc_type": document.doc_type.value,
+            "status": document.status.value,
+            "fields": fields_payload,
+        }
+        if version_entry:
+            document_payload["version"] = version_entry
+        if document.id in alternative_doc_ids:
+            alternative_documents_payload.append(document_payload)
+        else:
+            documents_payload.append(document_payload)
         doc_fields_index[document.id] = fields_payload
 
     validations_payload = [
@@ -165,6 +172,8 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
     product_buckets: Dict[tuple, List[Dict[str, Any]]] = {}
     for document in batch.documents:
         if document.doc_type in _INTERNAL_DOC_TYPES:
+            continue
+        if document.id in alternative_doc_ids:
             continue
         fields_payload = doc_fields_index.get(document.id, {})
         rows = _collect_products_for_doc(fields_payload)
@@ -214,6 +223,7 @@ async def generate_report(session: AsyncSession, batch_id: uuid.UUID) -> Dict[st
         "status": batch.status.value,
         "generated_at": datetime.utcnow().isoformat() + "Z",
         "documents": documents_payload,
+        "alternative_documents": alternative_documents_payload,
         "validations": validations_payload,
         "meta": batch.meta or {},
         "product_comparisons": product_comparisons,

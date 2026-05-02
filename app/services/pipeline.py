@@ -20,10 +20,14 @@ from app.core.schema import get_schema
 from app.core.storage import batch_dir, unique_filename
 from app.models import Batch, Document, FilledField
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.services import (
     blocklist,
     classification,
     confidence,
+    doc_assembler,
+    document_versions,
+    field_bbox_grounder,
     json_filler,
     json_filler_router,
     local_archive,
@@ -62,6 +66,7 @@ _CONTRACT_PART_ORDER = [
 ]
 
 _TOKEN_ID_RE = re.compile(r"^p(\d+)_t(.+)$")
+_SPLIT_PAGE_RE = re.compile(r"^(?P<source>.+)_p(?P<page>\d+)(?:_\d+)?$")
 
 
 @dataclass
@@ -512,6 +517,94 @@ def _sync_field_bboxes(
             payload["bbox"] = derived
 
 
+def _bbox_grounding_cache_file(paths, document: Document) -> Path:
+    return field_bbox_grounder.cache_path(paths.derived_for(str(document.id)))
+
+
+def _start_bbox_grounding_ocr(batch_id: uuid.UUID, paths, document: Document, raw_file: Path) -> None:
+    if not field_bbox_grounder.enabled():
+        return
+    try:
+        field_bbox_grounder.start_dots_bbox_ocr(
+            batch_id=batch_id,
+            doc_id=document.id,
+            file_path=raw_file,
+            cache_file=_bbox_grounding_cache_file(paths, document),
+        )
+    except Exception:
+        logger.warning("Failed to start Dots bbox grounding OCR for %s", document.filename, exc_info=True)
+
+
+async def _load_bbox_grounding_tokens(
+    batch_id: uuid.UUID,
+    paths,
+    document: Document,
+    *,
+    raw_file: Optional[Path] = None,
+    allow_sync_run: bool = True,
+) -> List[Dict[str, Any]]:
+    if not field_bbox_grounder.enabled():
+        return []
+    try:
+        return await field_bbox_grounder.get_dots_bbox_tokens(
+            batch_id=batch_id,
+            doc_id=document.id,
+            cache_file=_bbox_grounding_cache_file(paths, document),
+            file_path=raw_file,
+            allow_sync_run=allow_sync_run,
+        )
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.warning("Failed to load Dots bbox grounding tokens for %s", document.filename, exc_info=True)
+        return []
+
+
+async def _apply_field_bbox_grounding(
+    batch_id: uuid.UUID,
+    paths,
+    document: Document,
+    fields: Dict[str, Dict[str, Any]],
+    *,
+    raw_file: Optional[Path] = None,
+) -> bool:
+    if not field_bbox_grounder.enabled():
+        return False
+    dots_tokens = await _load_bbox_grounding_tokens(
+        batch_id,
+        paths,
+        document,
+        raw_file=raw_file,
+        allow_sync_run=True,
+    )
+    return await field_bbox_grounder.ground_fields(
+        doc_id=document.id,
+        doc_type=document.doc_type,
+        file_name=document.filename,
+        fields=fields,
+        dots_tokens=dots_tokens,
+    )
+
+
+def _shift_bbox_grounding_tokens(
+    tokens: List[Dict[str, Any]],
+    *,
+    page_offset: int,
+    fallback_start: int = 0,
+) -> List[Dict[str, Any]]:
+    shifted: List[Dict[str, Any]] = []
+    for index, token in enumerate(tokens):
+        new_token = dict(token)
+        new_page = _token_page_number(token) + page_offset
+        new_token["page"] = new_page
+        shifted_id = _shift_token_id(token.get("id"), new_page)
+        if shifted_id is None or str(shifted_id).strip() == "":
+            shifted_id = f"p{max(new_page - 1, 0)}_g{fallback_start + index}"
+        new_token["id"] = shifted_id
+        shifted.append(new_token)
+    return shifted
+
+
 def _contract_page_count(
     document: Document,
     tokens: List[Dict[str, Any]],
@@ -549,6 +642,255 @@ async def _drop_blocklisted_document(session, batch: Batch, paths, document: Doc
     if document in batch.documents:
         batch.documents.remove(document)
     await session.delete(document)
+    await session.flush()
+
+
+def _doc_assembler_enabled() -> bool:
+    return bool(settings.doc_assembler_endpoint)
+
+
+def _source_page_info(batch: Batch, document: Document) -> Dict[str, Any]:
+    meta = batch.meta if isinstance(batch.meta, dict) else {}
+    source_pages = meta.get("source_pages")
+    if isinstance(source_pages, dict):
+        entry = source_pages.get(str(document.id))
+        if isinstance(entry, dict):
+            return {
+                "source_group": str(entry.get("source_group") or Path(document.filename).stem),
+                "page_index": _positive_int(entry.get("page_index"), default=1),
+                "page_count": _positive_int(entry.get("page_count"), default=max(document.pages or 1, 1)),
+            }
+
+    stem = Path(document.filename).stem
+    match = _SPLIT_PAGE_RE.match(stem)
+    if match:
+        return {
+            "source_group": match.group("source"),
+            "page_index": _positive_int(match.group("page"), default=1),
+            "page_count": max(document.pages or 1, 1),
+        }
+    return {
+        "source_group": stem,
+        "page_index": 1,
+        "page_count": max(document.pages or 1, 1),
+    }
+
+
+def _positive_int(value: Any, *, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
+
+
+def _assembler_final_doc_type(raw: Any) -> DocumentType:
+    try:
+        doc_type = DocumentType(str(raw))
+    except ValueError:
+        return DocumentType.UNKNOWN
+    if doc_type in _CONTRACT_PART_TYPES:
+        return DocumentType.CONTRACT
+    return doc_type
+
+
+def _replace_documents_in_processing_run(batch: Batch, removed_docs: List[Document], merged_doc: Document) -> None:
+    meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
+    run_meta = meta.get("processing_run")
+    if not isinstance(run_meta, dict) or run_meta.get("mode") != "initial_upload":
+        return
+    doc_ids = run_meta.get("doc_ids")
+    if not isinstance(doc_ids, list):
+        return
+    removed_ids = {str(doc.id) for doc in removed_docs}
+    updated_ids: List[str] = []
+    seen: set[str] = set()
+    inserted = False
+    for doc_id in doc_ids:
+        doc_id_str = str(doc_id)
+        if doc_id_str in removed_ids:
+            if not inserted:
+                merged_id = str(merged_doc.id)
+                updated_ids.append(merged_id)
+                seen.add(merged_id)
+                inserted = True
+            continue
+        if doc_id_str in seen:
+            continue
+        updated_ids.append(doc_id_str)
+        seen.add(doc_id_str)
+    if not inserted and str(merged_doc.id) not in seen:
+        updated_ids.append(str(merged_doc.id))
+    run_meta = dict(run_meta)
+    run_meta["doc_ids"] = updated_ids
+    meta["processing_run"] = run_meta
+    batch.meta = meta
+
+
+def _remove_source_page_metadata(batch: Batch, removed_docs: List[Document], merged_doc: Document, *, page_count: int) -> None:
+    meta = dict(batch.meta) if isinstance(batch.meta, dict) else {}
+    source_pages = dict(meta.get("source_pages") or {})
+    removed_ids = {str(doc.id) for doc in removed_docs}
+    first_entry: Dict[str, Any] = {}
+    for doc_id in removed_ids:
+        entry = source_pages.pop(doc_id, None)
+        if isinstance(entry, dict) and not first_entry:
+            first_entry = entry
+    if first_entry:
+        source_pages[str(merged_doc.id)] = {
+            "source_group": str(first_entry.get("source_group") or Path(merged_doc.filename).stem),
+            "page_index": 1,
+            "page_count": page_count,
+        }
+    if source_pages:
+        meta["source_pages"] = source_pages
+    else:
+        meta.pop("source_pages", None)
+    batch.meta = meta
+
+
+async def _assemble_documents(session, batch: Batch, paths) -> None:
+    candidates = [doc for doc in batch.documents if doc.status == DocumentStatus.TEXT_READY]
+    if len(candidates) <= 1:
+        return
+
+    pages: List[Dict[str, Any]] = []
+    for document in candidates:
+        tokens = _load_contract_tokens(paths, document)
+        info = _source_page_info(batch, document)
+        pages.append(
+            {
+                "doc_id": str(document.id),
+                "filename": document.filename,
+                "source_group": info["source_group"],
+                "page_index": info["page_index"],
+                "doc_type": document.doc_type.value,
+                "doc_text": _build_contract_text(paths, document, tokens),
+                "tokens": tokens,
+            }
+        )
+
+    groups = await doc_assembler.assemble_pages(str(batch.id), pages)
+    if not groups:
+        return
+    await _merge_assembled_groups(session, batch, paths, groups)
+
+
+async def _merge_assembled_groups(session, batch: Batch, paths, groups: List[Dict[str, Any]]) -> None:
+    documents_by_id = {str(doc.id): doc for doc in batch.documents}
+    used_doc_ids: set[str] = set()
+    merge_index = 1
+
+    for group in groups:
+        doc_ids = [str(doc_id) for doc_id in group.get("page_doc_ids", [])]
+        ordered_parts = [documents_by_id[doc_id] for doc_id in doc_ids if doc_id in documents_by_id]
+        if len(ordered_parts) <= 1:
+            continue
+        if any(str(doc.id) in used_doc_ids for doc in ordered_parts):
+            continue
+        if any(doc.status != DocumentStatus.TEXT_READY for doc in ordered_parts):
+            continue
+        final_doc_type = _assembler_final_doc_type(group.get("final_doc_type"))
+        if final_doc_type == DocumentType.UNKNOWN:
+            continue
+
+        combined_tokens: List[Dict[str, Any]] = []
+        combined_bbox_tokens: List[Dict[str, Any]] = []
+        combined_texts: List[str] = []
+        part_previews: List[List[Tuple[int, Path]]] = []
+        part_page_counts: List[int] = []
+        page_offset = 0
+
+        for document in ordered_parts:
+            tokens = _load_contract_tokens(paths, document)
+            previews = _load_contract_previews(paths, document)
+            part_page_count = _contract_page_count(document, tokens, previews)
+            part_previews.append(previews)
+            part_page_counts.append(part_page_count)
+            bbox_tokens = await _load_bbox_grounding_tokens(
+                batch.id,
+                paths,
+                document,
+                raw_file=paths.raw / document.filename,
+                allow_sync_run=True,
+            )
+            if bbox_tokens:
+                combined_bbox_tokens.extend(
+                    _shift_bbox_grounding_tokens(
+                        bbox_tokens,
+                        page_offset=page_offset,
+                        fallback_start=len(combined_bbox_tokens),
+                    )
+                )
+            part_text = _build_contract_text(paths, document, tokens)
+            if part_text:
+                combined_texts.append(part_text)
+            for token in tokens:
+                new_token = dict(token)
+                new_page = _token_page_number(token) + page_offset
+                new_token["page"] = new_page
+                shifted_id = _shift_token_id(token.get("id"), new_page)
+                if shifted_id is not None:
+                    new_token["id"] = shifted_id
+                combined_tokens.append(new_token)
+            page_offset += part_page_count
+
+        if not combined_tokens:
+            continue
+
+        merged_text = "\n\n".join(text for text in combined_texts if text.strip())
+        merged_filename = unique_filename(paths.raw, f"assembled_{final_doc_type.value.lower()}_{merge_index}.txt")
+        merge_index += 1
+        merged_raw = paths.raw / merged_filename
+        merged_raw.write_text(merged_text, encoding="utf-8")
+
+        merged_doc = Document(
+            batch_id=batch.id,
+            filename=merged_filename,
+            mime="text/plain",
+            doc_type=final_doc_type,
+            status=DocumentStatus.TEXT_READY,
+            pages=page_offset,
+        )
+        batch.documents.append(merged_doc)
+        session.add(merged_doc)
+        await session.flush()
+
+        derived = paths.derived_for(str(merged_doc.id))
+        ocr_file = derived / "ocr.json"
+        with ocr_file.open("w", encoding="utf-8") as handle:
+            json.dump({"doc_id": str(merged_doc.id), "tokens": combined_tokens}, handle, indent=2)
+        merged_doc.ocr_path = str(ocr_file.relative_to(paths.base))
+        if combined_bbox_tokens:
+            field_bbox_grounder.write_cached_tokens(
+                cache_file=_bbox_grounding_cache_file(paths, merged_doc),
+                doc_id=merged_doc.id,
+                tokens=combined_bbox_tokens,
+                meta={"assembled_from": [str(doc.id) for doc in ordered_parts]},
+            )
+
+        merged_preview_dir = paths.preview_for(str(merged_doc.id))
+        preview_offset = 0
+        for index, document in enumerate(ordered_parts):
+            for page_number, preview in part_previews[index]:
+                target_page = preview_offset + page_number
+                target_path = merged_preview_dir / f"page_{target_page}.png"
+                try:
+                    shutil.copy2(preview, target_path)
+                except Exception:
+                    logger.debug("Failed to copy assembled preview %s", preview, exc_info=True)
+            preview_offset += part_page_counts[index]
+
+        _replace_documents_in_processing_run(batch, ordered_parts, merged_doc)
+        _remove_source_page_metadata(batch, ordered_parts, merged_doc, page_count=page_offset)
+
+        for document in ordered_parts:
+            used_doc_ids.add(str(document.id))
+            _cleanup_document_assets(paths, document)
+            if document in batch.documents:
+                batch.documents.remove(document)
+            await session.delete(document)
+
     await session.flush()
 
 
@@ -797,12 +1139,17 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
             if await _is_cancelled(batch_id, batch.status):
                 return
 
-            await _merge_contract_parts(session, batch, batch_paths)
-            if await _is_cancelled(batch_id, batch.status):
-                return
-            await _merge_veterinary_certificate_parts(session, batch, batch_paths)
-            if await _is_cancelled(batch_id, batch.status):
-                return
+            if _doc_assembler_enabled():
+                await _assemble_documents(session, batch, batch_paths)
+                if await _is_cancelled(batch_id, batch.status):
+                    return
+            else:
+                await _merge_contract_parts(session, batch, batch_paths)
+                if await _is_cancelled(batch_id, batch.status):
+                    return
+                await _merge_veterinary_certificate_parts(session, batch, batch_paths)
+                if await _is_cancelled(batch_id, batch.status):
+                    return
 
             filler_results: List[ProcessingResult] = []
             for document in list(batch.documents):
@@ -817,6 +1164,7 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
                         await session.commit()
 
             await session.flush()
+            await _mark_document_versions(session, batch)
             if await _is_cancelled(batch_id, batch.status):
                 return
 
@@ -860,6 +1208,7 @@ async def run_batch_pipeline(batch_id: uuid.UUID) -> None:
         logger.info("Batch pipeline cancelled for %s", batch_id)
         raise
     finally:
+        await field_bbox_grounder.cancel_batch_tasks(batch_id)
         await task_tracker.remove_task(batch_id, kind="process")
 
     if auto_validate:
@@ -950,6 +1299,7 @@ async def run_batch_delta_pipeline(batch_id: uuid.UUID) -> None:
         logger.info("Delta batch pipeline cancelled for %s", batch_id)
         raise
     finally:
+        await field_bbox_grounder.cancel_batch_tasks(batch_id)
         await task_tracker.remove_task(batch_id, kind="process_delta")
 
     if auto_validate:
@@ -1011,6 +1361,7 @@ async def _run_ocr_step(session, batch_id: uuid.UUID, batch: Batch, document: Do
 
     derived = paths.derived_for(str(document.id))
     ocr_file = derived / 'ocr.json'
+    _start_bbox_grounding_ocr(batch_id, paths, document, raw_file)
 
     if not needs_ocr and extraction is not None:
         ocr_payload: Dict[str, Any] = {'doc_id': str(document.id), 'tokens': []}
@@ -1195,7 +1546,10 @@ async def _run_filler_step(session, batch_id: uuid.UUID, document: Document) -> 
 
     _sync_field_pages(scored_fields, tokens, doc_id=document.id)
     _apply_vet_cert_date_page_override(scored_fields, tokens, doc_type)
-    _sync_field_bboxes(scored_fields, tokens)
+    if field_bbox_grounder.enabled():
+        await _apply_field_bbox_grounding(batch_id, paths, document, scored_fields, raw_file=raw_file)
+    else:
+        _sync_field_bboxes(scored_fields, tokens)
 
     filled_file = derived / 'filled.json'
     with filled_file.open('w', encoding='utf-8') as handle:
@@ -1256,6 +1610,16 @@ async def _store_fields(session, document: Document, fields: Dict[str, Dict[str,
         )
         session.add(field)
 
+
+async def _mark_document_versions(session, batch: Batch) -> None:
+    result = await session.execute(
+        select(Document)
+        .where(Document.batch_id == batch.id)
+        .options(selectinload(Document.fields))
+        .order_by(Document.created_at, Document.filename)
+    )
+    documents = result.scalars().all()
+    batch.meta = document_versions.mark_alternative_versions(batch.meta, documents)
     await session.flush()
 
 
@@ -1382,7 +1746,11 @@ async def fill_document_from_existing_ocr(
 
     _sync_field_pages(scored_fields, tokens, doc_id=document.id)
     _apply_vet_cert_date_page_override(scored_fields, tokens, forced_doc_type)
-    _sync_field_bboxes(scored_fields, tokens)
+    document.doc_type = forced_doc_type
+    if field_bbox_grounder.enabled():
+        await _apply_field_bbox_grounding(batch_id, paths, document, scored_fields, raw_file=raw_file)
+    else:
+        _sync_field_bboxes(scored_fields, tokens)
 
     derived = paths.derived_for(str(document.id))
     filled_file = derived / "filled.json"
@@ -1390,9 +1758,11 @@ async def fill_document_from_existing_ocr(
         json.dump({"fields": scored_fields}, handle, indent=2)
 
     await _store_fields(session, document, scored_fields)
-    document.doc_type = forced_doc_type
     document.status = DocumentStatus.FILLED_AUTO
     document.filled_path = str(filled_file.relative_to(paths.base))
+    batch = await session.get(Batch, batch_id)
+    if batch is not None:
+        await _mark_document_versions(session, batch)
 
 
 async def run_validation_pipeline(batch_id: uuid.UUID) -> None:
